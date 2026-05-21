@@ -1,25 +1,899 @@
-import logo from './logo.svg';
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-function App() {
+const SERVER_URL = 'https://youngsili-server-production.up.railway.app';
+
+const INIT_ELDERS = [
+  { id: 1, name: '김순자', age: 78, gender:'female', title:'할머니', region: '대구 북구',   address: '대구 북구 침산동 123',   phone: '010-1234-5678', guardian: '김민준', guardianPhone: '010-9876-5432', disease: '고혈압, 당뇨',  medicine: '혈압약',  mobility: '보조기구 필요',   status: 'danger',  lastCall: '오늘 09:12', keyword: '가슴이 아파', visits: 2, callCycle: 'daily',      callTime: '09:00', callActive: true  },
+  { id: 2, name: '이철수', age: 82, gender:'male',   title:'할아버지', region: '대구 달서구', address: '대구 달서구 월성동 456', phone: '010-2345-6789', guardian: '이영희', guardianPhone: '010-8765-4321', disease: '관절염',       medicine: '진통제',  mobility: '독립보행 가능',   status: 'warning', lastCall: '오늘 10:45', keyword: '어지러워',  visits: 1, callCycle: 'daily',      callTime: '10:00', callActive: true  },
+  { id: 3, name: '박영희', age: 75, gender:'female', title:'할머니', region: '대구 수성구', address: '대구 수성구 범어동 789', phone: '010-3456-7890', guardian: '박철호', guardianPhone: '010-7654-3210', disease: '없음',          medicine: '없음',    mobility: '독립보행 가능',   status: 'normal',  lastCall: '오늘 11:20', keyword: null,        visits: 0, callCycle: 'every2days', callTime: '11:00', callActive: true  },
+  { id: 4, name: '최동수', age: 80, gender:'male',   title:'할아버지', region: '대구 중구',   address: '대구 중구 대봉동 321',   phone: '010-4567-8901', guardian: '최지영', guardianPhone: '010-6543-2109', disease: '심장병',       medicine: '심장약',  mobility: '보조기구 필요',   status: 'normal',  lastCall: '어제 15:30', keyword: null,        visits: 0, callCycle: 'weekly',     callTime: '15:00', callActive: false },
+  { id: 5, name: '정말순', age: 71, gender:'female', title:'어머니', region: '대구 동구',   address: '대구 동구 신천동 654',   phone: '010-5678-9012', guardian: '정대호', guardianPhone: '010-5432-1098', disease: '골다공증',     medicine: '칼슘제',  mobility: '독립보행 가능',   status: 'warning', lastCall: '오늘 08:55', keyword: '넘어졌어',  visits: 1, callCycle: 'daily',      callTime: '09:00', callActive: true  },
+  { id: 6, name: '한복남', age: 85, gender:'male',   title:'아버지', region: '대구 서구',   address: '대구 서구 평리동 987',   phone: '010-6789-0123', guardian: '한미래', guardianPhone: '010-4321-0987', disease: '치매 초기',    medicine: '치매약',  mobility: '보조기구 필요',   status: 'normal',  lastCall: '오늘 13:10', keyword: null,        visits: 0, callCycle: 'daily',      callTime: '13:00', callActive: true  },
+];
+
+const PUBLIC_DATA = [
+  { region: '북구',   total: 4820, managed: 312, ratio: 6.5 },
+  { region: '달서구', total: 6210, managed: 418, ratio: 6.7 },
+  { region: '수성구', total: 3940, managed: 267, ratio: 6.8 },
+  { region: '중구',   total: 2180, managed: 156, ratio: 7.2 },
+  { region: '동구',   total: 5130, managed: 341, ratio: 6.6 },
+  { region: '서구',   total: 3760, managed: 249, ratio: 6.6 },
+];
+
+const INIT_CALL_LOGS = [
+  { id: 1, elderId: 1, date: '오늘', time: '09:12', duration: '4분 32초', keywords: ['가슴이 아파', '119'], risk: 'critical', type: 'auto' },
+  { id: 2, elderId: 2, date: '오늘', time: '10:45', duration: '3분 18초', keywords: ['어지러워'],            risk: 'urgent',   type: 'auto' },
+  { id: 3, elderId: 3, date: '오늘', time: '11:20', duration: '5분 02초', keywords: [],                     risk: 'normal',   type: 'auto' },
+  { id: 4, elderId: 5, date: '오늘', time: '08:55', duration: '2분 47초', keywords: ['넘어졌어'],            risk: 'urgent',   type: 'auto' },
+];
+
+const WEEKLY_DATA = [
+  { day: '월', calls: 5, danger: 1, warning: 2 },
+  { day: '화', calls: 6, danger: 0, warning: 1 },
+  { day: '수', calls: 4, danger: 2, warning: 1 },
+  { day: '목', calls: 7, danger: 1, warning: 3 },
+  { day: '금', calls: 5, danger: 0, warning: 2 },
+  { day: '토', calls: 3, danger: 1, warning: 0 },
+  { day: '일', calls: 4, danger: 0, warning: 1 },
+];
+
+const STATUS_CONFIG = {
+  danger:  { label: '위험', color: '#ef4444', bg: '#fef2f2' },
+  warning: { label: '주의', color: '#f59e0b', bg: '#fffbeb' },
+  normal:  { label: '정상', color: '#22c55e', bg: '#f0fdf4' },
+};
+const RISK_CONFIG = {
+  critical: { label: '긴급', color: '#ef4444' },
+  urgent:   { label: '주의', color: '#f59e0b' },
+  normal:   { label: '정상', color: '#22c55e' },
+};
+const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'대구 북구', address:'', phone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', callCycle:'daily', callTime:'09:00', callActive:true };
+
+const TITLE_OPTIONS = {
+  female: ['할머니', '어머니', '여사님'],
+  male:   ['할아버지', '아버지', '어르신'],
+};
+
+const DEFAULT_SCRIPT = `{{호칭}}, 안녕하세요. 저 영실이인데요~
+오늘 하루 어떻게 보내고 계세요?
+식사는 하셨나요? 꼭 챙겨 드셔야 해요.
+{{경보멘트}}
+혹시 몸이 불편하신 곳은 없으세요?
+무슨 일 있으시면 언제든지 말씀해 주세요.
+그럼 저 영실이가 또 연락드릴게요. 건강하게 지내세요.`;
+
+const ALERT_TEMPLATES = {
+  heatwave: `오늘 {{지역}} 폭염경보가 발령되었어요. 야외 활동은 자제하시고, 물을 자주 드시고 시원한 곳에 계세요.`,
+  cold:     `오늘 {{지역}} 한파경보가 발령되었어요. 외출 시 따뜻하게 입으시고, 가급적 실내에 계세요.`,
+  dust:     `오늘 {{지역}} 미세먼지 농도가 매우 나쁨이에요. 외출 시 마스크를 꼭 착용하세요.`,
+  rain:     `오늘 {{지역}} 비가 많이 온다고 해요. 외출 시 우산을 챙기시고 미끄러운 곳을 조심하세요.`,
+  typhoon:  `{{지역}} 태풍 영향권에 들어있어요. 외출을 삼가시고 안전한 실내에 계세요.`,
+  none:     ``,
+};
+
+// 모의 기상청 공공데이터
+const WEATHER_DATA = {
+  '대구 북구':   { temp: 36, condition: '폭염', alert: 'heatwave', alertText: '폭염경보' },
+  '대구 달서구': { temp: 35, condition: '폭염', alert: 'heatwave', alertText: '폭염경보' },
+  '대구 수성구': { temp: 28, condition: '맑음', alert: 'none',     alertText: '' },
+  '대구 중구':   { temp: 34, condition: '폭염', alert: 'heatwave', alertText: '폭염경보' },
+  '대구 동구':   { temp: 18, condition: '비',   alert: 'rain',     alertText: '호우주의보' },
+  '대구 서구':   { temp: 29, condition: '흐림', alert: 'none',     alertText: '' },
+};
+
+export default function App() {
+  const [page, setPage]         = useState('dashboard');
+  const [elders, setElders]     = useState(INIT_ELDERS);
+  const [callLogs, setCallLogs] = useState(INIT_CALL_LOGS);
+  const [selected, setSelected] = useState(null);
+  const [filter, setFilter]     = useState('all');
+  const [form, setForm]         = useState(EMPTY_FORM);
+  const [formStep, setFormStep] = useState(1);
+
+  // 멘트 관리 상태
+  const [mainScript, setMainScript]     = useState(DEFAULT_SCRIPT);
+  const [editScript, setEditScript]     = useState(DEFAULT_SCRIPT);
+  const [activeAlert, setActiveAlert]   = useState('none');
+  const [alertScript, setAlertScript]   = useState(ALERT_TEMPLATES.none);
+  const [previewElder, setPreviewElder] = useState(null);
+  const [scriptSaved, setScriptSaved]   = useState(false);
+  const [fetchingWeather, setFetchingWeather] = useState(false);
+  const [weatherData, setWeatherData]   = useState(WEATHER_DATA);
+  const [formErrors, setFormErrors] = useState({});
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [calling, setCalling]   = useState(null);
+  const [callResult, setCallResult] = useState(null);
+  const [callModal, setCallModal]   = useState(null);
+
+  // 일괄 발신 상태
+  const [checked, setChecked]       = useState([]);
+  const [smartFilter, setSmartFilter] = useState('all');
+  const [bulkQueue, setBulkQueue]   = useState([]);   // 발신 대기열
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkDone, setBulkDone]     = useState([]);   // {id, success}
+  const [bulkCurrent, setBulkCurrent] = useState(null);
+  const bulkRef = useRef(false);
+
+  const danger  = elders.filter(e => e.status==='danger').length;
+  const warning = elders.filter(e => e.status==='warning').length;
+  const normal  = elders.filter(e => e.status==='normal').length;
+  const filtered = filter==='all' ? elders : elders.filter(e => e.status===filter);
+  const cycleLabel = c => c==='daily'?'매일':c==='every2days'?'격일':'주 1회';
+
+  // 멘트 변수 치환 미리보기
+  const buildPreview = (elder) => {
+    const alertMsg = activeAlert !== 'none'
+      ? alertScript.replace(/{{지역}}/g, elder?.region || '')
+      : '';
+    return mainScript
+      .replace(/{{호칭}}/g, elder?.title || '어르신')
+      .replace(/{{이름}}/g, elder?.name || '어르신')
+      .replace(/{{지역}}/g, elder?.region || '')
+      .replace(/{{경보멘트}}/g, alertMsg)
+      .replace(/\n\s*\n/g, '\n').trim();
+  };
+
+  // 날씨 공공데이터 불러오기 (모의)
+  const fetchWeather = () => {
+    setFetchingWeather(true);
+    setTimeout(() => {
+      // 실제 서비스에서는 기상청 API 호출
+      // 현재는 모의 데이터로 폭염경보 시뮬레이션
+      const hasHeatwave = Object.values(weatherData).some(w => w.alert === 'heatwave');
+      if (hasHeatwave) {
+        setActiveAlert('heatwave');
+        setAlertScript(ALERT_TEMPLATES.heatwave);
+      }
+      setFetchingWeather(false);
+    }, 1200);
+  };
+
+  // 멘트 저장
+  const saveScript = () => {
+    setMainScript(editScript);
+    setScriptSaved(true);
+    setTimeout(() => setScriptSaved(false), 2000);
+  };
+
+  // 멘트 초기화
+  const resetScript = () => {
+    setEditScript(DEFAULT_SCRIPT);
+    setMainScript(DEFAULT_SCRIPT);
+  };
+
+  const goPage  = p => { setPage(p); setSelected(null); setCallResult(null); };
+  const openDetail = elder => { setSelected(elder); setCallResult(null); setPage('detail'); };
+  const openRegister = () => { setForm(EMPTY_FORM); setFormStep(1); setFormErrors({}); setSaveSuccess(false); setEditMode(false); setPage('register'); };
+  const openEdit = elder => { setForm({...elder}); setFormStep(1); setFormErrors({}); setSaveSuccess(false); setEditMode(true); setPage('register'); };
+
+  // 스마트 필터 적용
+  const smartElders = (() => {
+    if (smartFilter==='danger')    return elders.filter(e=>e.status==='danger'||e.status==='warning');
+    if (smartFilter==='noCall')    return elders.filter(e=>e.lastCall==='아직 없음'||e.lastCall.includes('어제')||e.lastCall.includes('2일'));
+    if (smartFilter==='active')    return elders.filter(e=>e.callActive);
+    return elders;
+  })();
+
+  // 체크박스
+  const toggleCheck = id => setChecked(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
+  const checkAll    = () => setChecked(smartElders.map(e=>e.id));
+  const uncheckAll  = () => setChecked([]);
+  const applySmartFilter = f => { setSmartFilter(f); setChecked([]); };
+
+  // 일괄 발신 시작
+  const startBulkCall = async () => {
+    if (checked.length === 0) return;
+    const queue = elders.filter(e => checked.includes(e.id));
+    setBulkQueue(queue);
+    setBulkDone([]);
+    setBulkRunning(true);
+    bulkRef.current = true;
+
+    for (const elder of queue) {
+      if (!bulkRef.current) break;
+      setBulkCurrent(elder.id);
+      const rawPhone = elder.phone.replace(/-/g,'');
+      const intlPhone = '+82' + rawPhone.substring(1);
+      try {
+        const res = await fetch(`${SERVER_URL}/call/make`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ to: intlPhone, elderName: elder.name, elderTitle: elder.title || '어르신', region: elder.region, script: mainScript, alertMessage: activeAlert !== 'none' ? alertScript.replace(/{{지역}}/g, elder.region) : '' }),
+        });
+        const data = await res.json();
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+        setBulkDone(prev => [...prev, { id: elder.id, success: data.success }]);
+        if (data.success) {
+          setCallLogs(prev => [{ id: Date.now(), elderId: elder.id, date:'오늘', time:timeStr, duration:'연결 중...', keywords:[], risk:'normal', type:'manual' }, ...prev]);
+          setElders(prev => prev.map(e => e.id===elder.id ? {...e, lastCall:`오늘 ${timeStr}`} : e));
+        }
+      } catch {
+        setBulkDone(prev => [...prev, { id: elder.id, success: false }]);
+      }
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    setBulkCurrent(null);
+    setBulkRunning(false);
+    bulkRef.current = false;
+  };
+
+  const stopBulkCall = () => { bulkRef.current = false; setBulkRunning(false); setBulkCurrent(null); };
+
+  // 단건 전화
+  const makeCall = async elder => {
+    setCallModal(null); setCalling(elder.id); setCallResult(null);
+    const rawPhone = elder.phone.replace(/-/g,'');
+    const intlPhone = '+82' + rawPhone.substring(1);
+    try {
+      const res = await fetch(`${SERVER_URL}/call/make`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({to:intlPhone, elderName:elder.name, elderTitle:elder.title||'어르신', region:elder.region, script:mainScript, alertMessage:activeAlert!=='none'?alertScript.replace(/{{지역}}/g,elder.region):''}) });
+      const data = await res.json();
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+      if (data.success) {
+        setCallLogs(prev => [{id:Date.now(),elderId:elder.id,date:'오늘',time:timeStr,duration:'연결 중...',keywords:[],risk:'normal',type:'manual'},...prev]);
+        setElders(prev => prev.map(e => e.id===elder.id?{...e,lastCall:`오늘 ${timeStr}`}:e));
+        if (selected?.id===elder.id) setSelected(prev=>({...prev,lastCall:`오늘 ${timeStr}`}));
+        setCallResult({elderId:elder.id,status:'success',message:`${elder.name} 어르신에게 전화를 발신했습니다!`});
+      } else {
+        setCallResult({elderId:elder.id,status:'error',message:`전화 발신 실패: ${data.error}`});
+      }
+    } catch {
+      setCallResult({elderId:elder.id,status:'error',message:'서버 연결 실패.'});
+    } finally { setCalling(null); }
+  };
+
+  const toggleCallActive = id => {
+    setElders(prev=>prev.map(e=>e.id===id?{...e,callActive:!e.callActive}:e));
+    if (selected?.id===id) setSelected(prev=>({...prev,callActive:!prev.callActive}));
+  };
+
+  const validateStep = step => {
+    const errors = {};
+    if (step===1) { if(!form.name.trim()) errors.name='이름을 입력하세요'; if(!form.age) errors.age='나이를 입력하세요'; if(!form.phone.trim()) errors.phone='전화번호를 입력하세요'; if(!form.address.trim()) errors.address='주소를 입력하세요'; }
+    if (step===2) { if(!form.guardian.trim()) errors.guardian='보호자 이름을 입력하세요'; if(!form.guardianPhone.trim()) errors.guardianPhone='보호자 연락처를 입력하세요'; }
+    setFormErrors(errors); return Object.keys(errors).length===0;
+  };
+  const nextStep = () => { if(validateStep(formStep)) setFormStep(s=>s+1); };
+  const saveElder = () => {
+    if (editMode) { setElders(prev=>prev.map(e=>e.id===form.id?{...e,...form}:e)); setSelected(prev=>({...prev,...form})); }
+    else setElders(prev=>[...prev,{...form,id:Date.now(),status:'normal',lastCall:'아직 없음',keyword:null,visits:0,age:parseInt(form.age),callActive:true}]);
+    setSaveSuccess(true);
+    setTimeout(()=>{setSaveSuccess(false);setPage(editMode?'detail':'elders');},1800);
+  };
+  const deleteElder = id => { if(window.confirm('정말 삭제하시겠습니까?')){setElders(prev=>prev.filter(e=>e.id!==id));setPage('elders');setSelected(null);} };
+  const inp = field => ({ value:form[field]??'', onChange:e=>setForm(f=>({...f,[field]:e.target.value})), className:`form-input ${formErrors[field]?'input-error':''}` });
+
+  const totalCalls = callLogs.length;
+  const criticalCount = callLogs.filter(c=>c.risk==='critical').length;
+  const urgentCount   = callLogs.filter(c=>c.risk==='urgent').length;
+  const manualCount   = callLogs.filter(c=>c.type==='manual').length;
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div className="app">
+      {/* 전화 확인 모달 */}
+      {callModal && (
+        <div className="modal-overlay" onClick={()=>setCallModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-icon">📞</div>
+            <div className="modal-title">{callModal.name} 어르신에게<br/>전화를 거시겠습니까?</div>
+            <div className="modal-sub">{callModal.phone} → {'+82'+callModal.phone.replace(/-/g,'').substring(1)}</div>
+            <div className="modal-btns">
+              <button className="btn-secondary" onClick={()=>setCallModal(null)}>취소</button>
+              <button className="btn-call" onClick={()=>makeCall(callModal)}>📞 전화 걸기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 사이드바 */}
+      <aside className="sidebar">
+        <div className="logo">
+          <div className="logo-icon">영</div>
+          <div><div className="logo-title">영실이</div><div className="logo-sub">복지사 관리 시스템</div></div>
+        </div>
+        <nav className="nav">
+          {[
+            {id:'dashboard', icon:'⊞', label:'대시보드'},
+            {id:'elders',    icon:'👥', label:'어르신 관리'},
+            {id:'schedule',  icon:'📅', label:'AI 전화 관리'},
+            {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
+            {id:'calls',     icon:'📞', label:'통화 기록'},
+            {id:'report',    icon:'📊', label:'리포트/통계'},
+            {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
+          ].map(item=>(
+            <button key={item.id}
+              className={`nav-item ${(page===item.id||(page==='detail'&&item.id==='elders')||(page==='register'&&item.id==='elders'))?'active':''}`}
+              onClick={()=>goPage(item.id)}>
+              <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          <div className="worker-info">
+            <div className="worker-avatar">복</div>
+            <div><div className="worker-name">김복지 사회복지사</div><div className="worker-region">대구광역시</div></div>
+          </div>
+        </div>
+      </aside>
+
+      <main className="main">
+        <header className="header">
+          <div className="header-title">
+            {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'AI 전화 관리'}
+            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}
+            {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
+          </div>
+          <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
+        </header>
+
+        <div className="content">
+
+          {/* ── 대시보드 ── */}
+          {page==='dashboard' && (
+            <div className="fade-in">
+              <div className="stat-grid">
+                <div className="stat-card stat-total"><div className="stat-num">{elders.length}</div><div className="stat-label">총 담당 어르신</div><div className="stat-icon">👥</div></div>
+                <div className="stat-card stat-danger"><div className="stat-num">{danger}</div><div className="stat-label">위험 감지</div><div className="stat-icon">🚨</div></div>
+                <div className="stat-card stat-warning"><div className="stat-num">{warning}</div><div className="stat-label">주의 필요</div><div className="stat-icon">⚠️</div></div>
+                <div className="stat-card stat-normal"><div className="stat-num">{normal}</div><div className="stat-label">정상</div><div className="stat-icon">✅</div></div>
+              </div>
+              <div className="section">
+                <div className="section-title">🚨 즉시 확인 필요</div>
+                <div className="alert-list">
+                  {elders.filter(e=>e.status!=='normal').map(elder=>(
+                    <div key={elder.id} className={`alert-card alert-${elder.status}`}>
+                      <div className="alert-left" onClick={()=>openDetail(elder)} style={{cursor:'pointer',flex:1}}>
+                        <div className={`status-dot dot-${elder.status}`}/>
+                        <div><div className="alert-name">{elder.name} ({elder.age}세)</div><div className="alert-region">{elder.region}</div></div>
+                        {elder.keyword&&<div className="keyword-tag">"{elder.keyword}"</div>}
+                      </div>
+                      <div className="alert-right">
+                        <div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div>
+                        <button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'발신 중...':'📞 전화'}</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="section">
+                <div className="section-title">📞 오늘 통화 현황</div>
+                <div className="call-summary">
+                  <div className="call-stat"><div className="call-num">{totalCalls}건</div><div className="call-label">총 통화</div></div>
+                  <div className="call-stat"><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
+                  <div className="call-stat"><div className="call-num" style={{color:'#f59e0b'}}>{urgentCount}건</div><div className="call-label">주의 키워드</div></div>
+                  <div className="call-stat"><div className="call-num" style={{color:'#3b82f6'}}>{manualCount}건</div><div className="call-label">수동 전화</div></div>
+                </div>
+              </div>
+              <div className="section">
+                <div className="dash-section-header">
+                  <div className="section-title">👥 전체 어르신 현황</div>
+                  <button className="btn-primary" onClick={openRegister}>+ 신규 등록</button>
+                </div>
+                <table className="table">
+                  <thead><tr><th>이름</th><th>나이</th><th>지역</th><th>마지막 통화</th><th>상태</th><th>즉시 전화</th></tr></thead>
+                  <tbody>
+                    {elders.map(elder=>(
+                      <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
+                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><span style={{fontWeight:700}}>{elder.name}</span>{elder.keyword&&<span className="keyword-tag">"{elder.keyword}"</span>}</div></td>
+                        <td>{elder.age}세</td>
+                        <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
+                        <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
+                        <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
+                        <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'⏳':'📞 전화'}</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── AI 전화 관리 (일괄 발신) ── */}
+          {page==='schedule' && (
+            <div className="fade-in">
+              {/* 스마트 필터 */}
+              <div className="bulk-toolbar">
+                <div className="bulk-left">
+                  <div className="bulk-title">스마트 선택</div>
+                  <div className="smart-filters">
+                    {[
+                      {id:'all',     label:'전체',          count: elders.length},
+                      {id:'danger',  label:'⚠️ 위험/주의만', count: elders.filter(e=>e.status!=='normal').length},
+                      {id:'noCall',  label:'📵 미통화',       count: elders.filter(e=>e.lastCall==='아직 없음'||e.lastCall.includes('어제')).length},
+                      {id:'active',  label:'✅ 활성만',       count: elders.filter(e=>e.callActive).length},
+                    ].map(f=>(
+                      <button key={f.id} className={`smart-btn ${smartFilter===f.id?'smart-active':''}`} onClick={()=>applySmartFilter(f.id)}>
+                        {f.label} <span className="filter-count">{f.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="bulk-right">
+                  <span className="check-count">{checked.length}명 선택됨</span>
+                  <button className="btn-secondary" onClick={checkAll}>전체선택</button>
+                  <button className="btn-secondary" onClick={uncheckAll}>선택해제</button>
+                  {!bulkRunning
+                    ? <button className={`btn-bulk-call ${checked.length===0?'btn-disabled':''}`} onClick={startBulkCall} disabled={checked.length===0}>📞 선택 발신 ({checked.length}명)</button>
+                    : <button className="btn-bulk-stop" onClick={stopBulkCall}>⏹ 발신 중단</button>
+                  }
+                </div>
+              </div>
+
+              {/* 발신 진행 상황 */}
+              {(bulkRunning || bulkDone.length > 0) && (
+                <div className="bulk-progress-box">
+                  <div className="bulk-progress-header">
+                    <span className="bulk-progress-title">{bulkRunning?'📞 일괄 발신 진행 중...':'✅ 발신 완료'}</span>
+                    <span className="bulk-progress-count">{bulkDone.length} / {bulkQueue.length}</span>
+                  </div>
+                  <div className="bulk-bar-wrap">
+                    <div className="bulk-bar" style={{width:`${bulkQueue.length?bulkDone.length/bulkQueue.length*100:0}%`}}/>
+                  </div>
+                  <div className="bulk-result-list">
+                    {bulkQueue.map(elder=>{
+                      const done = bulkDone.find(d=>d.id===elder.id);
+                      const isCurrent = bulkCurrent===elder.id;
+                      return (
+                        <div key={elder.id} className={`bulk-result-item ${isCurrent?'bulk-current':done?done.success?'bulk-success':'bulk-fail':''}`}>
+                          <div className="table-avatar">{elder.name[0]}</div>
+                          <span className="bulk-name">{elder.name}</span>
+                          <span className="bulk-phone">{elder.phone}</span>
+                          <span className="bulk-status-icon">
+                            {isCurrent?'⏳ 발신 중':done?done.success?'✅ 성공':'❌ 실패':'⏸ 대기'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {!bulkRunning && bulkDone.length>0 && (
+                    <div className="bulk-summary">
+                      <span className="bulk-success-count">✅ 성공 {bulkDone.filter(d=>d.success).length}건</span>
+                      <span className="bulk-fail-count">❌ 실패 {bulkDone.filter(d=>!d.success).length}건</span>
+                      <button className="btn-secondary" onClick={()=>{setBulkDone([]);setBulkQueue([]);setChecked([]);}}>닫기</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 어르신 목록 + 체크박스 */}
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{width:40}}><input type="checkbox" checked={checked.length===smartElders.length&&smartElders.length>0} onChange={e=>e.target.checked?checkAll():uncheckAll()} className="cb"/></th>
+                    <th>어르신</th><th>전화번호</th><th>전화 주기</th><th>전화 시간</th><th>마지막 통화</th><th>상태</th><th>중단/재개</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {smartElders.map(elder=>{
+                    const done = bulkDone.find(d=>d.id===elder.id);
+                    return (
+                      <tr key={elder.id} className={`${checked.includes(elder.id)?'row-checked':''} ${done?done.success?'row-success':'row-fail':''}`}>
+                        <td><input type="checkbox" checked={checked.includes(elder.id)} onChange={()=>toggleCheck(elder.id)} className="cb"/></td>
+                        <td>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <div className="table-avatar">{elder.name[0]}</div>
+                            <div><div style={{fontWeight:700}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age}세</div></div>
+                            {done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'✅':'❌'}</span>}
+                          </div>
+                        </td>
+                        <td style={{fontSize:13}}>{elder.phone}</td>
+                        <td><span className="cycle-badge">{cycleLabel(elder.callCycle)}</span></td>
+                        <td><span className="time-badge">{elder.callTime}</span></td>
+                        <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
+                        <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
+                        <td><button className={`toggle-btn ${elder.callActive?'toggle-active':'toggle-paused'}`} onClick={()=>toggleCallActive(elder.id)}>{elder.callActive?'⏸ 중단':'▶ 재개'}</button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ── 어르신 관리 ── */}
+          {page==='elders' && (
+            <div className="fade-in">
+              <div className="list-toolbar">
+                <div className="filter-bar">
+                  {['all','danger','warning','normal'].map(f=>(
+                    <button key={f} className={`filter-btn ${filter===f?'filter-active':''}`} onClick={()=>setFilter(f)}>
+                      {f==='all'?'전체':STATUS_CONFIG[f].label}<span className="filter-count">{f==='all'?elders.length:elders.filter(e=>e.status===f).length}</span>
+                    </button>
+                  ))}
+                </div>
+                <button className="btn-primary" onClick={openRegister}>+ 신규 등록</button>
+              </div>
+              <div className="elder-grid">
+                {filtered.map(elder=>(
+                  <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)}>
+                    <div className="elder-top">
+                      <div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div>
+                      <div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div>
+                    </div>
+                    <div className="elder-name">{elder.name}</div>
+                    <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
+                    <div className="elder-last">마지막 통화: {elder.lastCall}</div>
+                    {elder.keyword&&<div className="keyword-tag mt8">"{elder.keyword}" 감지</div>}
+                    {!elder.callActive&&<div className="paused-tag mt8">⏸ 전화 중단 중</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── 통화 기록 ── */}
+          {/* ── 전화 멘트 관리 ── */}
+          {page==='script' && (
+            <div className="fade-in">
+
+              {/* 공공데이터 날씨 경보 */}
+              <div className="weather-panel">
+                <div className="weather-panel-header">
+                  <div>
+                    <div className="weather-panel-title">🌡️ 기상청 공공데이터 연동</div>
+                    <div className="weather-panel-sub">날씨 경보 발령 시 자동으로 멘트에 삽입됩니다</div>
+                  </div>
+                  <button className={`btn-fetch-weather ${fetchingWeather?'btn-calling':''}`} onClick={fetchWeather} disabled={fetchingWeather}>
+                    {fetchingWeather ? '⏳ 불러오는 중...' : '🔄 날씨 데이터 갱신'}
+                  </button>
+                </div>
+                <div className="weather-grid">
+                  {Object.entries(weatherData).map(([region, data]) => (
+                    <div key={region} className={`weather-card ${data.alert!=='none'?'weather-alert':''}`}>
+                      <div className="weather-region">{region}</div>
+                      <div className="weather-temp">{data.temp}°C</div>
+                      <div className="weather-condition">{data.condition}</div>
+                      {data.alertText && <div className="weather-badge">{data.alertText}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 경보 멘트 선택 */}
+              <div className="section">
+                <div className="section-title">⚠️ 경보 멘트 설정</div>
+                <div className="alert-template-grid">
+                  {[
+                    {id:'none',     icon:'✅', label:'경보 없음',   color:'#22c55e'},
+                    {id:'heatwave', icon:'🌡️', label:'폭염경보',    color:'#ef4444'},
+                    {id:'cold',     icon:'❄️', label:'한파경보',    color:'#3b82f6'},
+                    {id:'dust',     icon:'😷', label:'미세먼지 나쁨', color:'#f59e0b'},
+                    {id:'rain',     icon:'🌧️', label:'호우주의보',   color:'#6366f1'},
+                    {id:'typhoon',  icon:'🌀', label:'태풍경보',    color:'#7c3aed'},
+                  ].map(t => (
+                    <button key={t.id}
+                      className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`}
+                      style={activeAlert===t.id?{borderColor:t.color,background:`${t.color}15`}:{}}
+                      onClick={() => { setActiveAlert(t.id); setAlertScript(ALERT_TEMPLATES[t.id]); }}
+                    >
+                      <span style={{fontSize:20}}>{t.icon}</span>
+                      <span style={{fontWeight:700,color:activeAlert===t.id?t.color:'#374151'}}>{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+                {activeAlert !== 'none' && (
+                  <div className="alert-script-edit">
+                    <label className="form-label">경보 멘트 수정</label>
+                    <textarea
+                      className="script-textarea"
+                      value={alertScript}
+                      onChange={e => setAlertScript(e.target.value)}
+                      rows={3}
+                    />
+                    <div className="var-hint">사용 가능 변수: <code>{'{{지역}}'}</code></div>
+                  </div>
+                )}
+              </div>
+
+              {/* 기본 멘트 편집기 */}
+              <div className="section">
+                <div className="script-editor-header">
+                  <div className="section-title">✍️ 기본 전화 멘트 편집</div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button className="btn-secondary" onClick={resetScript}>↩ 초기화</button>
+                    <button className="btn-success" onClick={saveScript}>💾 저장</button>
+                  </div>
+                </div>
+                {scriptSaved && <div className="success-banner">✅ 멘트가 저장되었습니다!</div>}
+                <div className="var-hint" style={{marginBottom:12}}>
+                  사용 가능 변수:
+                  <code>{'{{호칭}}'}</code> 할머니/할아버지 &nbsp;
+                  <code>{'{{이름}}'}</code> 어르신 이름 &nbsp;
+                  <code>{'{{지역}}'}</code> 담당 지역 &nbsp;
+                  <code>{'{{경보멘트}}'}</code> 날씨 경보
+                </div>
+                <textarea
+                  className="script-textarea script-textarea-lg"
+                  value={editScript}
+                  onChange={e => setEditScript(e.target.value)}
+                  rows={10}
+                />
+              </div>
+
+              {/* 미리보기 */}
+              <div className="section">
+                <div className="script-editor-header">
+                  <div className="section-title">👁️ 멘트 미리보기</div>
+                  <select
+                    className="form-input"
+                    style={{width:'auto',padding:'8px 16px'}}
+                    value={previewElder?.id || ''}
+                    onChange={e => setPreviewElder(elders.find(el => el.id === parseInt(e.target.value)) || null)}
+                  >
+                    <option value="">어르신 선택...</option>
+                    {elders.map(el => <option key={el.id} value={el.id}>{el.name} ({el.region})</option>)}
+                  </select>
+                </div>
+                <div className="script-preview">
+                  {previewElder ? (
+                    <div>
+                      <div className="preview-header">
+                        <div className="preview-avatar">{previewElder.name[0]}</div>
+                        <div>
+                          <div className="preview-name">{previewElder.name} 어르신</div>
+                          <div className="preview-region">{previewElder.region} · {previewElder.phone}</div>
+                        </div>
+                        {weatherData[previewElder.region]?.alertText && (
+                          <div className="weather-badge">{weatherData[previewElder.region].alertText}</div>
+                        )}
+                      </div>
+                      <div className="preview-divider"/>
+                      <div className="preview-script">
+                        {buildPreview(previewElder).split('\n').map((line, i) => (
+                          <div key={i} className="preview-line">
+                            <span className="preview-dot">🔊</span>
+                            <span>{line}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="preview-empty">어르신을 선택하면 실제 전화 멘트를 미리볼 수 있습니다</div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {page==='calls' && (
+            <div className="fade-in">
+              <table className="table">
+                <thead><tr><th>어르신</th><th>유형</th><th>날짜</th><th>시간</th><th>통화 길이</th><th>감지 키워드</th><th>위험도</th></tr></thead>
+                <tbody>
+                  {callLogs.map(log=>{
+                    const elder=elders.find(e=>e.id===log.elderId);
+                    return(<tr key={log.id}><td><strong>{elder?.name}</strong></td><td><span className={`type-badge ${log.type==='manual'?'type-manual':'type-auto'}`}>{log.type==='manual'?'수동':'자동'}</span></td><td>{log.date}</td><td>{log.time}</td><td>{log.duration}</td><td>{log.keywords.length>0?log.keywords.map((kw,i)=><span key={i} className="keyword-tag">{kw}</span>):<span style={{color:'#9ca3af'}}>없음</span>}</td><td><span style={{color:RISK_CONFIG[log.risk].color,fontWeight:700}}>{RISK_CONFIG[log.risk].label}</span></td></tr>);
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ── 리포트 / 통계 ── */}
+          {page==='report' && (
+            <div className="fade-in">
+              {/* 월간 요약 */}
+              <div className="report-banner">
+                <div className="report-banner-title">📊 2026년 5월 월간 리포트</div>
+                <div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div>
+                <button className="btn-download" onClick={()=>window.print()}>⬇️ PDF 다운로드</button>
+              </div>
+
+              <div className="report-stat-grid">
+                {[
+                  {label:'총 통화', value:'34건', icon:'📞', color:'#1d4ed8'},
+                  {label:'긴급 감지', value:'3건', icon:'🚨', color:'#ef4444'},
+                  {label:'주의 감지', value:'8건', icon:'⚠️', color:'#f59e0b'},
+                  {label:'방문 연결', value:'5건', icon:'🏠', color:'#16a34a'},
+                  {label:'총 통화 시간', value:'142분', icon:'⏱️', color:'#7c3aed'},
+                  {label:'관리 어르신', value:`${elders.length}명`, icon:'👥', color:'#0891b2'},
+                ].map((s,i)=>(
+                  <div key={i} className="report-stat-card">
+                    <div className="report-stat-icon">{s.icon}</div>
+                    <div className="report-stat-value" style={{color:s.color}}>{s.value}</div>
+                    <div className="report-stat-label">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 주간 통화 현황 차트 */}
+              <div className="section">
+                <div className="section-title">📈 주간 통화 현황</div>
+                <div className="chart-wrap">
+                  {WEEKLY_DATA.map((d,i)=>{
+                    const maxCalls = Math.max(...WEEKLY_DATA.map(x=>x.calls));
+                    return (
+                      <div key={i} className="chart-col">
+                        <div className="chart-bar-wrap">
+                          <div className="chart-bar-total" style={{height:`${d.calls/maxCalls*100}%`}}>
+                            <div className="chart-bar-danger" style={{height:`${d.danger/d.calls*100}%`}}/>
+                            <div className="chart-bar-warning" style={{height:`${d.warning/d.calls*100}%`}}/>
+                          </div>
+                        </div>
+                        <div className="chart-val">{d.calls}</div>
+                        <div className="chart-day">{d.day}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="chart-legend">
+                  <span className="legend-item"><span className="legend-dot" style={{background:'#ef4444'}}/>긴급</span>
+                  <span className="legend-item"><span className="legend-dot" style={{background:'#f59e0b'}}/>주의</span>
+                  <span className="legend-item"><span className="legend-dot" style={{background:'#3b82f6'}}/>정상</span>
+                </div>
+              </div>
+
+              {/* 어르신별 상태 */}
+              <div className="section">
+                <div className="section-title">👥 어르신별 이달 현황</div>
+                <table className="table">
+                  <thead><tr><th>어르신</th><th>이달 통화</th><th>위험 감지</th><th>방문 필요</th><th>현재 상태</th><th>변화 추이</th></tr></thead>
+                  <tbody>
+                    {elders.map((elder,i)=>{
+                      const elderLogs = callLogs.filter(c=>c.elderId===elder.id);
+                      const trends = ['→','↑','↓','→','↑','→'];
+                      const trendColors = ['#64748b','#ef4444','#22c55e','#64748b','#ef4444','#64748b'];
+                      return (
+                        <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
+                          <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><strong>{elder.name}</strong></div></td>
+                          <td><strong>{elderLogs.length}건</strong></td>
+                          <td>{elder.keyword?<span className="keyword-tag">{elder.keyword}</span>:<span style={{color:'#9ca3af'}}>없음</span>}</td>
+                          <td><span style={{color:elder.visits>0?'#ef4444':'#22c55e',fontWeight:700}}>{elder.visits>0?`${elder.visits}회`:'불필요'}</span></td>
+                          <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
+                          <td><span style={{fontSize:20,fontWeight:900,color:trendColors[i%6]}}>{trends[i%6]}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 위험도 분포 */}
+              <div className="section">
+                <div className="section-title">🎯 위험도 분포</div>
+                <div className="donut-wrap">
+                  <div className="donut-chart">
+                    <svg viewBox="0 0 120 120" width="160" height="160">
+                      <circle cx="60" cy="60" r="45" fill="none" stroke="#fef2f2" strokeWidth="18"/>
+                      <circle cx="60" cy="60" r="45" fill="none" stroke="#ef4444" strokeWidth="18" strokeDasharray={`${danger/elders.length*283} 283`} strokeDashoffset="0" transform="rotate(-90 60 60)"/>
+                      <circle cx="60" cy="60" r="45" fill="none" stroke="#f59e0b" strokeWidth="18" strokeDasharray={`${warning/elders.length*283} 283`} strokeDashoffset={`-${danger/elders.length*283}`} transform="rotate(-90 60 60)"/>
+                      <circle cx="60" cy="60" r="45" fill="none" stroke="#22c55e" strokeWidth="18" strokeDasharray={`${normal/elders.length*283} 283`} strokeDashoffset={`-${(danger+warning)/elders.length*283}`} transform="rotate(-90 60 60)"/>
+                      <text x="60" y="55" textAnchor="middle" fontSize="14" fontWeight="900" fill="#0f172a">{elders.length}</text>
+                      <text x="60" y="70" textAnchor="middle" fontSize="9" fill="#94a3b8">전체</text>
+                    </svg>
+                  </div>
+                  <div className="donut-legend">
+                    {[{label:'위험',count:danger,color:'#ef4444'},{label:'주의',count:warning,color:'#f59e0b'},{label:'정상',count:normal,color:'#22c55e'}].map(item=>(
+                      <div key={item.label} className="donut-legend-item">
+                        <div className="donut-dot" style={{background:item.color}}/>
+                        <div><div className="donut-label">{item.label}</div><div className="donut-count" style={{color:item.color}}>{item.count}명 ({Math.round(item.count/elders.length*100)}%)</div></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── 공공데이터 ── */}
+          {page==='data' && (
+            <div className="fade-in">
+              <div className="data-banner"><div className="data-banner-title">📊 대구광역시 독거노인 현황</div><div className="data-banner-sub">출처: 보건복지부 공공데이터포털 (2024년 기준)</div></div>
+              <div className="data-total-row">
+                <div className="data-total-card"><div className="data-total-num">26,040명</div><div className="data-total-label">대구 전체 독거노인</div></div>
+                <div className="data-total-card"><div className="data-total-num">1,743명</div><div className="data-total-label">현재 AI 영실이 관리</div></div>
+                <div className="data-total-card"><div className="data-total-num">6.7%</div><div className="data-total-label">관리 비율</div></div>
+              </div>
+              <table className="table">
+                <thead><tr><th>구</th><th>독거노인 수</th><th>영실이 관리</th><th>관리 비율</th><th>커버리지</th></tr></thead>
+                <tbody>{PUBLIC_DATA.map((d,i)=><tr key={i}><td><strong>대구 {d.region}</strong></td><td>{d.total.toLocaleString()}명</td><td>{d.managed.toLocaleString()}명</td><td>{d.ratio}%</td><td><div className="progress-bar"><div className="progress-fill" style={{width:`${d.ratio*5}%`}}/></div></td></tr>)}</tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ── 어르신 상세 ── */}
+          {page==='detail' && selected && (
+            <div className="fade-in">
+              <div className="detail-topbar">
+                <button className="back-btn" onClick={()=>{setPage('elders');setSelected(null);}}>← 목록으로</button>
+                <div className="detail-actions">
+                  <button className="btn-secondary" onClick={()=>openEdit(selected)}>✏️ 정보 수정</button>
+                  <button className="btn-danger-outline" onClick={()=>deleteElder(selected.id)}>🗑️ 삭제</button>
+                </div>
+              </div>
+              {callResult?.elderId===selected.id&&<div className={`call-result-banner ${callResult.status}`}>{callResult.status==='success'?'✅':'❌'} {callResult.message}</div>}
+              <div className="detail-grid">
+                <div className="detail-card">
+                  <div className="detail-avatar">{selected.name[0]}</div>
+                  <div className="detail-name">{selected.name}</div>
+                  <div className="detail-sub">{selected.age}세 · {selected.region}</div>
+                  <div className={`status-badge badge-${selected.status} mt16`}>{STATUS_CONFIG[selected.status].label}</div>
+                  <div className="call-action-box">
+                    <button className={`btn-call-lg ${calling===selected.id?'btn-calling':''} ${!selected.callActive?'btn-disabled':''}`} onClick={()=>selected.callActive&&setCallModal(selected)} disabled={calling===selected.id||!selected.callActive}>{calling===selected.id?'⏳ 발신 중...':'📞 지금 전화하기'}</button>
+                    <button className={`toggle-btn-lg ${selected.callActive?'toggle-active':'toggle-paused'}`} onClick={()=>toggleCallActive(selected.id)}>{selected.callActive?'⏸ 자동전화 중단':'▶ 자동전화 재개'}</button>
+                  </div>
+                  {[['성별', selected.gender==='female'?'👵 여성':'👴 남성'],['호칭', selected.title||'어르신'],['전화번호',selected.phone],['주소',selected.address],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(
+                    <div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>
+                  ))}
+                </div>
+                <div className="detail-right">
+                  {selected.keyword&&<div className="alert-box"><div className="alert-box-title">🚨 감지된 위험 키워드</div><div className="alert-box-keyword">"{selected.keyword}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
+                  <div className="section">
+                    <div className="section-title">📞 통화 기록</div>
+                    {callLogs.filter(c=>c.elderId===selected.id).map(log=>(
+                      <div key={log.id} className={`call-log-item risk-${log.risk}`}>
+                        <span className={`type-badge ${log.type==='manual'?'type-manual':'type-auto'}`}>{log.type==='manual'?'수동':'자동'}</span>
+                        <div className="call-log-time">{log.time}</div>
+                        <div className="call-log-duration">{log.duration}</div>
+                        <div>{log.keywords.length>0?log.keywords.map((kw,i)=><span key={i} className="keyword-tag">{kw}</span>):<span style={{color:'#9ca3af',fontSize:13}}>이상 없음</span>}</div>
+                      </div>
+                    ))}
+                    {callLogs.filter(c=>c.elderId===selected.id).length===0&&<div style={{color:'#9ca3af',fontSize:14,padding:'16px 0'}}>통화 기록 없음</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── 신규 등록/수정 ── */}
+          {page==='register' && (
+            <div className="fade-in">
+              <button className="back-btn" onClick={()=>setPage(editMode?'detail':'elders')}>← 돌아가기</button>
+              {saveSuccess&&<div className="success-banner">✅ {editMode?'수정이 완료되었습니다!':'어르신 등록이 완료되었습니다!'}</div>}
+              <div className="step-bar">
+                {[{n:1,label:'기본 정보'},{n:2,label:'보호자 정보'},{n:3,label:'AI 전화 설정'}].map(step=>(
+                  <div key={step.n} className={`step-item ${formStep===step.n?'step-active':formStep>step.n?'step-done':''}`}>
+                    <div className="step-circle">{formStep>step.n?'✓':step.n}</div>
+                    <div className="step-label">{step.label}</div>
+                    {step.n<3&&<div className="step-line"/>}
+                  </div>
+                ))}
+              </div>
+              <div className="form-card">
+                {formStep===1&&(<div className="fade-in"><div className="form-section-title">👤 기본 정보</div><div className="form-grid">
+
+                  {/* 성별 선택 */}
+                  <div className="form-field full-width">
+                    <label className="form-label">성별 <span className="required">*</span></label>
+                    <div className="gender-group">
+                      {[{value:'female',icon:'👵',label:'여성'},{value:'male',icon:'👴',label:'남성'}].map(g=>(
+                        <label key={g.value} className={`gender-option ${form.gender===g.value?'gender-selected':''}`}
+                          onClick={()=>setForm(f=>({...f, gender:g.value, title:TITLE_OPTIONS[g.value][0]}))}>
+                          <span style={{fontSize:28}}>{g.icon}</span>
+                          <span style={{fontWeight:700}}>{g.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 호칭 선택 */}
+                  <div className="form-field full-width">
+                    <label className="form-label">호칭 (전화 시 사용)</label>
+                    <div className="radio-group">
+                      {(TITLE_OPTIONS[form.gender]||[]).map(t=>(
+                        <label key={t} className={`radio-option ${form.title===t?'radio-selected':''}`}>
+                          <input type="radio" name="title" value={t} checked={form.title===t} onChange={e=>setForm(f=>({...f,title:e.target.value}))} style={{display:'none'}}/>
+                          {t}
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>
+                      💬 전화 시 "{form.title}, 안녕하세요. 저 영실이인데요~" 라고 시작합니다
+                    </div>
+                  </div>
+
+                  <div className="form-field"><label className="form-label">이름 <span className="required">*</span></label><input {...inp('name')} placeholder="예: 김순자"/>{formErrors.name&&<div className="error-msg">{formErrors.name}</div>}</div><div className="form-field"><label className="form-label">나이 <span className="required">*</span></label><input {...inp('age')} type="number" placeholder="예: 78"/>{formErrors.age&&<div className="error-msg">{formErrors.age}</div>}</div><div className="form-field"><label className="form-label">전화번호 <span className="required">*</span></label><input {...inp('phone')} placeholder="예: 010-1234-5678"/>{formErrors.phone&&<div className="error-msg">{formErrors.phone}</div>}</div><div className="form-field"><label className="form-label">관할 구역</label><select {...inp('region')} className="form-input">{['대구 북구','대구 달서구','대구 수성구','대구 중구','대구 동구','대구 서구','대구 남구','대구 달성군'].map(r=><option key={r} value={r}>{r}</option>)}</select></div><div className="form-field full-width"><label className="form-label">주소 <span className="required">*</span></label><input {...inp('address')} placeholder="예: 대구 북구 침산동 123"/>{formErrors.address&&<div className="error-msg">{formErrors.address}</div>}</div><div className="form-field"><label className="form-label">지병</label><input {...inp('disease')} placeholder="예: 고혈압, 당뇨"/></div><div className="form-field"><label className="form-label">복용 중인 약</label><input {...inp('medicine')} placeholder="예: 혈압약"/></div><div className="form-field full-width"><label className="form-label">거동 상태</label><div className="radio-group">{['독립보행 가능','보조기구 필요','거동 불가'].map(opt=><label key={opt} className={`radio-option ${form.mobility===opt?'radio-selected':''}`}><input type="radio" name="mobility" value={opt} checked={form.mobility===opt} onChange={e=>setForm(f=>({...f,mobility:e.target.value}))} style={{display:'none'}}/>{opt}</label>)}</div></div></div><div className="form-footer"><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
+                {formStep===2&&(<div className="fade-in"><div className="form-section-title">👨‍👩‍👧 보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">💡 위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
+                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid"><div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'every2days',label:'격일'},{value:'weekly',label:'주 1회'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div></div><div className="form-field"><label className="form-label">전화 시간</label><input {...inp('callTime')} type="time"/></div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </main>
     </div>
   );
 }
-
-export default App;
