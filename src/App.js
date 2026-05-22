@@ -84,12 +84,47 @@ const WEATHER_DATA = {
 
 export default function App() {
   const [page, setPage]         = useState('dashboard');
-  const [elders, setElders]     = useState(INIT_ELDERS);
-  const [callLogs, setCallLogs] = useState(INIT_CALL_LOGS);
+  const [elders, setElders] = useState(() => {
+    try {
+      const saved = localStorage.getItem('youngsili_elders');
+      return saved ? JSON.parse(saved) : INIT_ELDERS;
+    } catch { return INIT_ELDERS; }
+  });
+
+  const [callLogs, setCallLogs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('youngsili_callLogs');
+      return saved ? JSON.parse(saved) : INIT_CALL_LOGS;
+    } catch { return INIT_CALL_LOGS; }
+  });
   const [selected, setSelected] = useState(null);
   const [filter, setFilter]     = useState('all');
   const [form, setForm]         = useState(EMPTY_FORM);
   const [formStep, setFormStep] = useState(1);
+
+  // 어르신 관리 검색/필터/정렬/뷰
+  const [searchName, setSearchName]   = useState('');
+  const [regionFilter, setRegionFilter] = useState('전체');
+  const [sortBy, setSortBy]           = useState('status');
+  const [viewMode, setViewMode]       = useState('card');
+
+  // 대시보드 상태
+  const [todoChecked, setTodoChecked] = useState([]);
+  const [memoText, setMemoText]       = useState('');
+  const [memos, setMemos]             = useState([
+    { id: 1, text: '김순자 할머니 딸 연락 옴 - 다음주 방문 예정', time: '09:30', done: false },
+    { id: 2, text: '오후 2시 팀 회의 있음', time: '08:00', done: false },
+  ]);
+  const [quickCallRunning, setQuickCallRunning] = useState(false);
+
+  // 어르신/통화기록 변경 시 자동 저장
+  useEffect(() => {
+    localStorage.setItem('youngsili_elders', JSON.stringify(elders));
+  }, [elders]);
+
+  useEffect(() => {
+    localStorage.setItem('youngsili_callLogs', JSON.stringify(callLogs));
+  }, [callLogs]);
 
   // 멘트 관리 상태
   const [mainScript, setMainScript]     = useState(DEFAULT_SCRIPT);
@@ -121,6 +156,56 @@ export default function App() {
   const normal  = elders.filter(e => e.status==='normal').length;
   const filtered = filter==='all' ? elders : elders.filter(e => e.status===filter);
   const cycleLabel = c => c==='daily'?'매일':c==='every2days'?'격일':'주 1회';
+
+  // 미응답 경과일 계산
+  const getNoResponseDays = (lastCall) => {
+    if (!lastCall || lastCall === '아직 없음') return 99;
+    if (lastCall.includes('오늘')) return 0;
+    if (lastCall.includes('어제')) return 1;
+    if (lastCall.includes('2일')) return 2;
+    if (lastCall.includes('3일')) return 3;
+    return 99;
+  };
+
+  // 고독사 위험도 자동 계산
+  const getSolitudeRisk = (elder) => {
+    let score = 0;
+    const days = getNoResponseDays(elder.lastCall);
+    if (days >= 3) score += 40;
+    else if (days >= 1) score += 20;
+    if (elder.keyword) score += 25;
+    if (elder.status === 'danger') score += 20;
+    else if (elder.status === 'warning') score += 10;
+    if (elder.visits > 0) score += 10;
+    if (!elder.callActive) score += 15;
+    if (elder.mobility === '거동 불가') score += 10;
+    if (elder.age >= 80) score += 5;
+    if (score >= 50) return { level: 'high',   label: '🔴 고위험', color: '#ef4444', bg: '#fef2f2' };
+    if (score >= 25) return { level: 'medium', label: '🟡 주의',   color: '#f59e0b', bg: '#fffbeb' };
+    return               { level: 'low',    label: '🟢 안전',   color: '#22c55e', bg: '#f0fdf4' };
+  };
+
+  // 어르신 검색/필터/정렬 적용
+  const REGIONS = ['전체', '대구 북구', '대구 달서구', '대구 수성구', '대구 중구', '대구 동구', '대구 서구', '대구 남구', '대구 달성군'];
+
+  const filteredElders = elders
+    .filter(e => filter === 'all' || e.status === filter)
+    .filter(e => regionFilter === '전체' || e.region === regionFilter)
+    .filter(e => searchName === '' || e.name.includes(searchName))
+    .sort((a, b) => {
+      if (sortBy === 'status') {
+        const order = { danger: 0, warning: 1, normal: 2 };
+        return order[a.status] - order[b.status];
+      }
+      if (sortBy === 'risk') {
+        const riskOrder = { high: 0, medium: 1, low: 2 };
+        return riskOrder[getSolitudeRisk(a).level] - riskOrder[getSolitudeRisk(b).level];
+      }
+      if (sortBy === 'noResponse') return getNoResponseDays(b.lastCall) - getNoResponseDays(a.lastCall);
+      if (sortBy === 'age') return b.age - a.age;
+      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      return 0;
+    });
 
   // 멘트 변수 치환 미리보기
   const buildPreview = (elder) => {
@@ -222,25 +307,107 @@ export default function App() {
   const stopBulkCall = () => { bulkRef.current = false; setBulkRunning(false); setBulkCurrent(null); };
 
   // 단건 전화
+  // 통화 상태 폴링 (최대 60초, 5초 간격)
+  const pollCallStatus = async (callSid, logId, attempt) => {
+    const MAX_POLLS = 12; // 60초
+    let polls = 0;
+    const interval = setInterval(async () => {
+      polls++;
+      try {
+        const res = await fetch(`${SERVER_URL}/call/status/${callSid}`);
+        const data = await res.json();
+        const status = data.status;
+
+        if (status === 'completed' || status === 'in-progress') {
+          clearInterval(interval);
+          const dur = data.duration ? `${data.duration}초` : '통화 완료';
+          setCallLogs(prev => prev.map(l =>
+            l.id === logId ? { ...l, duration: dur, callStatus: 'completed' } : l
+          ));
+        } else if (status === 'no-answer' || status === 'busy' || status === 'failed' || status === 'canceled') {
+          clearInterval(interval);
+          if (attempt < 2) {
+            // 1차 실패 → 10초 후 재시도
+            setCallLogs(prev => prev.map(l =>
+              l.id === logId ? { ...l, duration: `미응답 (${attempt}차) → 재발신 중...`, callStatus: 'retrying' } : l
+            ));
+            setTimeout(() => retryCall(logId, attempt + 1), 10000);
+          } else {
+            // 2차도 실패 → 연결 실패 확정
+            setCallLogs(prev => prev.map(l =>
+              l.id === logId ? { ...l, duration: '❌ 연결 실패 (2회 미응답)', callStatus: 'failed', risk: 'urgent' } : l
+            ));
+          }
+        }
+      } catch { /* 폴링 실패 시 무시 */ }
+
+      if (polls >= MAX_POLLS) {
+        clearInterval(interval);
+        setCallLogs(prev => prev.map(l =>
+          l.id === logId && l.duration === '연결 중...' ? { ...l, duration: '상태 확인 불가', callStatus: 'unknown' } : l
+        ));
+      }
+    }, 5000);
+  };
+
+  // 재발신
+  const retryCall = async (logId, attempt) => {
+    const log = callLogs.find(l => l.id === logId);
+    if (!log) return;
+    const elder = elders.find(e => e.id === log.elderId);
+    if (!elder) return;
+
+    const rawPhone = elder.phone.replace(/-/g,'');
+    const intlPhone = '+82' + rawPhone.substring(1);
+    try {
+      const res = await fetch(`${SERVER_URL}/call/make`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: intlPhone, elderName: elder.name, elderTitle: elder.title||'어르신', region: elder.region, script: mainScript, alertMessage: activeAlert!=='none'?alertScript.replace(/{{지역}}/g,elder.region):'' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCallLogs(prev => prev.map(l =>
+          l.id === logId ? { ...l, duration: `재발신 중... (${attempt}차)`, callStatus: 'ringing' } : l
+        ));
+        pollCallStatus(data.callSid, logId, attempt);
+      } else {
+        setCallLogs(prev => prev.map(l =>
+          l.id === logId ? { ...l, duration: '❌ 연결 실패 (발신 오류)', callStatus: 'failed' } : l
+        ));
+      }
+    } catch {
+      setCallLogs(prev => prev.map(l =>
+        l.id === logId ? { ...l, duration: '❌ 연결 실패 (서버 오류)', callStatus: 'failed' } : l
+      ));
+    }
+  };
+
   const makeCall = async elder => {
     setCallModal(null); setCalling(elder.id); setCallResult(null);
     const rawPhone = elder.phone.replace(/-/g,'');
     const intlPhone = '+82' + rawPhone.substring(1);
+    const logId = Date.now();
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
     try {
-      const res = await fetch(`${SERVER_URL}/call/make`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({to:intlPhone, elderName:elder.name, elderTitle:elder.title||'어르신', region:elder.region, script:mainScript, alertMessage:activeAlert!=='none'?alertScript.replace(/{{지역}}/g,elder.region):''}) });
+      const res = await fetch(`${SERVER_URL}/call/make`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({to:intlPhone, elderName:elder.name, elderTitle:elder.title||'어르신', region:elder.region, script:mainScript, alertMessage:activeAlert!=='none'?alertScript.replace(/{{지역}}/g,elder.region):''})
+      });
       const data = await res.json();
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
       if (data.success) {
-        setCallLogs(prev => [{id:Date.now(),elderId:elder.id,date:'오늘',time:timeStr,duration:'연결 중...',keywords:[],risk:'normal',type:'manual'},...prev]);
+        // 통화 로그 추가 (연결 중 상태)
+        setCallLogs(prev => [{id:logId, elderId:elder.id, date:'오늘', time:timeStr, duration:'연결 중...', keywords:[], risk:'normal', type:'manual', callStatus:'ringing', callSid:data.callSid},...prev]);
         setElders(prev => prev.map(e => e.id===elder.id?{...e,lastCall:`오늘 ${timeStr}`}:e));
         if (selected?.id===elder.id) setSelected(prev=>({...prev,lastCall:`오늘 ${timeStr}`}));
-        setCallResult({elderId:elder.id,status:'success',message:`${elder.name} 어르신에게 전화를 발신했습니다!`});
+        setCallResult({elderId:elder.id, status:'success', message:`${elder.name} ${elder.title||'어르신'}에게 발신 중... 응답 여부를 확인합니다.`});
+        // 상태 폴링 시작 (1차 시도)
+        if (data.callSid) pollCallStatus(data.callSid, logId, 1);
       } else {
-        setCallResult({elderId:elder.id,status:'error',message:`전화 발신 실패: ${data.error}`});
+        setCallResult({elderId:elder.id, status:'error', message:`전화 발신 실패: ${data.error}`});
       }
     } catch {
-      setCallResult({elderId:elder.id,status:'error',message:'서버 연결 실패.'});
+      setCallResult({elderId:elder.id, status:'error', message:'서버 연결 실패.'});
     } finally { setCalling(null); }
   };
 
@@ -333,57 +500,255 @@ export default function App() {
           {/* ── 대시보드 ── */}
           {page==='dashboard' && (
             <div className="fade-in">
+
+              {/* ── 실시간 위험 알림 센터 ── */}
+              {(() => {
+                const alerts = [];
+                elders.forEach(e => {
+                  const days = getNoResponseDays(e.lastCall);
+                  if (days >= 3) alerts.push({ elder: e, type: 'noResponse', msg: `${days}일째 미응답 → 즉시 확인 필요`, color: '#ef4444', bg: '#fef2f2', icon: '📵' });
+                  else if (e.keyword) alerts.push({ elder: e, type: 'keyword', msg: `"${e.keyword}" 위험 키워드 감지`, color: '#ef4444', bg: '#fef2f2', icon: '🚨' });
+                });
+                const heatwaveElders = elders.filter(e => weatherData[e.region]?.alert === 'heatwave');
+                if (heatwaveElders.length > 0) alerts.push({ type: 'weather', msg: `폭염경보 → ${heatwaveElders.map(e=>e.name).join(', ')} 어르신 안전 확인 필요`, color: '#f59e0b', bg: '#fffbeb', icon: '🌡️' });
+                if (alerts.length === 0) return null;
+                return (
+                  <div className="alert-center">
+                    <div className="alert-center-title">🔔 실시간 위험 알림</div>
+                    {alerts.map((a, i) => (
+                      <div key={i} className="alert-center-item" style={{borderLeftColor: a.color, background: a.bg}}
+                        onClick={() => a.elder && openDetail(a.elder)}>
+                        <span className="alert-center-icon">{a.icon}</span>
+                        <div className="alert-center-content">
+                          {a.elder && <span className="alert-center-name">{a.elder.name} ({a.elder.age}세)</span>}
+                          <span className="alert-center-msg">{a.msg}</span>
+                        </div>
+                        {a.elder && <button className="btn-call-sm" onClick={e=>{e.stopPropagation();setCallModal(a.elder);}}>📞 전화</button>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* ── 요약 통계 ── */}
               <div className="stat-grid">
                 <div className="stat-card stat-total"><div className="stat-num">{elders.length}</div><div className="stat-label">총 담당 어르신</div><div className="stat-icon">👥</div></div>
                 <div className="stat-card stat-danger"><div className="stat-num">{danger}</div><div className="stat-label">위험 감지</div><div className="stat-icon">🚨</div></div>
                 <div className="stat-card stat-warning"><div className="stat-num">{warning}</div><div className="stat-label">주의 필요</div><div className="stat-icon">⚠️</div></div>
                 <div className="stat-card stat-normal"><div className="stat-num">{normal}</div><div className="stat-label">정상</div><div className="stat-icon">✅</div></div>
               </div>
-              <div className="section">
-                <div className="section-title">🚨 즉시 확인 필요</div>
-                <div className="alert-list">
-                  {elders.filter(e=>e.status!=='normal').map(elder=>(
-                    <div key={elder.id} className={`alert-card alert-${elder.status}`}>
-                      <div className="alert-left" onClick={()=>openDetail(elder)} style={{cursor:'pointer',flex:1}}>
-                        <div className={`status-dot dot-${elder.status}`}/>
-                        <div><div className="alert-name">{elder.name} ({elder.age}세)</div><div className="alert-region">{elder.region}</div></div>
-                        {elder.keyword&&<div className="keyword-tag">"{elder.keyword}"</div>}
+
+              <div className="dash-two-col">
+                <div className="dash-col-left">
+
+                  {/* ── 오늘 할 일 체크리스트 ── */}
+                  <div className="section">
+                    <div className="section-title">✅ 오늘 할 일</div>
+                    <div className="todo-list">
+                      {[
+                        { id:'noResponse', icon:'📵', label:`미응답 어르신 확인`, count: elders.filter(e=>getNoResponseDays(e.lastCall)>=1).length, color:'#ef4444' },
+                        { id:'callToday',  icon:'📞', label:`오늘 전화 예정`,     count: elders.filter(e=>e.callActive).length, color:'#1d4ed8' },
+                        { id:'visit',      icon:'🏠', label:`방문 필요`,          count: elders.filter(e=>e.visits>0).length, color:'#16a34a' },
+                        { id:'heatwave',   icon:'🌡️', label:`폭염경보 안전 확인`, count: elders.filter(e=>weatherData[e.region]?.alert==='heatwave').length, color:'#f59e0b' },
+                      ].map(item => (
+                        <div key={item.id} className={`todo-item ${todoChecked.includes(item.id)?'todo-done':''}`}
+                          onClick={()=>setTodoChecked(prev=>prev.includes(item.id)?prev.filter(x=>x!==item.id):[...prev,item.id])}>
+                          <div className="todo-check">{todoChecked.includes(item.id)?'✅':'⬜'}</div>
+                          <div className="todo-icon">{item.icon}</div>
+                          <div className="todo-label">{item.label}</div>
+                          {item.count > 0 && <div className="todo-count" style={{background:item.color}}>{item.count}명</div>}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="todo-progress">
+                      <div className="todo-progress-bar" style={{width:`${todoChecked.length/4*100}%`}}/>
+                    </div>
+                    <div className="todo-progress-label">{todoChecked.length}/4 완료</div>
+                  </div>
+
+                  {/* ── 오늘 통화 현황 ── */}
+                  <div className="section">
+                    <div className="section-title">📞 오늘 통화 현황</div>
+                    <div className="call-summary">
+                      <div className="call-stat"><div className="call-num">{totalCalls}건</div><div className="call-label">총 통화</div></div>
+                      <div className="call-stat"><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
+                      <div className="call-stat"><div className="call-num" style={{color:'#f59e0b'}}>{urgentCount}건</div><div className="call-label">주의 키워드</div></div>
+                      <div className="call-stat"><div className="call-num" style={{color:'#3b82f6'}}>{manualCount}건</div><div className="call-label">수동 전화</div></div>
+                    </div>
+                    {/* 통화 완료율 */}
+                    <div style={{marginTop:16}}>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:6}}>
+                        <span style={{color:'#64748b',fontWeight:600}}>오늘 통화 완료율</span>
+                        <span style={{fontWeight:800,color:'#1d4ed8'}}>{Math.round(totalCalls/elders.length*100)}%</span>
                       </div>
-                      <div className="alert-right">
-                        <div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div>
-                        <button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'발신 중...':'📞 전화'}</button>
+                      <div className="todo-progress">
+                        <div className="todo-progress-bar" style={{width:`${totalCalls/elders.length*100}%`}}/>
                       </div>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* ── 빠른 실행 ── */}
+                  <div className="section">
+                    <div className="section-title">⚡ 빠른 실행</div>
+                    <div className="quick-actions">
+                      <button className="quick-btn quick-danger" onClick={()=>{goPage('schedule');}}>
+                        <span>🚨</span><span>위험 어르신만 전화</span>
+                        <span className="quick-count">{elders.filter(e=>e.status!=='normal').length}명</span>
+                      </button>
+                      <button className="quick-btn quick-all" onClick={()=>goPage('schedule')}>
+                        <span>📞</span><span>전체 일괄 전화 시작</span>
+                        <span className="quick-count">{elders.filter(e=>e.callActive).length}명</span>
+                      </button>
+                      <button className="quick-btn quick-report" onClick={()=>goPage('report')}>
+                        <span>📋</span><span>오늘 리포트 출력</span>
+                      </button>
+                      <button className="quick-btn quick-register" onClick={openRegister}>
+                        <span>➕</span><span>어르신 신규 등록</span>
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+                <div className="dash-col-right">
+
+                  {/* ── 지역별 현황 ── */}
+                  <div className="section">
+                    <div className="section-title">🗺️ 지역별 현황</div>
+                    <div className="region-map">
+                      {['대구 북구','대구 달서구','대구 수성구','대구 중구','대구 동구','대구 서구'].map(region => {
+                        const regionElders = elders.filter(e => e.region === region);
+                        const regionDanger = regionElders.filter(e => e.status==='danger').length;
+                        const regionWarning = regionElders.filter(e => e.status==='warning').length;
+                        const weather = weatherData[region];
+                        const riskLevel = regionDanger > 0 ? 'danger' : regionWarning > 0 ? 'warning' : 'normal';
+                        return (
+                          <div key={region} className={`region-card region-${riskLevel}`} onClick={()=>{setRegionFilter(region);goPage('elders');}}>
+                            <div className="region-name">{region.replace('대구 ','')}</div>
+                            <div className="region-count">{regionElders.length}명</div>
+                            <div className="region-status">
+                              {regionDanger > 0 && <span className="region-dot-danger">{regionDanger}위험</span>}
+                              {regionWarning > 0 && <span className="region-dot-warning">{regionWarning}주의</span>}
+                              {regionDanger===0 && regionWarning===0 && <span className="region-dot-normal">정상</span>}
+                            </div>
+                            {weather?.alertText && <div className="region-alert">{weather.alertText}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ── 공지/메모 ── */}
+                  <div className="section">
+                    <div className="section-title">📝 메모 / 공지</div>
+                    <div className="memo-input-wrap">
+                      <input className="memo-input" placeholder="메모 추가..." value={memoText}
+                        onChange={e=>setMemoText(e.target.value)}
+                        onKeyDown={e=>{
+                          if(e.key==='Enter'&&memoText.trim()){
+                            const now = new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+                            setMemos(prev=>[{id:Date.now(),text:memoText.trim(),time:now,done:false},...prev]);
+                            setMemoText('');
+                          }
+                        }}
+                      />
+                      <button className="btn-primary" style={{padding:'8px 14px',fontSize:13}}
+                        onClick={()=>{
+                          if(!memoText.trim()) return;
+                          const now = new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+                          setMemos(prev=>[{id:Date.now(),text:memoText.trim(),time:now,done:false},...prev]);
+                          setMemoText('');
+                        }}>추가</button>
+                    </div>
+                    <div className="memo-list">
+                      {memos.map(memo=>(
+                        <div key={memo.id} className={`memo-item ${memo.done?'memo-done':''}`}>
+                          <div className="memo-check" onClick={()=>setMemos(prev=>prev.map(m=>m.id===memo.id?{...m,done:!m.done}:m))}>
+                            {memo.done?'✅':'⬜'}
+                          </div>
+                          <div className="memo-text">{memo.text}</div>
+                          <div className="memo-time">{memo.time}</div>
+                          <button className="memo-del" onClick={()=>setMemos(prev=>prev.filter(m=>m.id!==memo.id))}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── 즉시 확인 필요 ── */}
+                  <div className="section">
+                    <div className="section-title">🚨 즉시 확인 필요</div>
+                    <div className="alert-list">
+                      {elders.filter(e=>e.status!=='normal').length === 0
+                        ? <div style={{color:'#22c55e',fontWeight:700,padding:'12px 0'}}>✅ 위험 어르신 없음</div>
+                        : elders.filter(e=>e.status!=='normal').map(elder=>(
+                          <div key={elder.id} className={`alert-card alert-${elder.status}`}>
+                            <div className="alert-left" onClick={()=>openDetail(elder)} style={{cursor:'pointer',flex:1}}>
+                              <div className={`status-dot dot-${elder.status}`}/>
+                              <div>
+                                <div className="alert-name">{elder.gender==='female'?'👵':'👴'} {elder.name} ({elder.age}세)</div>
+                                <div className="alert-region">{elder.region}</div>
+                              </div>
+                              {elder.keyword&&<div className="keyword-tag">"{elder.keyword}"</div>}
+                            </div>
+                            <div className="alert-right">
+                              <div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div>
+                              <button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'발신 중':'📞 전화'}</button>
+                            </div>
+                          </div>
+                        ))
+                      }
+                    </div>
+                  </div>
+
                 </div>
               </div>
-              <div className="section">
-                <div className="section-title">📞 오늘 통화 현황</div>
-                <div className="call-summary">
-                  <div className="call-stat"><div className="call-num">{totalCalls}건</div><div className="call-label">총 통화</div></div>
-                  <div className="call-stat"><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
-                  <div className="call-stat"><div className="call-num" style={{color:'#f59e0b'}}>{urgentCount}건</div><div className="call-label">주의 키워드</div></div>
-                  <div className="call-stat"><div className="call-num" style={{color:'#3b82f6'}}>{manualCount}건</div><div className="call-label">수동 전화</div></div>
-                </div>
-              </div>
+
+              {/* ── 전체 어르신 현황 테이블 ── */}
               <div className="section">
                 <div className="dash-section-header">
                   <div className="section-title">👥 전체 어르신 현황</div>
                   <button className="btn-primary" onClick={openRegister}>+ 신규 등록</button>
                 </div>
                 <table className="table">
-                  <thead><tr><th>이름</th><th>나이</th><th>지역</th><th>마지막 통화</th><th>상태</th><th>즉시 전화</th></tr></thead>
+                  <thead>
+                    <tr><th>어르신</th><th>나이</th><th>지역</th><th>마지막 통화</th><th>미응답</th><th>고독사위험</th><th>상태</th><th>즉시 전화</th></tr>
+                  </thead>
                   <tbody>
-                    {elders.map(elder=>(
-                      <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
-                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><span style={{fontWeight:700}}>{elder.name}</span>{elder.keyword&&<span className="keyword-tag">"{elder.keyword}"</span>}</div></td>
-                        <td>{elder.age}세</td>
-                        <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
-                        <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
-                        <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
-                        <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'⏳':'📞 전화'}</button></td>
-                      </tr>
-                    ))}
+                    {elders
+                      .sort((a,b)=>{
+                        const order={danger:0,warning:1,normal:2};
+                        return order[a.status]-order[b.status];
+                      })
+                      .map(elder=>{
+                        const risk = getSolitudeRisk(elder);
+                        const days = getNoResponseDays(elder.lastCall);
+                        return (
+                          <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
+                            <td><div style={{display:'flex',alignItems:'center',gap:8}}>
+                              <span style={{fontSize:18}}>{elder.gender==='female'?'👵':'👴'}</span>
+                              <span style={{fontWeight:700}}>{elder.name}</span>
+                              {elder.keyword&&<span className="keyword-tag">"{elder.keyword}"</span>}
+                            </div></td>
+                            <td>{elder.age}세</td>
+                            <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
+                            <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
+                            <td>
+                              {days===0
+                                ? <span style={{color:'#22c55e',fontWeight:700,fontSize:12}}>정상</span>
+                                : <span style={{color:days>=3?'#ef4444':'#f59e0b',fontWeight:700,fontSize:12}}>
+                                    {days>=99?'미통화':`${days}일`}
+                                  </span>
+                              }
+                            </td>
+                            <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
+                            <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
+                            <td onClick={e=>e.stopPropagation()}>
+                              <button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>
+                                {calling===elder.id?'⏳':'📞 전화'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -495,31 +860,169 @@ export default function App() {
           {/* ── 어르신 관리 ── */}
           {page==='elders' && (
             <div className="fade-in">
-              <div className="list-toolbar">
+
+              {/* 검색 + 필터 툴바 */}
+              <div className="elder-toolbar">
+                {/* 이름 검색 */}
+                <div className="search-box">
+                  <span className="search-icon">🔍</span>
+                  <input
+                    className="search-input"
+                    placeholder="어르신 이름 검색..."
+                    value={searchName}
+                    onChange={e => setSearchName(e.target.value)}
+                  />
+                  {searchName && <button className="search-clear" onClick={() => setSearchName('')}>✕</button>}
+                </div>
+
+                {/* 구별 필터 */}
+                <select className="form-input region-select" value={regionFilter} onChange={e => setRegionFilter(e.target.value)}>
+                  {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+
+                {/* 상태 필터 */}
                 <div className="filter-bar">
                   {['all','danger','warning','normal'].map(f=>(
                     <button key={f} className={`filter-btn ${filter===f?'filter-active':''}`} onClick={()=>setFilter(f)}>
-                      {f==='all'?'전체':STATUS_CONFIG[f].label}<span className="filter-count">{f==='all'?elders.length:elders.filter(e=>e.status===f).length}</span>
+                      {f==='all'?'전체':STATUS_CONFIG[f].label}
+                      <span className="filter-count">{f==='all'?elders.length:elders.filter(e=>e.status===f).length}</span>
                     </button>
                   ))}
                 </div>
-                <button className="btn-primary" onClick={openRegister}>+ 신규 등록</button>
               </div>
-              <div className="elder-grid">
-                {filtered.map(elder=>(
-                  <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)}>
-                    <div className="elder-top">
-                      <div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div>
-                      <div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div>
-                    </div>
-                    <div className="elder-name">{elder.name}</div>
-                    <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
-                    <div className="elder-last">마지막 통화: {elder.lastCall}</div>
-                    {elder.keyword&&<div className="keyword-tag mt8">"{elder.keyword}" 감지</div>}
-                    {!elder.callActive&&<div className="paused-tag mt8">⏸ 전화 중단 중</div>}
+
+              {/* 정렬 + 뷰 전환 + 신규등록 */}
+              <div className="elder-toolbar2">
+                <div style={{display:'flex', alignItems:'center', gap:8}}>
+                  <span style={{fontSize:13,color:'#64748b',fontWeight:600}}>정렬:</span>
+                  {[
+                    {id:'status',     label:'위험도순'},
+                    {id:'risk',       label:'고독사위험'},
+                    {id:'noResponse', label:'미응답순'},
+                    {id:'age',        label:'나이순'},
+                    {id:'name',       label:'이름순'},
+                  ].map(s=>(
+                    <button key={s.id} className={`sort-btn ${sortBy===s.id?'sort-active':''}`} onClick={()=>setSortBy(s.id)}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{display:'flex', gap:8}}>
+                  <div className="view-toggle">
+                    <button className={`view-btn ${viewMode==='card'?'view-active':''}`} onClick={()=>setViewMode('card')}>⊞ 카드</button>
+                    <button className={`view-btn ${viewMode==='table'?'view-active':''}`} onClick={()=>setViewMode('table')}>☰ 목록</button>
                   </div>
-                ))}
+                  <button className="btn-primary" onClick={openRegister}>+ 신규 등록</button>
+                </div>
               </div>
+
+              {/* 검색 결과 수 */}
+              <div className="search-result-count">
+                총 <strong>{filteredElders.length}명</strong>
+                {searchName && <span> · "{searchName}" 검색결과</span>}
+                {regionFilter !== '전체' && <span> · {regionFilter}</span>}
+              </div>
+
+              {/* 카드 뷰 */}
+              {viewMode === 'card' && (
+                <div className="elder-grid">
+                  {filteredElders.length === 0 && (
+                    <div className="empty-result">검색 결과가 없습니다 🔍</div>
+                  )}
+                  {filteredElders.map(elder => {
+                    const risk = getSolitudeRisk(elder);
+                    const noResponseDays = getNoResponseDays(elder.lastCall);
+                    return (
+                      <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)}>
+                        <div className="elder-top">
+                          <div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div>
+                          <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4}}>
+                            <div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div>
+                            <div className="risk-badge" style={{background:risk.bg, color:risk.color}}>{risk.label}</div>
+                          </div>
+                        </div>
+                        <div className="elder-name">{elder.name}</div>
+                        <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
+
+                        {/* 미응답 경과일 */}
+                        {noResponseDays >= 1 && (
+                          <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>
+                            📵 {noResponseDays >= 99 ? '미통화' : `${noResponseDays}일째 미응답`}
+                          </div>
+                        )}
+
+                        <div className="elder-last">📞 마지막 통화: {elder.lastCall}</div>
+                        {elder.keyword && <div className="keyword-tag mt8">⚠️ "{elder.keyword}" 감지</div>}
+                        {elder.visits > 0 && <div className="visit-tag mt8">🏠 방문 필요 {elder.visits}회</div>}
+                        {!elder.callActive && <div className="paused-tag mt8">⏸ 전화 중단 중</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 테이블 뷰 */}
+              {viewMode === 'table' && (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>어르신</th>
+                      <th>성별/호칭</th>
+                      <th>나이</th>
+                      <th>지역</th>
+                      <th>마지막 통화</th>
+                      <th>미응답</th>
+                      <th>고독사 위험도</th>
+                      <th>상태</th>
+                      <th>키워드</th>
+                      <th>즉시 전화</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredElders.length === 0 && (
+                      <tr><td colSpan={10} style={{textAlign:'center',color:'#94a3b8',padding:32}}>검색 결과가 없습니다 🔍</td></tr>
+                    )}
+                    {filteredElders.map(elder => {
+                      const risk = getSolitudeRisk(elder);
+                      const noResponseDays = getNoResponseDays(elder.lastCall);
+                      return (
+                        <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
+                          <td>
+                            <div style={{display:'flex',alignItems:'center',gap:8}}>
+                              <span style={{fontSize:20}}>{elder.gender==='female'?'👵':'👴'}</span>
+                              <strong>{elder.name}</strong>
+                            </div>
+                          </td>
+                          <td><span className="cycle-badge">{elder.title}</span></td>
+                          <td>{elder.age}세</td>
+                          <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
+                          <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
+                          <td>
+                            {noResponseDays === 0
+                              ? <span style={{color:'#22c55e',fontWeight:700}}>정상</span>
+                              : <span style={{color:noResponseDays>=3?'#ef4444':'#f59e0b',fontWeight:700}}>
+                                  {noResponseDays >= 99 ? '미통화' : `${noResponseDays}일`}
+                                </span>
+                            }
+                          </td>
+                          <td>
+                            <span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>
+                              {risk.label}
+                            </span>
+                          </td>
+                          <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
+                          <td>{elder.keyword ? <span className="keyword-tag">"{elder.keyword}"</span> : <span style={{color:'#9ca3af',fontSize:12}}>없음</span>}</td>
+                          <td onClick={e=>e.stopPropagation()}>
+                            <button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>
+                              {calling===elder.id?'⏳':'📞'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
 
@@ -661,11 +1164,36 @@ export default function App() {
           {page==='calls' && (
             <div className="fade-in">
               <table className="table">
-                <thead><tr><th>어르신</th><th>유형</th><th>날짜</th><th>시간</th><th>통화 길이</th><th>감지 키워드</th><th>위험도</th></tr></thead>
+                <thead>
+                  <tr><th>어르신</th><th>유형</th><th>날짜</th><th>시간</th><th>통화 결과</th><th>감지 키워드</th><th>위험도</th></tr>
+                </thead>
                 <tbody>
                   {callLogs.map(log=>{
-                    const elder=elders.find(e=>e.id===log.elderId);
-                    return(<tr key={log.id}><td><strong>{elder?.name}</strong></td><td><span className={`type-badge ${log.type==='manual'?'type-manual':'type-auto'}`}>{log.type==='manual'?'수동':'자동'}</span></td><td>{log.date}</td><td>{log.time}</td><td>{log.duration}</td><td>{log.keywords.length>0?log.keywords.map((kw,i)=><span key={i} className="keyword-tag">{kw}</span>):<span style={{color:'#9ca3af'}}>없음</span>}</td><td><span style={{color:RISK_CONFIG[log.risk].color,fontWeight:700}}>{RISK_CONFIG[log.risk].label}</span></td></tr>);
+                    const elder = elders.find(e=>e.id===log.elderId);
+                    const statusConfig = {
+                      ringing:   { label:'📳 발신 중',       color:'#3b82f6' },
+                      retrying:  { label:'🔄 재발신 중',     color:'#f59e0b' },
+                      completed: { label:'✅ 통화 완료',     color:'#22c55e' },
+                      failed:    { label:'❌ 연결 실패',     color:'#ef4444' },
+                      unknown:   { label:'❓ 상태 불명',     color:'#94a3b8' },
+                    };
+                    const sc = statusConfig[log.callStatus] || null;
+                    return (
+                      <tr key={log.id} style={{background: log.callStatus==='failed'?'#fef2f2':log.callStatus==='completed'?'#f0fdf4':'inherit'}}>
+                        <td><strong>{elder?.name}</strong></td>
+                        <td><span className={`type-badge ${log.type==='manual'?'type-manual':'type-auto'}`}>{log.type==='manual'?'수동':'자동'}</span></td>
+                        <td>{log.date}</td>
+                        <td>{log.time}</td>
+                        <td>
+                          {sc
+                            ? <span style={{color:sc.color,fontWeight:700,fontSize:13}}>{sc.label}</span>
+                            : <span style={{fontSize:13,color:'#64748b'}}>{log.duration}</span>
+                          }
+                        </td>
+                        <td>{log.keywords.length>0?log.keywords.map((kw,i)=><span key={i} className="keyword-tag">{kw}</span>):<span style={{color:'#9ca3af'}}>없음</span>}</td>
+                        <td><span style={{color:RISK_CONFIG[log.risk]?.color||'#64748b',fontWeight:700}}>{RISK_CONFIG[log.risk]?.label||'-'}</span></td>
+                      </tr>
+                    );
                   })}
                 </tbody>
               </table>
@@ -822,15 +1350,36 @@ export default function App() {
                 <div className="detail-right">
                   {selected.keyword&&<div className="alert-box"><div className="alert-box-title">🚨 감지된 위험 키워드</div><div className="alert-box-keyword">"{selected.keyword}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
                   <div className="section">
-                    <div className="section-title">📞 통화 기록</div>
-                    {callLogs.filter(c=>c.elderId===selected.id).map(log=>(
-                      <div key={log.id} className={`call-log-item risk-${log.risk}`}>
-                        <span className={`type-badge ${log.type==='manual'?'type-manual':'type-auto'}`}>{log.type==='manual'?'수동':'자동'}</span>
-                        <div className="call-log-time">{log.time}</div>
-                        <div className="call-log-duration">{log.duration}</div>
-                        <div>{log.keywords.length>0?log.keywords.map((kw,i)=><span key={i} className="keyword-tag">{kw}</span>):<span style={{color:'#9ca3af',fontSize:13}}>이상 없음</span>}</div>
-                      </div>
-                    ))}
+                    <div className="script-editor-header" style={{marginBottom:12}}>
+                      <div className="section-title" style={{marginBottom:0}}>📞 통화 기록</div>
+                      <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}}
+                        onClick={()=>setCallLogs(prev=>prev.filter(l=>l.elderId!==selected.id||l.callStatus))}>
+                        🗑️ 이전 기록 정리
+                      </button>
+                    </div>
+                    {callLogs.filter(c=>c.elderId===selected.id).map(log=>{
+                      const callStatusConfig = {
+                        ringing:   { label:'📳 발신 중',     color:'#3b82f6', bg:'#eff6ff' },
+                        retrying:  { label:'🔄 재발신 중',   color:'#f59e0b', bg:'#fffbeb' },
+                        completed: { label:'✅ 통화 완료',   color:'#22c55e', bg:'#f0fdf4' },
+                        failed:    { label:'❌ 연결 실패',   color:'#ef4444', bg:'#fef2f2' },
+                        unknown:   { label:'❓ 상태 불명',   color:'#94a3b8', bg:'#f8fafc' },
+                      };
+                      const sc = callStatusConfig[log.callStatus];
+                      return (
+                        <div key={log.id} className={`call-log-item ${log.callStatus==='failed'?'risk-critical':log.callStatus==='completed'?'risk-normal':'risk-'+log.risk}`}>
+                          <span className={`type-badge ${log.type==='manual'?'type-manual':'type-auto'}`}>{log.type==='manual'?'수동':'자동'}</span>
+                          <div className="call-log-time">{log.time}</div>
+                          <div className="call-log-duration">
+                            {sc
+                              ? <span style={{color:sc.color,fontWeight:800,fontSize:13,background:sc.bg,padding:'3px 8px',borderRadius:6}}>{sc.label}</span>
+                              : <span>{log.duration}</span>
+                            }
+                          </div>
+                          <div>{log.keywords.length>0?log.keywords.map((kw,i)=><span key={i} className="keyword-tag">{kw}</span>):<span style={{color:'#9ca3af',fontSize:13}}>이상 없음</span>}</div>
+                        </div>
+                      );
+                    })}
                     {callLogs.filter(c=>c.elderId===selected.id).length===0&&<div style={{color:'#9ca3af',fontSize:14,padding:'16px 0'}}>통화 기록 없음</div>}
                   </div>
                 </div>
