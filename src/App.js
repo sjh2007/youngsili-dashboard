@@ -117,6 +117,30 @@ export default function App() {
   ]);
   const [quickCallRunning, setQuickCallRunning] = useState(false);
 
+  // 공공데이터 - 인구 현황
+  const [popData, setPopData]       = useState(null);
+  const [popLoading, setPopLoading] = useState(false);
+  const [popError, setPopError]     = useState(null);
+
+  const fetchPopulation = async () => {
+    setPopLoading(true);
+    setPopError(null);
+    try {
+      const res = await fetch(`${SERVER_URL}/population`);
+      const data = await res.json();
+      setPopData(data);
+    } catch (err) {
+      setPopError('데이터를 불러오지 못했습니다.');
+    } finally {
+      setPopLoading(false);
+    }
+  };
+
+  // 공공데이터 탭 진입 시 자동 로드
+  useEffect(() => {
+    if (page === 'data' && !popData) fetchPopulation();
+  }, [page]); // eslint-disable-line
+
   // 어르신/통화기록 변경 시 자동 저장
   useEffect(() => {
     localStorage.setItem('youngsili_elders', JSON.stringify(elders));
@@ -1337,16 +1361,161 @@ export default function App() {
           {/* ── 공공데이터 ── */}
           {page==='data' && (
             <div className="fade-in">
-              <div className="data-banner"><div className="data-banner-title">📊 대구광역시 독거노인 현황</div><div className="data-banner-sub">출처: 보건복지부 공공데이터포털 (2024년 기준)</div></div>
-              <div className="data-total-row">
-                <div className="data-total-card"><div className="data-total-num">26,040명</div><div className="data-total-label">대구 전체 독거노인</div></div>
-                <div className="data-total-card"><div className="data-total-num">1,743명</div><div className="data-total-label">현재 AI 영실이 관리</div></div>
-                <div className="data-total-card"><div className="data-total-num">6.7%</div><div className="data-total-label">관리 비율</div></div>
+
+              {/* 헤더 배너 */}
+              <div className="data-banner">
+                <div>
+                  <div className="data-banner-title">📊 대구광역시 독거노인 현황</div>
+                  <div className="data-banner-sub">
+                    출처: {popData?.source || '행정안전부 주민등록인구통계'}
+                    {popData && ` · ${popData.year}년 ${popData.month}월 기준`}
+                  </div>
+                </div>
+                <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={fetchPopulation} disabled={popLoading}>
+                  {popLoading ? '⏳ 불러오는 중...' : '🔄 데이터 갱신'}
+                </button>
               </div>
-              <table className="table">
-                <thead><tr><th>구</th><th>독거노인 수</th><th>영실이 관리</th><th>관리 비율</th><th>커버리지</th></tr></thead>
-                <tbody>{PUBLIC_DATA.map((d,i)=><tr key={i}><td><strong>대구 {d.region}</strong></td><td>{d.total.toLocaleString()}명</td><td>{d.managed.toLocaleString()}명</td><td>{d.ratio}%</td><td><div className="progress-bar"><div className="progress-fill" style={{width:`${d.ratio*5}%`}}/></div></td></tr>)}</tbody>
-              </table>
+
+              {/* 에러 */}
+              {popError && (
+                <div className="call-result-banner error">❌ {popError}</div>
+              )}
+
+              {/* 로딩 */}
+              {popLoading && (
+                <div style={{textAlign:'center', padding:'40px', color:'#64748b', fontSize:16}}>
+                  ⏳ 행정안전부 공공데이터 불러오는 중...
+                </div>
+              )}
+
+              {/* 전체 요약 */}
+              {popData && (
+                <>
+                  <div className="data-total-row">
+                    <div className="data-total-card">
+                      <div className="data-total-num">{popData.total.population.toLocaleString()}명</div>
+                      <div className="data-total-label">대구 전체 인구</div>
+                    </div>
+                    <div className="data-total-card">
+                      <div className="data-total-num" style={{color:'#1d4ed8'}}>{popData.total.elderly.toLocaleString()}명</div>
+                      <div className="data-total-label">65세 이상 노인</div>
+                    </div>
+                    <div className="data-total-card">
+                      <div className="data-total-num" style={{color:'#f59e0b'}}>{popData.total.solitary.toLocaleString()}명</div>
+                      <div className="data-total-label">추정 독거노인</div>
+                    </div>
+                    <div className="data-total-card">
+                      <div className="data-total-num" style={{color:'#22c55e'}}>{elders.length}명</div>
+                      <div className="data-total-label">영실이 현재 관리</div>
+                    </div>
+                    <div className="data-total-card">
+                      <div className="data-total-num" style={{color:'#ef4444'}}>
+                        {(elders.length / popData.total.solitary * 100).toFixed(2)}%
+                      </div>
+                      <div className="data-total-label">관리 비율</div>
+                    </div>
+                    <div className="data-total-card">
+                      <div className="data-total-num" style={{color:'#7c3aed'}}>{popData.total.elderlyRatio}%</div>
+                      <div className="data-total-label">고령화율</div>
+                    </div>
+                  </div>
+
+                  {/* 고령화 경고 */}
+                  {popData.total.elderlyRatio >= 20 && (
+                    <div style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 20px',marginBottom:20,fontSize:14,color:'#dc2626',fontWeight:700}}>
+                      🚨 대구광역시 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)
+                    </div>
+                  )}
+
+                  {/* 구별 상세 테이블 */}
+                  <div className="section">
+                    <div className="section-title">🗺️ 구별 독거노인 현황</div>
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>구</th>
+                          <th>전체 인구</th>
+                          <th>65세 이상</th>
+                          <th>고령화율</th>
+                          <th>추정 독거노인</th>
+                          <th>영실이 관리</th>
+                          <th>관리 비율</th>
+                          <th>커버리지</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {popData.regions
+                          .sort((a,b) => b.solitary - a.solitary)
+                          .map((d, i) => {
+                            const managed = elders.filter(e => e.region === d.region).length;
+                            const managedRatio = d.solitary > 0 ? (managed / d.solitary * 100).toFixed(2) : 0;
+                            const isHighAge = d.elderlyRatio >= 20;
+                            return (
+                              <tr key={i} style={{background: isHighAge ? '#fffbeb' : 'inherit'}}>
+                                <td>
+                                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                                    <strong>{d.region}</strong>
+                                    {isHighAge && <span style={{fontSize:11,background:'#f59e0b',color:'#fff',padding:'2px 6px',borderRadius:4,fontWeight:700}}>초고령</span>}
+                                  </div>
+                                </td>
+                                <td>{d.total.toLocaleString()}명</td>
+                                <td>{d.elderly.toLocaleString()}명</td>
+                                <td>
+                                  <span style={{color:d.elderlyRatio>=20?'#ef4444':d.elderlyRatio>=14?'#f59e0b':'#22c55e',fontWeight:700}}>
+                                    {d.elderlyRatio}%
+                                  </span>
+                                </td>
+                                <td><strong>{d.solitary.toLocaleString()}명</strong></td>
+                                <td>
+                                  <span style={{color:'#1d4ed8',fontWeight:700}}>{managed}명</span>
+                                </td>
+                                <td>
+                                  <span style={{color:parseFloat(managedRatio)>5?'#22c55e':'#f59e0b',fontWeight:700}}>
+                                    {managedRatio}%
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="progress-bar" style={{width:120}}>
+                                    <div className="progress-fill" style={{width:`${Math.min(parseFloat(managedRatio)*10,100)}%`}}/>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* 영실이 확장 가능성 */}
+                  <div className="section">
+                    <div className="section-title">🚀 영실이 서비스 확장 가능성</div>
+                    <div className="report-stat-grid">
+                      <div className="report-stat-card">
+                        <div className="report-stat-icon">👵</div>
+                        <div className="report-stat-value" style={{color:'#f59e0b'}}>{popData.total.solitary.toLocaleString()}명</div>
+                        <div className="report-stat-label">대구 전체 독거노인</div>
+                      </div>
+                      <div className="report-stat-card">
+                        <div className="report-stat-icon">📞</div>
+                        <div className="report-stat-value" style={{color:'#22c55e'}}>{elders.length}명</div>
+                        <div className="report-stat-label">현재 관리 중</div>
+                      </div>
+                      <div className="report-stat-card">
+                        <div className="report-stat-icon">🎯</div>
+                        <div className="report-stat-value" style={{color:'#1d4ed8'}}>{(popData.total.solitary - elders.length).toLocaleString()}명</div>
+                        <div className="report-stat-label">추가 관리 가능</div>
+                      </div>
+                      <div className="report-stat-card">
+                        <div className="report-stat-icon">💰</div>
+                        <div className="report-stat-value" style={{color:'#7c3aed'}}>
+                          {Math.round(popData.total.solitary * 3000 / 10000).toLocaleString()}만원
+                        </div>
+                        <div className="report-stat-label">월 예상 수익 (1인 3천원)</div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
