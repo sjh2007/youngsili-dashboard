@@ -126,6 +126,16 @@ export default function App() {
     localStorage.setItem('youngsili_callLogs', JSON.stringify(callLogs));
   }, [callLogs]);
 
+  // 앱 시작 시 "연결 중..." 상태로 남아있는 로그 → 연결 실패 처리
+  useEffect(() => {
+    setCallLogs(prev => prev.map(log => {
+      if (log.duration === '연결 중...' || log.duration?.includes('재발신') || log.duration?.includes('발신 중')) {
+        return { ...log, duration: '❌ 연결 실패 (미응답)', callStatus: 'failed', risk: 'urgent' };
+      }
+      return log;
+    }));
+  }, []); // 최초 1회만 실행
+
   // 멘트 관리 상태
   const [mainScript, setMainScript]     = useState(DEFAULT_SCRIPT);
   const [editScript, setEditScript]     = useState(DEFAULT_SCRIPT);
@@ -220,20 +230,38 @@ export default function App() {
       .replace(/\n\s*\n/g, '\n').trim();
   };
 
-  // 날씨 공공데이터 불러오기 (모의)
-  const fetchWeather = () => {
+  // 날씨 공공데이터 불러오기 (기상청 실제 API)
+  const fetchWeather = async () => {
     setFetchingWeather(true);
-    setTimeout(() => {
-      // 실제 서비스에서는 기상청 API 호출
-      // 현재는 모의 데이터로 폭염경보 시뮬레이션
-      const hasHeatwave = Object.values(weatherData).some(w => w.alert === 'heatwave');
-      if (hasHeatwave) {
-        setActiveAlert('heatwave');
-        setAlertScript(ALERT_TEMPLATES.heatwave);
+    try {
+      const res = await fetch(`${SERVER_URL}/weather`);
+      if (res.ok) {
+        const data = await res.json();
+        setWeatherData(data);
+        // 폭염경보 있으면 자동으로 경보 멘트 설정
+        const hasHeatwave = Object.values(data).some(w => w.alert === 'heatwave');
+        const hasCold     = Object.values(data).some(w => w.alert === 'cold');
+        const hasRain     = Object.values(data).some(w => w.alert === 'rain');
+        if (hasHeatwave)      { setActiveAlert('heatwave'); setAlertScript(ALERT_TEMPLATES.heatwave); }
+        else if (hasCold)     { setActiveAlert('cold');     setAlertScript(ALERT_TEMPLATES.cold); }
+        else if (hasRain)     { setActiveAlert('rain');     setAlertScript(ALERT_TEMPLATES.rain); }
+        else                  { setActiveAlert('none');     setAlertScript(ALERT_TEMPLATES.none); }
+      } else {
+        throw new Error('API 응답 오류');
       }
+    } catch (err) {
+      console.error('날씨 API 오류:', err);
+      // 실패 시 모의 데이터 유지
+      alert('날씨 데이터를 불러오지 못했습니다. 기존 데이터를 사용합니다.');
+    } finally {
       setFetchingWeather(false);
-    }, 1200);
+    }
   };
+
+  // 앱 시작 시 날씨 자동 로드
+  useEffect(() => {
+    fetchWeather();
+  }, []); // eslint-disable-line
 
   // 멘트 저장
   const saveScript = () => {
@@ -464,10 +492,10 @@ export default function App() {
           {[
             {id:'dashboard', icon:'⊞', label:'대시보드'},
             {id:'elders',    icon:'👥', label:'어르신 관리'},
-            {id:'schedule',  icon:'📅', label:'AI 전화 관리'},
+            {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
             {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
             {id:'calls',     icon:'📞', label:'통화 기록'},
-            {id:'report',    icon:'📊', label:'리포트/통계'},
+            {id:'report',    icon:'📊', label:'리포트 / 통계'},
             {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
           ].map(item=>(
             <button key={item.id}
@@ -488,7 +516,7 @@ export default function App() {
       <main className="main">
         <header className="header">
           <div className="header-title">
-            {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'AI 전화 관리'}
+            {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}
             {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}
             {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
           </div>
