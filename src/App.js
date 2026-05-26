@@ -117,6 +117,46 @@ export default function App() {
   ]);
   const [quickCallRunning, setQuickCallRunning] = useState(false);
 
+  // 건강 상태 + 실시간 알림
+  const [healthData, setHealthData]     = useState([]);
+  const [alertsData, setAlertsData]     = useState([]);
+  const [alertCount, setAlertCount]     = useState(0);
+  const [healthLoading, setHealthLoading] = useState(false);
+
+  const fetchHealth = async () => {
+    setHealthLoading(true);
+    try {
+      const [hRes, aRes] = await Promise.all([
+        fetch(`${SERVER_URL}/health/all`),
+        fetch(`${SERVER_URL}/alerts`),
+      ]);
+      const hData = await hRes.json();
+      const aData = await aRes.json();
+      setHealthData(hData);
+      setAlertsData(aData);
+      setAlertCount(aData.filter(a => !a.read).length);
+    } catch (err) {
+      console.error('건강 데이터 오류:', err);
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (page === 'health') fetchHealth();
+  }, [page]); // eslint-disable-line
+
+  // 30초마다 알림 자동 갱신
+  useEffect(() => {
+    const t = setInterval(() => {
+      fetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
+        setAlertsData(data);
+        setAlertCount(data.filter(a=>!a.read).length);
+      }).catch(()=>{});
+    }, 30000);
+    return () => clearInterval(t);
+  }, []); // eslint-disable-line
+
   // 공공데이터 - 인구 현황
   const [popData, setPopData]       = useState(null);
   const [popLoading, setPopLoading] = useState(false);
@@ -519,6 +559,7 @@ export default function App() {
             {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
             {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
             {id:'calls',     icon:'📞', label:'통화 기록'},
+            {id:'health',    icon:'💊', label:'건강 상태'},
             {id:'report',    icon:'📊', label:'리포트 / 통계'},
             {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
           ].map(item=>(
@@ -541,7 +582,7 @@ export default function App() {
         <header className="header">
           <div className="header-title">
             {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}
-            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}
+            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}
             {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
           </div>
           <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
@@ -650,6 +691,10 @@ export default function App() {
                       <button className="quick-btn quick-all" onClick={()=>goPage('schedule')}>
                         <span>📞</span><span>전체 일괄 전화 시작</span>
                         <span className="quick-count">{elders.filter(e=>e.callActive).length}명</span>
+                      </button>
+                      <button className="quick-btn" style={{background:'#f0fdf4',border:'2px solid #bbf7d0'}} onClick={()=>goPage('health')}>
+                        <span>💊</span><span>건강 상태 확인</span>
+                        {alertCount > 0 && <span className="quick-count" style={{background:'#dc2626'}}>{alertCount}건</span>}
                       </button>
                       <button className="quick-btn quick-report" onClick={()=>goPage('report')}>
                         <span>📋</span><span>오늘 리포트 출력</span>
@@ -1359,6 +1404,137 @@ export default function App() {
           )}
 
           {/* ── 공공데이터 ── */}
+          {page==='health' && (
+            <div className="fade-in">
+              <div className="data-banner" style={{marginBottom:20}}>
+                <div>
+                  <div className="data-banner-title">💊 어르신 건강 상태 현황</div>
+                  <div className="data-banner-sub">영실이 앱에서 어르신이 직접 체크한 건강 상태</div>
+                </div>
+                <button className={`btn-download ${healthLoading?'btn-calling':''}`} onClick={fetchHealth} disabled={healthLoading}>
+                  {healthLoading ? '⏳ 불러오는 중...' : '🔄 갱신'}
+                </button>
+              </div>
+
+              {/* 요약 카드 */}
+              <div className="report-stat-grid" style={{marginBottom:20}}>
+                <div className="report-stat-card">
+                  <div className="report-stat-icon">😊</div>
+                  <div className="report-stat-value" style={{color:'#16a34a'}}>{healthData.filter(h=>h.status==='good').length}명</div>
+                  <div className="report-stat-label">좋아요</div>
+                </div>
+                <div className="report-stat-card">
+                  <div className="report-stat-icon">😐</div>
+                  <div className="report-stat-value" style={{color:'#f59e0b'}}>{healthData.filter(h=>h.status==='okay').length}명</div>
+                  <div className="report-stat-label">그럭저럭</div>
+                </div>
+                <div className="report-stat-card">
+                  <div className="report-stat-icon">😔</div>
+                  <div className="report-stat-value" style={{color:'#ef4444'}}>{healthData.filter(h=>h.status==='bad').length}명</div>
+                  <div className="report-stat-label">안 좋아요</div>
+                </div>
+                <div className="report-stat-card">
+                  <div className="report-stat-icon">📱</div>
+                  <div className="report-stat-value" style={{color:'#6b7280'}}>{elders.length - healthData.length}명</div>
+                  <div className="report-stat-label">미체크</div>
+                </div>
+              </div>
+
+              {/* 긴급 알림 */}
+              {alertsData.filter(a=>!a.read).length > 0 && (
+                <div className="section" style={{marginBottom:20}}>
+                  <div className="section-title">🚨 미확인 알림 ({alertsData.filter(a=>!a.read).length}건)</div>
+                  {alertsData.filter(a=>!a.read).map((alert,i) => (
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 18px',marginBottom:10}}>
+                      <span style={{fontSize:24}}>⚠️</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:14,fontWeight:700,color:'#dc2626'}}>{alert.message}</div>
+                        <div style={{fontSize:12,color:'#ef4444',marginTop:2}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div>
+                      </div>
+                      <button className="btn-small" onClick={async()=>{
+                        await fetch(`${SERVER_URL}/alerts/${alert.id}/read`,{method:'POST'});
+                        fetchHealth();
+                      }}>확인</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 건강 상태 테이블 */}
+              <div className="section">
+                <div className="section-title">📋 어르신별 건강 상태</div>
+                {healthData.length === 0 ? (
+                  <div style={{textAlign:'center',padding:40,color:'#9ca3af'}}>
+                    <div style={{fontSize:48}}>📭</div>
+                    <div style={{marginTop:12}}>아직 건강 체크 데이터가 없습니다</div>
+                    <div style={{fontSize:13,marginTop:6}}>어르신이 앱에서 건강 체크를 하면 여기에 표시됩니다</div>
+                  </div>
+                ) : (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>어르신</th>
+                        <th>건강 상태</th>
+                        <th>체크 시간</th>
+                        <th>담당 복지사</th>
+                        <th>조치</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {healthData.sort((a,b) => {
+                        const order = {bad:0, okay:1, good:2};
+                        return order[a.status] - order[b.status];
+                      }).map((h,i) => {
+                        const elder = elders.find(e=>e.name===h.name);
+                        const statusColor = {good:'#16a34a', okay:'#f59e0b', bad:'#ef4444'}[h.status];
+                        const statusLabel = {good:'😊 좋아요', okay:'😐 그럭저럭', bad:'😔 안 좋아요'}[h.status];
+                        return (
+                          <tr key={i} style={{background:h.status==='bad'?'#fff5f5':'inherit'}}>
+                            <td><strong>{h.name}</strong></td>
+                            <td>
+                              <span style={{color:statusColor,fontWeight:700,fontSize:15}}>{statusLabel}</span>
+                            </td>
+                            <td style={{fontSize:13,color:'#6b7280'}}>{new Date(h.timestamp).toLocaleString('ko-KR')}</td>
+                            <td>{elder?.worker||'-'}</td>
+                            <td>
+                              {h.status==='bad' && (
+                                <button className="btn-small" style={{background:'#dc2626',color:'#fff',borderColor:'#dc2626'}}
+                                  onClick={()=>elder&&callElder(elder)}>
+                                  📞 즉시 전화
+                                </button>
+                              )}
+                              {h.status==='okay' && (
+                                <button className="btn-small" onClick={()=>elder&&callElder(elder)}>
+                                  📞 확인 전화
+                                </button>
+                              )}
+                              {h.status==='good' && <span style={{color:'#22c55e',fontSize:13}}>✅ 정상</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* 미체크 어르신 */}
+              {elders.filter(e=>!healthData.find(h=>h.name===e.name)).length > 0 && (
+                <div className="section">
+                  <div className="section-title">📵 오늘 미체크 어르신</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+                    {elders.filter(e=>!healthData.find(h=>h.name===e.name)).map((e,i)=>(
+                      <div key={i} style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 16px',fontSize:14}}>
+                        <strong>{e.name}</strong>
+                        <span style={{color:'#9ca3af',fontSize:12,marginLeft:8}}>{e.region}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {page==='data' && (
             <div className="fade-in">
 
