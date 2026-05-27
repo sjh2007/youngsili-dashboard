@@ -135,14 +135,29 @@ export default function App() {
 
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => {
-    const t = setInterval(() => {
-      fetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
-        setAlertsData(data);
-        setAlertCount(data.filter(a=>!a.read).length);
-      }).catch(()=>{});
-    }, 30000);
-    return () => clearInterval(t);
-  }, []); // eslint-disable-line
+  const t = setInterval(() => {
+    fetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
+      setAlertsData(data);
+      const unread = data.filter(a=>!a.read);
+      setAlertCount(unread.length);
+      unread.forEach(alert => {
+        if (alert.level === 'critical' || alert.level === 'urgent') {
+          setElders(prev => prev.map(e => {
+            if (e.name === alert.name) {
+              return {
+                ...e,
+                status: alert.level === 'critical' ? 'danger' : 'warning',
+                keyword: alert.message,
+              };
+            }
+            return e;
+          }));
+        }
+      });
+    }).catch(()=>{});
+  }, 5000);
+  return () => clearInterval(t);
+}, []); // eslint-disable-line
 
   const [popData, setPopData]       = useState(null);
   const [popLoading, setPopLoading] = useState(false);
@@ -413,7 +428,7 @@ export default function App() {
             {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
             {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
             {id:'calls',     icon:'📞', label:'통화 기록'},
-            {id:'health',    icon:'💊', label:'건강 상태'},
+            {id:'health', icon:'💊', label: alertCount > 0 ? `💊 건강 상태 🔴${alertCount}` : '💊 건강 상태'},
             {id:'report',    icon:'📊', label:'리포트 / 통계'},
             {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
           ].map(item=>(
