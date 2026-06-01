@@ -2,14 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 const SERVER_URL = 'https://youngsili-server-production.up.railway.app';
-
+const CAREGIVERS = ['신주환', '이정훈', '박미경'];
 const INIT_ELDERS = [
-  { id: 1, name: '김순자', age: 78, gender:'female', title:'할머니', region: '대구 북구',   address: '대구 북구 침산동 123',   phone: '010-1234-5678', guardian: '김민준', guardianPhone: '010-9876-5432', disease: '고혈압, 당뇨',  medicine: '혈압약',  mobility: '보조기구 필요',   status: 'danger',  lastCall: '오늘 09:12', keyword: '가슴이 아파', visits: 2, callCycle: 'daily',      callTime: '09:00', callActive: true  },
-  { id: 2, name: '이철수', age: 82, gender:'male',   title:'할아버지', region: '대구 달서구', address: '대구 달서구 월성동 456', phone: '010-2345-6789', guardian: '이영희', guardianPhone: '010-8765-4321', disease: '관절염',       medicine: '진통제',  mobility: '독립보행 가능',   status: 'warning', lastCall: '오늘 10:45', keyword: '어지러워',  visits: 1, callCycle: 'daily',      callTime: '10:00', callActive: true  },
-  { id: 3, name: '박영희', age: 75, gender:'female', title:'할머니', region: '대구 수성구', address: '대구 수성구 범어동 789', phone: '010-3456-7890', guardian: '박철호', guardianPhone: '010-7654-3210', disease: '없음',          medicine: '없음',    mobility: '독립보행 가능',   status: 'normal',  lastCall: '오늘 11:20', keyword: null,        visits: 0, callCycle: 'every2days', callTime: '11:00', callActive: true  },
-  { id: 4, name: '최동수', age: 80, gender:'male',   title:'할아버지', region: '대구 중구',   address: '대구 중구 대봉동 321',   phone: '010-4567-8901', guardian: '최지영', guardianPhone: '010-6543-2109', disease: '심장병',       medicine: '심장약',  mobility: '보조기구 필요',   status: 'normal',  lastCall: '어제 15:30', keyword: null,        visits: 0, callCycle: 'weekly',     callTime: '15:00', callActive: false },
-  { id: 5, name: '정말순', age: 71, gender:'female', title:'어머니', region: '대구 동구',   address: '대구 동구 신천동 654',   phone: '010-5678-9012', guardian: '정대호', guardianPhone: '010-5432-1098', disease: '골다공증',     medicine: '칼슘제',  mobility: '독립보행 가능',   status: 'warning', lastCall: '오늘 08:55', keyword: '넘어졌어',  visits: 1, callCycle: 'daily',      callTime: '09:00', callActive: true  },
-  { id: 6, name: '한복남', age: 85, gender:'male',   title:'아버지', region: '대구 서구',   address: '대구 서구 평리동 987',   phone: '010-6789-0123', guardian: '한미래', guardianPhone: '010-4321-0987', disease: '치매 초기',    medicine: '치매약',  mobility: '보조기구 필요',   status: 'normal',  lastCall: '오늘 13:10', keyword: null,        visits: 0, callCycle: 'daily',      callTime: '13:00', callActive: true  },
+  { id: 1, name: '김순자', age: 78, gender:'female', title:'할머니', region: '대구 북구',   address: '대구 북구 침산동 123',   phone: '010-1234-5678', caregiver: '신주환', guardian: '김민준', guardianPhone: '010-9876-5432', disease: '고혈압, 당뇨',  medicine: '혈압약',  mobility: '보조기구 필요',   status: 'danger',  lastCall: '오늘 09:12', keyword: '가슴이 아파', visits: 2, callCycle: 'daily',      callTime: '09:00', callActive: true  },
+  { id: 2, name: '이철수', age: 82, gender:'male',   title:'할아버지', region: '대구 달서구', address: '대구 달서구 월성동 456', phone: '010-2345-6789', caregiver: '신주환', guardian: '이영희', guardianPhone: '010-8765-4321', disease: '관절염',       medicine: '진통제',  mobility: '독립보행 가능',   status: 'warning', lastCall: '오늘 10:45', keyword: '어지러워',  visits: 1, callCycle: 'daily',      callTime: '10:00', callActive: true  },
+  { id: 3, name: '박영희', age: 75, gender:'female', title:'할머니', region: '대구 수성구', address: '대구 수성구 범어동 789', phone: '010-3456-7890', caregiver: '이정훈', guardian: '박철호', guardianPhone: '010-7654-3210', disease: '없음',          medicine: '없음',    mobility: '독립보행 가능',   status: 'normal',  lastCall: '오늘 11:20', keyword: null,        visits: 0, callCycle: 'every2days', callTime: '11:00', callActive: true  },
+  { id: 4, name: '최동수', age: 80, gender:'male',   title:'할아버지', region: '대구 중구',   address: '대구 중구 대봉동 321',   phone: '010-4567-8901', caregiver: '이정훈', guardian: '최지영', guardianPhone: '010-6543-2109', disease: '심장병',       medicine: '심장약',  mobility: '보조기구 필요',   status: 'normal',  lastCall: '어제 15:30', keyword: null,        visits: 0, callCycle: 'weekly',     callTime: '15:00', callActive: false },
+  { id: 5, name: '정말순', age: 71, gender:'female', title:'어머니', region: '대구 동구',   address: '대구 동구 신천동 654',   phone: '010-5678-9012', caregiver: '박미경', guardian: '정대호', guardianPhone: '010-5432-1098', disease: '골다공증',     medicine: '칼슘제',  mobility: '독립보행 가능',   status: 'warning', lastCall: '오늘 08:55', keyword: '넘어졌어',  visits: 1, callCycle: 'daily',      callTime: '09:00', callActive: true  },
+  { id: 6, name: '한복남', age: 85, gender:'male',   title:'아버지', region: '대구 서구',   address: '대구 서구 평리동 987',   phone: '010-6789-0123', caregiver: '박미경', guardian: '한미래', guardianPhone: '010-4321-0987', disease: '치매 초기',    medicine: '치매약',  mobility: '보조기구 필요',   status: 'normal',  lastCall: '오늘 13:10', keyword: null,        visits: 0, callCycle: 'daily',      callTime: '13:00', callActive: true  },
 ];
 
 const PUBLIC_DATA = [
@@ -48,7 +48,7 @@ const RISK_CONFIG = {
   urgent:   { label: '주의', color: '#f59e0b' },
   normal:   { label: '정상', color: '#22c55e' },
 };
-const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'대구 북구', address:'', phone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', callCycle:'daily', callTime:'09:00', callActive:true };
+const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'대구 북구', address:'', phone:'', caregiver:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', callCycle:'daily', callTime:'09:00', callActive:true };
 
 const TITLE_OPTIONS = {
   female: ['할머니', '어머니', '여사님'],
@@ -626,7 +626,7 @@ export default function App() {
                   <button className="btn-primary" onClick={openRegister}>+ 신규 등록</button>
                 </div>
                 <table className="table">
-                  <thead><tr><th>어르신</th><th>나이</th><th>지역</th><th>마지막 통화</th><th>미응답</th><th>고독사위험</th><th>상태</th><th>즉시 전화</th></tr></thead>
+                  <thead><tr><th>어르신</th><th>나이</th><th>지역</th><th>담당 복지사</th><th>마지막 통화</th><th>미응답</th><th>고독사위험</th><th>상태</th><th>즉시 전화</th></tr></thead>
                   <tbody>
                     {elders.sort((a,b)=>{const order={danger:0,warning:1,normal:2};return order[a.status]-order[b.status];}).map(elder=>{
                       const risk = getSolitudeRisk(elder);
@@ -636,6 +636,7 @@ export default function App() {
                           <td><div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:18}}>{elder.gender==='female'?'👵':'👴'}</span><span style={{fontWeight:700}}>{elder.name}</span>{elder.keyword&&<span className="keyword-tag">"{elder.keyword}"</span>}</div></td>
                           <td>{elder.age}세</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
+                          <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
                           <td>{days===0?<span style={{color:'#22c55e',fontWeight:700,fontSize:12}}>정상</span>:<span style={{color:days>=3?'#ef4444':'#f59e0b',fontWeight:700,fontSize:12}}>{days>=99?'미통화':`${days}일`}</span>}</td>
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
@@ -704,7 +705,7 @@ export default function App() {
               )}
 
               <table className="table">
-                <thead><tr><th style={{width:40}}><input type="checkbox" checked={checked.length===smartElders.length&&smartElders.length>0} onChange={e=>e.target.checked?checkAll():uncheckAll()} className="cb"/></th><th>어르신</th><th>전화번호</th><th>전화 주기</th><th>전화 시간</th><th>마지막 통화</th><th>상태</th><th>중단/재개</th></tr></thead>
+                <thead><tr><th style={{width:40}}><input type="checkbox" checked={checked.length===smartElders.length&&smartElders.length>0} onChange={e=>e.target.checked?checkAll():uncheckAll()} className="cb"/></th><th>어르신</th><th>전화번호</th><th>담당 복지사</th><th>전화 주기</th><th>전화 시간</th><th>마지막 통화</th><th>상태</th><th>중단/재개</th></tr></thead>
                 <tbody>
                   {smartElders.map(elder=>{
                     const done = bulkDone.find(d=>d.id===elder.id);
@@ -713,6 +714,7 @@ export default function App() {
                         <td><input type="checkbox" checked={checked.includes(elder.id)} onChange={()=>toggleCheck(elder.id)} className="cb"/></td>
                         <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><div><div style={{fontWeight:700}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age}세</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'✅':'❌'}</span>}</div></td>
                         <td style={{fontSize:13}}>{elder.phone}</td>
+                        <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                         <td><span className="cycle-badge">{cycleLabel(elder.callCycle)}</span></td>
                         <td><span className="time-badge">{elder.callTime}</span></td>
                         <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
@@ -756,6 +758,7 @@ export default function App() {
                         <div className="elder-top"><div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
                         <div className="elder-name">{elder.name}</div>
                         <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
+                        {elder.caregiver && <div className="elder-info" style={{color:'#1d4ed8',fontWeight:600}}>👤 담당: {elder.caregiver}</div>}
                         {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>📵 {noResponseDays >= 99 ? '미통화' : `${noResponseDays}일째 미응답`}</div>}
                         <div className="elder-last">📞 마지막 통화: {elder.lastCall}</div>
                         {elder.keyword && <div className="keyword-tag mt8">⚠️ "{elder.keyword}" 감지</div>}
@@ -769,9 +772,9 @@ export default function App() {
 
               {viewMode === 'table' && (
                 <table className="table">
-                  <thead><tr><th>어르신</th><th>성별/호칭</th><th>나이</th><th>지역</th><th>마지막 통화</th><th>미응답</th><th>고독사 위험도</th><th>상태</th><th>키워드</th><th>즉시 전화</th></tr></thead>
+                  <thead><tr><th>어르신</th><th>성별/호칭</th><th>나이</th><th>지역</th><th>담당 복지사</th><th>마지막 통화</th><th>미응답</th><th>고독사 위험도</th><th>상태</th><th>키워드</th><th>즉시 전화</th></tr></thead>
                   <tbody>
-                    {filteredElders.length === 0 && <tr><td colSpan={10} style={{textAlign:'center',color:'#94a3b8',padding:32}}>검색 결과가 없습니다 🔍</td></tr>}
+                    {filteredElders.length === 0 && <tr><td colSpan={11} style={{textAlign:'center',color:'#94a3b8',padding:32}}>검색 결과가 없습니다 🔍</td></tr>}
                     {filteredElders.map(elder => {
                       const risk = getSolitudeRisk(elder);
                       const noResponseDays = getNoResponseDays(elder.lastCall);
@@ -781,6 +784,7 @@ export default function App() {
                           <td><span className="cycle-badge">{elder.title}</span></td>
                           <td>{elder.age}세</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
+                          <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
                           <td>{noResponseDays===0?<span style={{color:'#22c55e',fontWeight:700}}>정상</span>:<span style={{color:noResponseDays>=3?'#ef4444':'#f59e0b',fontWeight:700}}>{noResponseDays>=99?'미통화':`${noResponseDays}일`}</span>}</td>
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
@@ -899,9 +903,9 @@ export default function App() {
               <div className="section">
                 <div className="section-title">👥 어르신별 이달 현황</div>
                 <table className="table">
-                  <thead><tr><th>어르신</th><th>이달 통화</th><th>위험 감지</th><th>방문 필요</th><th>현재 상태</th><th>변화 추이</th></tr></thead>
+                  <thead><tr><th>어르신</th><th>담당 복지사</th><th>이달 통화</th><th>위험 감지</th><th>방문 필요</th><th>현재 상태</th><th>변화 추이</th></tr></thead>
                   <tbody>
-                    {elders.map((elder,i)=>{const elderLogs=callLogs.filter(c=>c.elderId===elder.id);const trends=['→','↑','↓','→','↑','→'];const trendColors=['#64748b','#ef4444','#22c55e','#64748b','#ef4444','#64748b'];return(<tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}><td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><strong>{elder.name}</strong></div></td><td><strong>{elderLogs.length}건</strong></td><td>{elder.keyword?<span className="keyword-tag">{elder.keyword}</span>:<span style={{color:'#9ca3af'}}>없음</span>}</td><td><span style={{color:elder.visits>0?'#ef4444':'#22c55e',fontWeight:700}}>{elder.visits>0?`${elder.visits}회`:'불필요'}</span></td><td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td><td><span style={{fontSize:20,fontWeight:900,color:trendColors[i%6]}}>{trends[i%6]}</span></td></tr>);})}
+                    {elders.map((elder,i)=>{const elderLogs=callLogs.filter(c=>c.elderId===elder.id);const trends=['→','↑','↓','→','↑','→'];const trendColors=['#64748b','#ef4444','#22c55e','#64748b','#ef4444','#64748b'];return(<tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}><td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><strong>{elder.name}</strong></div></td><td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td><td><strong>{elderLogs.length}건</strong></td><td>{elder.keyword?<span className="keyword-tag">{elder.keyword}</span>:<span style={{color:'#9ca3af'}}>없음</span>}</td><td><span style={{color:elder.visits>0?'#ef4444':'#22c55e',fontWeight:700}}>{elder.visits>0?`${elder.visits}회`:'불필요'}</span></td><td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td><td><span style={{fontSize:20,fontWeight:900,color:trendColors[i%6]}}>{trends[i%6]}</span></td></tr>);})}
                   </tbody>
                 </table>
               </div>
@@ -967,7 +971,7 @@ export default function App() {
                             <td><strong>{h.name}</strong></td>
                             <td><span style={{color:statusColor,fontWeight:700,fontSize:15}}>{statusLabel}</span></td>
                             <td style={{fontSize:13,color:'#6b7280'}}>{new Date(h.timestamp).toLocaleString('ko-KR')}</td>
-                            <td>{elder?.worker||'-'}</td>
+                            <td>{elder?.caregiver||'-'}</td>
                             <td>
                               {h.status==='bad'&&<button className="btn-small" style={{background:'#dc2626',color:'#fff',borderColor:'#dc2626'}} onClick={()=>elder&&setCallModal(elder)}>📱 즉시 전화</button>}
                               {h.status==='okay'&&<button className="btn-small" onClick={()=>elder&&setCallModal(elder)}>📱 확인 전화</button>}
@@ -1057,7 +1061,7 @@ export default function App() {
                     <button className={`btn-call-lg ${calling===selected.id?'btn-calling':''} ${!selected.callActive?'btn-disabled':''}`} onClick={()=>selected.callActive&&setCallModal(selected)} disabled={calling===selected.id||!selected.callActive}>{calling===selected.id?'⏳ 발신 중...':'📱 앱으로 전화하기'}</button>
                     <button className={`toggle-btn-lg ${selected.callActive?'toggle-active':'toggle-paused'}`} onClick={()=>toggleCallActive(selected.id)}>{selected.callActive?'⏸ 자동전화 중단':'▶ 자동전화 재개'}</button>
                   </div>
-                  {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['전화번호',selected.phone],['주소',selected.address],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
+                  {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',selected.address],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
                 </div>
                 <div className="detail-right">
                   {selected.keyword&&<div className="alert-box"><div className="alert-box-title">🚨 감지된 위험 키워드</div><div className="alert-box-keyword">"{selected.keyword}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
@@ -1104,9 +1108,10 @@ export default function App() {
                   <div className="form-field"><label className="form-label">지병</label><input {...inp('disease')} placeholder="예: 고혈압, 당뇨"/></div>
                   <div className="form-field"><label className="form-label">복용 중인 약</label><input {...inp('medicine')} placeholder="예: 혈압약"/></div>
                   <div className="form-field full-width"><label className="form-label">거동 상태</label><div className="radio-group">{['독립보행 가능','보조기구 필요','거동 불가'].map(opt=><label key={opt} className={`radio-option ${form.mobility===opt?'radio-selected':''}`}><input type="radio" name="mobility" value={opt} checked={form.mobility===opt} onChange={e=>setForm(f=>({...f,mobility:e.target.value}))} style={{display:'none'}}/>{opt}</label>)}</div></div>
+                  <div className="form-field full-width"><label className="form-label">담당 복지사</label><select {...inp('caregiver')}><option value="">선택 안 함</option>{CAREGIVERS.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
                 </div><div className="form-footer"><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
                 {formStep===2&&(<div className="fade-in"><div className="form-section-title">👨‍👩‍👧 보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">💡 위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
-                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid"><div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'every2days',label:'격일'},{value:'weekly',label:'주 1회'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div></div><div className="form-field"><label className="form-label">전화 시간</label><input {...inp('callTime')} type="time"/></div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
+                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid"><div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'every2days',label:'격일'},{value:'weekly',label:'주 1회'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div></div><div className="form-field"><label className="form-label">전화 시간</label><input {...inp('callTime')} type="time"/></div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
               </div>
             </div>
           )}
