@@ -987,7 +987,7 @@ export default function App() {
 
           {page==='report' && (
             <div className="fade-in">
-              <div className="report-banner"><div className="report-banner-title">📊 2026년 5월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>📊 엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>⬇️ PDF 다운로드</button></div></div>
+              <div className="report-banner"><div className="report-banner-title">📊 {new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>📊 엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>⬇️ PDF 다운로드</button></div></div>
               <div className="report-stat-grid">
                 {[{label:'총 통화',value:'34건',icon:'📞',color:'#1d4ed8'},{label:'긴급 감지',value:'3건',icon:'🚨',color:'#ef4444'},{label:'주의 감지',value:'8건',icon:'⚠️',color:'#f59e0b'},{label:'방문 연결',value:'5건',icon:'🏠',color:'#16a34a'},{label:'총 통화 시간',value:'142분',icon:'⏱️',color:'#7c3aed'},{label:'관리 어르신',value:`${elders.length}명`,icon:'👥',color:'#0891b2'}].map((s,i)=>(
                   <div key={i} className="report-stat-card"><div className="report-stat-icon">{s.icon}</div><div className="report-stat-value" style={{color:s.color}}>{s.value}</div><div className="report-stat-label">{s.label}</div></div>
