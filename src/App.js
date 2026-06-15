@@ -218,6 +218,17 @@ export default function App() {
 
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
+  // 통화 시각 ISO → "오늘 14:23" / "어제 09:10" / "6/14 15:30"
+  const formatCallTime = (iso) => {
+    if (!iso) return '아직 없음';
+    const d = new Date(iso), now = new Date();
+    const hm = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const yest = new Date(now); yest.setDate(now.getDate() - 1);
+    if (d.toDateString() === now.toDateString()) return `오늘 ${hm}`;
+    if (d.toDateString() === yest.toDateString()) return `어제 ${hm}`;
+    return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+  };
+
   useEffect(() => {
   const t = setInterval(() => {
     fetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
@@ -242,6 +253,14 @@ export default function App() {
           keyword: kw,
           keywordAt: a.timestamp,
         };
+      }));
+    }).catch(()=>{});
+    // 최근 통화 → 마지막 통화 시각/상태 실시간 갱신 (위험 없어도 항상)
+    fetch(`${SERVER_URL}/calls/recent`).then(r=>r.json()).then(calls => {
+      setElders(prev => prev.map(e => {
+        const c = calls[e.name];
+        if (!c) return e;
+        return { ...e, lastCall: formatCallTime(c.timestamp), lastCallRisk: c.riskLevel, lastTranscript: c.transcript };
       }));
     }).catch(()=>{});
   }, 5000);
