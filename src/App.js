@@ -464,10 +464,20 @@ export default function App() {
             <div className="fade-in">
               {(() => {
                 const alerts = [];
+                // 1) 통화 중 위험 키워드 감지 — 서버 알림(alertsData) 직접 표시 (키워드+시각, localStorage 매칭 무관)
+                //    keyword 필드가 비어도(구버전 서버) message에서 "감지: 뒤"를 파싱해 키워드만 깔끔히.
+                alertsData
+                  .filter(a => !a.read && (a.level === 'critical' || a.level === 'urgent'))
+                  .slice(0, 10)
+                  .forEach(a => {
+                    const kw = a.keyword || (a.message ? a.message.split('감지:').pop().trim() : '') || a.message;
+                    const el = elders.find(e => e.name === a.name);
+                    alerts.push({ elder: el, name: a.name, msg: `"${kw}" 위험 키워드 감지`, time: a.timestamp, color: a.level === 'critical' ? '#ef4444' : '#f59e0b', bg: a.level === 'critical' ? '#fef2f2' : '#fffbeb', icon: '🚨' });
+                  });
+                // 2) 미응답 (어르신 데이터 기반)
                 elders.forEach(e => {
                   const days = getNoResponseDays(e.lastCall);
                   if (days >= 3) alerts.push({ elder: e, type: 'noResponse', msg: `${days}일째 미응답 → 즉시 확인 필요`, color: '#ef4444', bg: '#fef2f2', icon: '📵' });
-                  else if (e.keyword) alerts.push({ elder: e, type: 'keyword', msg: `"${e.keyword}" 위험 키워드 감지`, time: e.keywordAt, color: '#ef4444', bg: '#fef2f2', icon: '🚨' });
                 });
                 const heatwaveElders = elders.filter(e => weatherData[e.region]?.alert === 'heatwave');
                 if (heatwaveElders.length > 0) alerts.push({ type: 'weather', msg: `폭염경보 → ${heatwaveElders.map(e=>e.name).join(', ')} 어르신 안전 확인 필요`, color: '#f59e0b', bg: '#fffbeb', icon: '🌡️' });
@@ -479,7 +489,7 @@ export default function App() {
                       <div key={i} className="alert-center-item" style={{borderLeftColor: a.color, background: a.bg}} onClick={() => a.elder && openDetail(a.elder)}>
                         <span className="alert-center-icon">{a.icon}</span>
                         <div className="alert-center-content">
-                          {a.elder && <span className="alert-center-name">{a.elder.name} ({a.elder.age}세)</span>}
+                          {(a.elder || a.name) && <span className="alert-center-name">{a.elder ? `${a.elder.name} (${a.elder.age}세)` : a.name}</span>}
                           <span className="alert-center-msg">{a.msg}</span>
                           {a.time && <span className="alert-center-time" style={{fontSize:12,color:'#9ca3af',marginLeft:6}}>{new Date(a.time).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>}
                         </div>
@@ -950,7 +960,7 @@ export default function App() {
                   {alertsData.filter(a=>!a.read).map((alert,i) => (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 18px',marginBottom:10}}>
                       <span style={{fontSize:24}}>⚠️</span>
-                      <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'#dc2626'}}>{alert.name} · 🚨 "{alert.keyword || alert.message}"</div><div style={{fontSize:12,color:'#ef4444',marginTop:2}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
+                      <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'#dc2626'}}>{alert.name} · 🚨 "{alert.keyword || (alert.message ? alert.message.split('감지:').pop().trim() : alert.message)}"</div><div style={{fontSize:12,color:'#ef4444',marginTop:2}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
                       <button className="btn-small" onClick={async()=>{await fetch(`${SERVER_URL}/alerts/${alert.id}/read`,{method:'POST'});fetchHealth();}}>확인</button>
                     </div>
                   ))}
