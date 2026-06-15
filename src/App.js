@@ -169,6 +169,34 @@ export default function App() {
     return Math.round(s * 10) / 10;
   };
 
+  // 위험 키워드 통계 → 엑셀(UTF-8 CSV, BOM 포함 → Excel 한글 정상)
+  const exportStatsCSV = () => {
+    if (!statsData || !statsData.elders || Object.keys(statsData.elders).length === 0) { alert('내보낼 통계 데이터가 없습니다.'); return; }
+    const { from, to } = rangeToDates(statsRange);
+    const fmt = (d) => new Date(d).toLocaleDateString('ko-KR');
+    const entries = Object.entries(statsData.elders)
+      .map(([name, es]) => ({ name, es, score: priorityScore(es), prevTotal: (statsPrev && statsPrev.elders && statsPrev.elders[name] && statsPrev.elders[name].total) || 0 }))
+      .sort((a, b) => b.score - a.score);
+    const rows = [];
+    rows.push(['위험 키워드 통계 리포트']);
+    rows.push(['기간', `${fmt(from)} ~ ${fmt(to)}`]);
+    rows.push(['총 위험 감지', `${statsData.totalEvents || 0}건`]);
+    rows.push([]);
+    rows.push(['순위', '어르신', '우선순위 점수', '총 감지', '주요 키워드(빈도)', '긴급', '주의', '마지막 감지', '지난기간', '증감']);
+    entries.forEach((e, i) => {
+      const kwStr = Object.entries(e.es.keywords || {}).sort((a, b) => b[1] - a[1]).map(([k, c]) => `${k}(${c})`).join(' ');
+      const diff = e.es.total - e.prevTotal;
+      rows.push([i + 1, e.name, e.score, e.es.total, kwStr, (e.es.byLevel || {}).critical || 0, (e.es.byLevel || {}).urgent || 0, e.es.lastAt ? new Date(e.es.lastAt).toLocaleString('ko-KR') : '', e.prevTotal, diff > 0 ? `+${diff}` : `${diff}`]);
+    });
+    const csv = '﻿' + rows.map(r => r.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `위험키워드통계_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const fetchHealth = async () => {
     setHealthLoading(true);
     try {
@@ -959,7 +987,7 @@ export default function App() {
 
           {page==='report' && (
             <div className="fade-in">
-              <div className="report-banner"><div className="report-banner-title">📊 2026년 5월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><button className="btn-download" onClick={()=>window.print()}>⬇️ PDF 다운로드</button></div>
+              <div className="report-banner"><div className="report-banner-title">📊 2026년 5월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>📊 엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>⬇️ PDF 다운로드</button></div></div>
               <div className="report-stat-grid">
                 {[{label:'총 통화',value:'34건',icon:'📞',color:'#1d4ed8'},{label:'긴급 감지',value:'3건',icon:'🚨',color:'#ef4444'},{label:'주의 감지',value:'8건',icon:'⚠️',color:'#f59e0b'},{label:'방문 연결',value:'5건',icon:'🏠',color:'#16a34a'},{label:'총 통화 시간',value:'142분',icon:'⏱️',color:'#7c3aed'},{label:'관리 어르신',value:`${elders.length}명`,icon:'👥',color:'#0891b2'}].map((s,i)=>(
                   <div key={i} className="report-stat-card"><div className="report-stat-icon">{s.icon}</div><div className="report-stat-value" style={{color:s.color}}>{s.value}</div><div className="report-stat-label">{s.label}</div></div>
