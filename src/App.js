@@ -114,6 +114,61 @@ export default function App() {
   const [alertCount, setAlertCount]     = useState(0);
   const [healthLoading, setHealthLoading] = useState(false);
 
+  // ── 통계(리포트) 상태 ──
+  const [statsRange, setStatsRange]       = useState('month'); // week | month | 3month | custom
+  const [statsFrom, setStatsFrom]         = useState('');
+  const [statsTo, setStatsTo]             = useState('');
+  const [statsData, setStatsData]         = useState(null);    // 현재 기간 /stats
+  const [statsPrev, setStatsPrev]         = useState(null);    // 직전 기간(추이 비교용)
+  const [statsLoading, setStatsLoading]   = useState(false);
+
+  // 위험 키워드 → 위험도 (키워드 칩 색상용; 서버 KEYWORDS와 동기화)
+  const KW_LEVEL = {
+    critical: ['살려','쓰러','숨이 막','숨을 못','의식','가슴이 아파','가슴 아파','죽','119','구급차','피가 나','피나','못 일어'],
+    urgent:   ['어지러','넘어졌','넘어져','토','열이 나','열나','다쳤','숨이 차','답답','배가 아파','머리가 아파','많이 아파','힘이 없','기운이 없','무서','혼자'],
+  };
+  const kwLevel = (kw) => {
+    const t = kw || '';
+    if (KW_LEVEL.critical.some(s => t.includes(s))) return 'critical';
+    if (KW_LEVEL.urgent.some(s => t.includes(s))) return 'urgent';
+    return 'warning';
+  };
+  const LV_COLOR = { critical: { c:'#dc2626', bg:'#fef2f2' }, urgent: { c:'#d97706', bg:'#fffbeb' }, warning: { c:'#ca8a04', bg:'#fefce8' } };
+
+  const rangeToDates = (range) => {
+    const to = new Date();
+    const day = 86400000;
+    if (range === 'custom' && statsFrom && statsTo) return { from: new Date(statsFrom + 'T00:00:00'), to: new Date(statsTo + 'T23:59:59') };
+    if (range === 'week')   return { from: new Date(to.getTime() - 7 * day),  to };
+    if (range === '3month') return { from: new Date(to.getTime() - 90 * day), to };
+    return { from: new Date(to.getTime() - 30 * day), to }; // month
+  };
+
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const { from, to } = rangeToDates(statsRange);
+      const span = to.getTime() - from.getTime();
+      const prevTo = new Date(from.getTime() - 1);
+      const prevFrom = new Date(prevTo.getTime() - span);
+      const [cur, prev] = await Promise.all([
+        fetch(`${SERVER_URL}/stats?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
+        fetch(`${SERVER_URL}/stats?from=${prevFrom.toISOString()}&to=${prevTo.toISOString()}`).then(r => r.json()),
+      ]);
+      setStatsData(cur); setStatsPrev(prev);
+    } catch { setStatsData({ available: false }); setStatsPrev(null); }
+    finally { setStatsLoading(false); }
+  };
+
+  const priorityScore = (es) => {
+    if (!es) return 0;
+    const w = { critical: 3, urgent: 1.5, warning: 1 };
+    let s = 0;
+    Object.entries(es.byLevel || {}).forEach(([lvl, c]) => { s += c * (w[lvl] || 1); });
+    if (es.lastAt) { const d = (Date.now() - new Date(es.lastAt).getTime()) / 86400000; if (d < 1) s *= 1.5; else if (d < 3) s *= 1.2; }
+    return Math.round(s * 10) / 10;
+  };
+
   const fetchHealth = async () => {
     setHealthLoading(true);
     try {
@@ -134,6 +189,7 @@ export default function App() {
   };
 
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
+  useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
   useEffect(() => {
   const t = setInterval(() => {
     fetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
@@ -916,14 +972,60 @@ export default function App() {
                 </div>
                 <div className="chart-legend"><span className="legend-item"><span className="legend-dot" style={{background:'#ef4444'}}/>긴급</span><span className="legend-item"><span className="legend-dot" style={{background:'#f59e0b'}}/>주의</span><span className="legend-item"><span className="legend-dot" style={{background:'#3b82f6'}}/>정상</span></div>
               </div>
+              {/* ── 위험 키워드 통계 (실데이터 /stats, 기간선택·빈도·우선순위·추이) ── */}
               <div className="section">
-                <div className="section-title">👥 어르신별 이달 현황</div>
-                <table className="table">
-                  <thead><tr><th>어르신</th><th>담당 복지사</th><th>이달 통화</th><th>위험 감지</th><th>방문 필요</th><th>현재 상태</th><th>변화 추이</th></tr></thead>
-                  <tbody>
-                    {elders.map((elder,i)=>{const elderLogs=callLogs.filter(c=>c.elderId===elder.id);const trends=['→','↑','↓','→','↑','→'];const trendColors=['#64748b','#ef4444','#22c55e','#64748b','#ef4444','#64748b'];return(<tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}><td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><strong>{elder.name}</strong></div></td><td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td><td><strong>{elderLogs.length}건</strong></td><td>{elder.keyword?<span className="keyword-tag">{elder.keyword}</span>:<span style={{color:'#9ca3af'}}>없음</span>}</td><td><span style={{color:elder.visits>0?'#ef4444':'#22c55e',fontWeight:700}}>{elder.visits>0?`${elder.visits}회`:'불필요'}</span></td><td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td><td><span style={{fontSize:20,fontWeight:900,color:trendColors[i%6]}}>{trends[i%6]}</span></td></tr>);})}
-                  </tbody>
-                </table>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:14}}>
+                  <div className="section-title" style={{marginBottom:0}}>🔎 위험 키워드 통계</div>
+                  <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                    {[['week','이번 주'],['month','이번 달'],['3month','최근 3개월'],['custom','직접 선택']].map(([k,label])=>(
+                      <button key={k} onClick={()=>setStatsRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(statsRange===k?'#1d4ed8':'#e2e8f0'),background:statsRange===k?'#eff6ff':'#fff',color:statsRange===k?'#1d4ed8':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
+                    ))}
+                    {statsRange==='custom' && (<>
+                      <input type="date" value={statsFrom} onChange={e=>setStatsFrom(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
+                      <span style={{color:'#94a3b8'}}>~</span>
+                      <input type="date" value={statsTo} onChange={e=>setStatsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
+                    </>)}
+                    <button onClick={fetchStats} className="btn-download" style={{padding:'6px 12px'}}>{statsLoading?'⏳':'🔄'}</button>
+                  </div>
+                </div>
+
+                {(!statsData || statsData.available===false) ? (
+                  <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{statsLoading?'불러오는 중...':'아직 통계 데이터가 없습니다. 통화 중 위험 키워드가 감지되면 자동으로 쌓입니다.'}</div>
+                ) : (()=>{
+                  const elderEntries = Object.entries(statsData.elders||{})
+                    .map(([name,es])=>({ name, es, score: priorityScore(es), prevTotal: (statsPrev&&statsPrev.elders&&statsPrev.elders[name]&&statsPrev.elders[name].total)||0 }))
+                    .sort((a,b)=>b.score-a.score);
+                  const topKw = (statsData.topKeywords||[])[0];
+                  const surge = elderEntries.filter(e=>e.es.total>e.prevTotal).sort((a,b)=>(b.es.total-b.prevTotal)-(a.es.total-a.prevTotal))[0];
+                  return (<>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginBottom:16}}>
+                      <div style={{background:'#f8fafc',borderRadius:12,padding:16}}><div style={{fontSize:13,color:'#64748b'}}>총 위험 감지</div><div style={{fontSize:26,fontWeight:900,color:'#0f172a'}}>{statsData.totalEvents||0}건</div></div>
+                      <div style={{background:'#fff7ed',borderRadius:12,padding:16}}><div style={{fontSize:13,color:'#9a3412'}}>최다 키워드</div><div style={{fontSize:20,fontWeight:900,color:'#c2410c'}}>{topKw?`"${topKw.keyword}" ${topKw.count}건`:'-'}</div></div>
+                      <div style={{background:'#fef2f2',borderRadius:12,padding:16}}><div style={{fontSize:13,color:'#991b1b'}}>위험 급증 어르신</div><div style={{fontSize:20,fontWeight:900,color:'#dc2626'}}>{surge?`${surge.name} (+${surge.es.total-surge.prevTotal})`:'없음'}</div></div>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                      {elderEntries.length===0 && <div style={{color:'#94a3b8',padding:20,textAlign:'center'}}>이 기간엔 위험 감지가 없습니다.</div>}
+                      {elderEntries.map((e,idx)=>{
+                        const trendDiff = e.es.total - e.prevTotal;
+                        return (
+                          <div key={e.name} style={{border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 16px',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:10,minWidth:160}}>
+                              <div style={{width:30,height:30,borderRadius:15,background:idx===0?'#dc2626':idx===1?'#f59e0b':'#94a3b8',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:13}}>{idx+1}</div>
+                              <div><div style={{fontWeight:800,fontSize:15}}>{e.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>우선순위 {e.score}점 · 총 {e.es.total}건</div></div>
+                            </div>
+                            <div style={{flex:1,display:'flex',flexWrap:'wrap',gap:6,minWidth:160}}>
+                              {Object.entries(e.es.keywords||{}).sort((a,b)=>b[1]-a[1]).map(([kw,cnt])=>{const L=LV_COLOR[kwLevel(kw)];return(<span key={kw} style={{background:L.bg,color:L.c,borderRadius:14,padding:'3px 10px',fontSize:13,fontWeight:700}}>{kw} ×{cnt}</span>);})}
+                            </div>
+                            <div style={{textAlign:'right',minWidth:90}}>
+                              <div style={{fontSize:18,fontWeight:900,color:trendDiff>0?'#dc2626':trendDiff<0?'#16a34a':'#94a3b8'}}>{trendDiff>0?`↑ +${trendDiff}`:trendDiff<0?`↓ ${trendDiff}`:'→ 0'}</div>
+                              <div style={{fontSize:11,color:'#94a3b8'}}>지난 기간 {e.prevTotal}건</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>);
+                })()}
               </div>
               <div className="section">
                 <div className="section-title">🎯 위험도 분포</div>
