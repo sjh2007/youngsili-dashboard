@@ -140,21 +140,25 @@ export default function App() {
       setAlertsData(data);
       const unread = data.filter(a=>!a.read);
       setAlertCount(unread.length);
-      unread.forEach(alert => {
-        if (alert.level === 'critical' || alert.level === 'urgent') {
-          setElders(prev => prev.map(e => {
-            if (e.name === alert.name) {
-              return {
-                ...e,
-                status: alert.level === 'critical' ? 'danger' : 'warning',
-                keyword: alert.keyword || alert.message,
-                keywordAt: alert.timestamp,
-              };
-            }
-            return e;
-          }));
+      // 어르신별 "가장 최근" 위험 알림만 반영 (data는 최신순 → 이름별 첫 항목이 최신)
+      const latestByName = {};
+      unread.forEach(a => {
+        if ((a.level === 'critical' || a.level === 'urgent') && !latestByName[a.name]) {
+          latestByName[a.name] = a;
         }
       });
+      setElders(prev => prev.map(e => {
+        const a = latestByName[e.name];
+        if (!a) return e;
+        // keyword 필드 없으면(구버전 서버) message의 "감지: 뒤"를 파싱
+        const kw = a.keyword || (a.message ? a.message.split('감지:').pop().trim() : '') || a.message;
+        return {
+          ...e,
+          status: a.level === 'critical' ? 'danger' : 'warning',
+          keyword: kw,
+          keywordAt: a.timestamp,
+        };
+      }));
     }).catch(()=>{});
   }, 5000);
   return () => clearInterval(t);
