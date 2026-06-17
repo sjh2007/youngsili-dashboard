@@ -1233,7 +1233,7 @@ export default function App() {
                   <div className="section">
                     <div className="script-editor-header" style={{marginBottom:12}}>
                       <div className="section-title" style={{marginBottom:0}}>📞 통화 기록</div>
-                      <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setCallLogs(prev=>prev.filter(l=>l.elderId!==selected.id||l.callStatus))}>🗑️ 이전 기록 정리</button>
+                      <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>{ if(window.confirm('이 어르신의 통화 기록을 모두 삭제할까요?\n(되돌릴 수 없습니다)')) setCallLogs(prev=>prev.filter(l=>l.elderId!==selected.id)); }}>🗑️ 이전 기록 정리</button>
                     </div>
                     {callLogs.filter(c=>c.elderId===selected.id).map(log=>{
                       const callStatusConfig={ringing:{label:'📱 앱 수신 대기',color:'#3b82f6',bg:'#eff6ff'},completed:{label:'✅ 통화 완료',color:'#22c55e',bg:'#f0fdf4'},failed:{label:'❌ 연결 실패',color:'#ef4444',bg:'#fef2f2'},unknown:{label:'❓ 상태 불명',color:'#94a3b8',bg:'#f8fafc'}};
