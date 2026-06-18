@@ -69,6 +69,7 @@ const ALERT_TEMPLATES = {
   dust:     `오늘 {{지역}} 미세먼지 농도가 매우 나쁨이에요. 외출 시 마스크를 꼭 착용하세요.`,
   rain:     `오늘 {{지역}} 비가 많이 온다고 해요. 외출 시 우산을 챙기시고 미끄러운 곳을 조심하세요.`,
   typhoon:  `{{지역}} 태풍 영향권에 들어있어요. 외출을 삼가시고 안전한 실내에 계세요.`,
+  wildfire: `오늘 {{지역}} 인근에 산불이 발생했어요. 안내 방송에 귀 기울이시고, 대피 안내가 있으면 꼭 따르세요. 위급하면 119로 연락하세요.`,
   none:     ``,
 };
 
@@ -939,13 +940,44 @@ export default function App() {
               <div className="section">
                 <div className="section-title">⚠️ 경보 멘트 설정</div>
                 <div className="alert-template-grid">
-                  {[{id:'none',icon:'✅',label:'경보 없음',color:'#22c55e'},{id:'heatwave',icon:'🌡️',label:'폭염경보',color:'#ef4444'},{id:'cold',icon:'❄️',label:'한파경보',color:'#3b82f6'},{id:'dust',icon:'😷',label:'미세먼지 나쁨',color:'#f59e0b'},{id:'rain',icon:'🌧️',label:'호우주의보',color:'#6366f1'},{id:'typhoon',icon:'🌀',label:'태풍경보',color:'#7c3aed'}].map(t => (
+                  {[{id:'none',icon:'✅',label:'경보 없음',color:'#22c55e'},{id:'heatwave',icon:'🌡️',label:'폭염경보',color:'#ef4444'},{id:'cold',icon:'❄️',label:'한파경보',color:'#3b82f6'},{id:'dust',icon:'😷',label:'미세먼지 나쁨',color:'#f59e0b'},{id:'rain',icon:'🌧️',label:'호우주의보',color:'#6366f1'},{id:'typhoon',icon:'🌀',label:'태풍경보',color:'#7c3aed'},{id:'wildfire',icon:'🔥',label:'산불발생',color:'#ea580c'}].map(t => (
                     <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} style={activeAlert===t.id?{borderColor:t.color,background:`${t.color}15`}:{}} onClick={() => { setActiveAlert(t.id); setAlertScript(ALERT_TEMPLATES[t.id]); }}>
                       <span style={{fontSize:20}}>{t.icon}</span><span style={{fontWeight:700,color:activeAlert===t.id?t.color:'#374151'}}>{t.label}</span>
                     </button>
                   ))}
                 </div>
                 {activeAlert !== 'none' && (<div className="alert-script-edit"><label className="form-label">경보 멘트 수정</label><textarea className="script-textarea" value={alertScript} onChange={e => setAlertScript(e.target.value)} rows={3}/><div className="var-hint">사용 가능 변수: <code>{'{{지역}}'}</code></div></div>)}
+                {activeAlert !== 'none' && (
+                  <div style={{marginTop:18,borderTop:'1px solid #e5e7eb',paddingTop:16}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
+                      <label className="form-label" style={{margin:0}}>📋 이 경보 멘트로 발신할 어르신 (체크 후 일괄 발신)</label>
+                      <div style={{display:'flex',gap:6}}>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked(elders.filter(e=>weatherData[e.region]?.alert===activeAlert).map(e=>e.id))}>🎯 경보지역 자동선택</button>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked(elders.map(e=>e.id))}>전체</button>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked([])}>해제</button>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
+                      {elders.map(e => {
+                        const inZone = weatherData[e.region]?.alert === activeAlert;
+                        const on = checked.includes(e.id);
+                        return (
+                          <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,border:'1px solid '+(on?'#2563eb':'#e5e7eb'),borderRadius:8,padding:'8px 12px',cursor:'pointer',background:on?'#eff6ff':'#fff'}}>
+                            <input type="checkbox" checked={on} onChange={()=>toggleCheck(e.id)} />
+                            <span style={{fontWeight:600}}>{e.gender==='female'?'👵':'👴'} {e.name}</span>
+                            <span style={{fontSize:12,color:'#6b7280'}}>{e.region}</span>
+                            {inZone && <span style={{fontSize:11,color:'#ef4444',fontWeight:700}}>● 경보지역</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {!bulkRunning ? (
+                      <button className="btn-call" onClick={startBulkCall} disabled={checked.length===0} style={{opacity:checked.length===0?0.5:1,cursor:checked.length===0?'not-allowed':'pointer'}}>📢 선택한 {checked.length}명에게 이 경보 멘트로 발신</button>
+                    ) : (
+                      <div style={{display:'flex',alignItems:'center',gap:12}}><span style={{fontWeight:700,color:'#2563eb'}}>📡 발신 중... ({bulkDone.length}/{bulkQueue.length})</span><button className="btn-secondary" onClick={stopBulkCall}>중지</button></div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="section">
@@ -1199,10 +1231,38 @@ export default function App() {
                     </table>
                   </div>
                   <div className="section">
-                    <div className="section-title">🚀 영실이 서비스 확장 가능성</div>
-                    <div className="report-stat-grid">
-                      {[{icon:'👵',value:popData.total.solitary.toLocaleString()+'명',label:'대구 전체 독거노인',color:'#f59e0b'},{icon:'📱',value:elders.length+'명',label:'현재 관리 중',color:'#22c55e'},{icon:'🎯',value:(popData.total.solitary-elders.length).toLocaleString()+'명',label:'추가 관리 가능',color:'#1d4ed8'},{icon:'💰',value:Math.round(popData.total.solitary*3000/10000).toLocaleString()+'만원',label:'월 예상 수익 (1인 3천원)',color:'#7c3aed'}].map((s,i)=>(<div key={i} className="report-stat-card"><div className="report-stat-icon">{s.icon}</div><div className="report-stat-value" style={{color:s.color}}>{s.value}</div><div className="report-stat-label">{s.label}</div></div>))}
-                    </div>
+                    <div className="section-title">🌡️ 기상특보 집중 케어 대상</div>
+                    <div className="data-banner-sub" style={{marginBottom:14}}>기상청 공공데이터 경보가 발령된 지역의 어르신이에요. 오늘 안전 확인이 필요합니다.</div>
+                    {(() => {
+                      const ALERTS = [
+                        {key:'heatwave', icon:'🌡️', label:'폭염경보', color:'#ef4444', tip:'수분 섭취·외출 자제 안내'},
+                        {key:'cold', icon:'❄️', label:'한파경보', color:'#3b82f6', tip:'난방·보온 상태 확인'},
+                        {key:'dust', icon:'😷', label:'미세먼지 나쁨', color:'#f59e0b', tip:'외출 자제·환기 주의'},
+                        {key:'rain', icon:'🌧️', label:'호우주의보', color:'#6366f1', tip:'외출 자제·안부 확인'},
+                        {key:'typhoon', icon:'🌀', label:'태풍경보', color:'#7c3aed', tip:'외출 금지·안부 확인'},
+                        {key:'wildfire', icon:'🔥', label:'산불발생', color:'#ea580c', tip:'대피 안내 확인·안부 확인'},
+                      ];
+                      const groups = ALERTS.map(a => ({...a, list: elders.filter(e => weatherData[e.region]?.alert === a.key)})).filter(g => g.list.length > 0);
+                      if (groups.length === 0) return <div style={{color:'#16a34a',fontSize:15,padding:'20px 0',textAlign:'center'}}>☀️ 현재 발령된 기상특보가 없습니다. 모든 어르신이 안전한 날씨예요.</div>;
+                      return groups.map(g => (
+                        <div key={g.key} style={{marginBottom:16}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,fontWeight:700,color:g.color}}>
+                            <span style={{fontSize:18}}>{g.icon}</span> {g.label} · {g.list.length}명 <span style={{fontWeight:400,color:'#6b7280',fontSize:13}}>({g.tip})</span>
+                          </div>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+                            {g.list.map(e => (
+                              <div key={e.id} style={{border:'1px solid '+g.color+'33',borderRadius:10,padding:'10px 14px',background:'#fff',minWidth:210,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+                                <div>
+                                  <div style={{fontWeight:700,color:'#0f172a'}}>{e.gender==='female'?'👵':'👴'} {e.name} <span style={{fontWeight:400,fontSize:12,color:e.status==='danger'?'#ef4444':e.status==='warning'?'#f59e0b':'#9ca3af'}}>{e.status==='danger'?'· 위험':e.status==='warning'?'· 주의':''}</span></div>
+                                  <div style={{fontSize:12,color:'#6b7280'}}>{e.region} · {weatherData[e.region]?.temp}℃</div>
+                                </div>
+                                <button onClick={()=>e.callActive&&setCallModal(e)} disabled={calling===e.id||!e.callActive} style={{fontSize:13,padding:'6px 12px',borderRadius:8,border:'none',background:e.callActive?g.color:'#d1d5db',color:'#fff',cursor:e.callActive?'pointer':'not-allowed',fontWeight:700,whiteSpace:'nowrap'}}>{calling===e.id?'⏳':'📞 전화'}</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </>
               )}
