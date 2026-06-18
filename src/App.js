@@ -957,7 +957,17 @@ export default function App() {
                         <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked([])}>해제</button>
                       </div>
                     </div>
-                    <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}}>
+                      {[...new Set(elders.map(e=>e.region))].sort().map(r => {
+                        const inR = elders.filter(e=>e.region===r);
+                        const allOn = inR.length>0 && inR.every(e=>checked.includes(e.id));
+                        const someOn = inR.some(e=>checked.includes(e.id));
+                        return (
+                          <button key={r} onClick={()=>{ if(allOn) setChecked(prev=>prev.filter(id=>!inR.some(e=>e.id===id))); else setChecked(prev=>[...new Set([...prev,...inR.map(e=>e.id)])]); }} style={{fontSize:13,padding:'6px 12px',borderRadius:20,border:'1px solid '+(allOn?'#2563eb':someOn?'#93c5fd':'#d1d5db'),background:allOn?'#2563eb':someOn?'#eff6ff':'#fff',color:allOn?'#fff':'#374151',fontWeight:600,cursor:'pointer'}}>📍 {r.replace('대구 ','')} ({inR.length})</button>
+                        );
+                      })}
+                    </div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14,maxHeight:220,overflowY:'auto',padding:'2px'}}>
                       {elders.map(e => {
                         const inZone = weatherData[e.region]?.alert === activeAlert;
                         const on = checked.includes(e.id);
