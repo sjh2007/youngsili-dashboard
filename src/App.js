@@ -301,6 +301,7 @@ export default function App() {
   const [previewElder, setPreviewElder] = useState(null);
   const [scriptSaved, setScriptSaved]   = useState(false);
   const [fetchingWeather, setFetchingWeather] = useState(false);
+  const [weatherTime, setWeatherTime] = useState('');
   const [weatherData, setWeatherData]   = useState(WEATHER_DATA);
   const [formErrors, setFormErrors] = useState({});
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -380,6 +381,10 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setWeatherData(data);
+        const _n = new Date();
+        const _d = ['일','월','화','수','목','금','토'][_n.getDay()];
+        const _h = _n.getHours();
+        setWeatherTime(`(${_d}요일) ${_h < 12 ? '오전' : '오후'} ${_h % 12 || 12}:${String(_n.getMinutes()).padStart(2,'0')}`);
         const hasHeatwave = Object.values(data).some(w => w.alert === 'heatwave');
         const hasCold     = Object.values(data).some(w => w.alert === 'cold');
         const hasRain     = Object.values(data).some(w => w.alert === 'rain');
@@ -930,7 +935,7 @@ export default function App() {
                 <div className="weather-grid">
                   {Object.entries(weatherData).map(([region, data]) => (
                     <div key={region} className={`weather-card ${data.alert!=='none'?'weather-alert':''}`}>
-                      <div className="weather-region">{region}</div><div className="weather-temp">{data.temp}°C</div><div className="weather-condition">{data.condition}</div>
+                      <div className="weather-region">{region}</div><div className="weather-temp">{data.temp}°C</div>{weatherTime && <div className="weather-time" style={{fontSize:10,color:'#94a3b8',margin:'2px 0'}}>{weatherTime}</div>}<div className="weather-condition">{data.condition}</div>
                       {data.alertText && <div className="weather-badge">{data.alertText}</div>}
                     </div>
                   ))}
