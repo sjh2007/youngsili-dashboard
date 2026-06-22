@@ -82,6 +82,16 @@ const WEATHER_DATA = {
   '대구 서구':   { temp: 29, condition: '흐림', alert: 'none',     alertText: '' },
 };
 
+const getWeatherIcon = (c = '') => {
+  if (c.includes('소나기')) return '🌦️';
+  if (c.includes('비'))     return '🌧️';
+  if (c.includes('눈'))     return '❄️';
+  if (c.includes('흐림'))   return '☁️';
+  if (c.includes('구름'))   return '⛅';
+  if (c.includes('폭염'))   return '🥵';
+  return '☀️';
+};
+
 export default function App() {
   const [page, setPage]         = useState('dashboard');
   const [elders, setElders] = useState(() => {
@@ -935,7 +945,11 @@ export default function App() {
                 <div className="weather-grid">
                   {Object.entries(weatherData).map(([region, data]) => (
                     <div key={region} className={`weather-card ${data.alert!=='none'?'weather-alert':''}`}>
-                      <div className="weather-region">{region}</div><div className="weather-temp">{data.temp}°C</div>{weatherTime && <div className="weather-time" style={{fontSize:10,color:'#94a3b8',margin:'2px 0'}}>{weatherTime}</div>}<div className="weather-condition">{data.condition}</div>
+                      <div className="weather-region">{region}</div>
+                      <div className="weather-icon" style={{fontSize:34,lineHeight:1,margin:'4px 0'}}>{getWeatherIcon(data.condition)}</div>
+                      <div className="weather-temp">{data.temp}°C</div>
+                      <div className="weather-condition">{data.condition}</div>
+                      {weatherTime && <div className="weather-time" style={{fontSize:11,color:'#94a3b8',marginTop:3}}>{weatherTime}</div>}
                       {data.alertText && <div className="weather-badge">{data.alertText}</div>}
                     </div>
                   ))}
