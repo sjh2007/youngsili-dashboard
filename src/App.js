@@ -138,6 +138,7 @@ export default function App() {
   const [callsFrom, setCallsFrom]         = useState('');
   const [callsTo, setCallsTo]             = useState('');
   const [callsPhone, setCallsPhone]       = useState('');     // 어르신 필터 ('' = 전체)
+  const [callsSearch, setCallsSearch]     = useState('');     // 이름 검색
 
   // 위험 키워드 → 위험도 (키워드 칩 색상용; 서버 KEYWORDS와 동기화)
   const KW_LEVEL = {
@@ -1100,16 +1101,17 @@ export default function App() {
                   <input type="date" value={callsTo} onChange={e=>setCallsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
                 </>)}
                 <button onClick={fetchCalls} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'⏳':'🔄'}</button>
+                <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="🔍 이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#1d4ed8':'#e2e8f0'),fontSize:13,width:120}}/>
                 <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#1d4ed8':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#1d4ed8':'#334155',background:'#fff',cursor:'pointer'}}>
                   <option value="">전체 어르신</option>
                   {[...new Map(callsHistory.map(c=>[(c.phone||c.elderName||'미상'),(c.elderName||c.phone||'미상')])).entries()].map(([key,name])=>(<option key={key} value={key}>{name}</option>))}
                 </select>
-                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {(callsPhone?callsHistory.filter(c=>(c.phone||c.elderName||'미상')===callsPhone):callsHistory).length}건</span>
+                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.filter(c=>(!callsPhone||(c.phone||c.elderName||'미상')===callsPhone)&&(!callsSearch||(c.elderName||c.phone||'').includes(callsSearch))).length}건</span>
               </div>
               {callsHistory.length===0 ? (
                 <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
               ) : (()=>{
-                const src = callsPhone ? callsHistory.filter(c=>(c.phone||c.elderName||'미상')===callsPhone) : callsHistory;
+                const src = callsHistory.filter(c=>(!callsPhone||(c.phone||c.elderName||'미상')===callsPhone)&&(!callsSearch||(c.elderName||c.phone||'').includes(callsSearch)));
                 const grouped = {};
                 src.forEach(c=>{ const dk=c.date||(c.at?c.at.slice(0,10):'미상'); (grouped[dk]=grouped[dk]||[]).push(c); });
                 return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,logs])=>(
