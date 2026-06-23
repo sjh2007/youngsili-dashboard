@@ -139,6 +139,10 @@ export default function App() {
   const [callsTo, setCallsTo]             = useState('');
   const [callsPhone, setCallsPhone]       = useState('');     // 어르신 필터 ('' = 전체)
   const [callsSearch, setCallsSearch]     = useState('');     // 이름 검색
+  const [healthHistory, setHealthHistory] = useState([]);     // 건강 이력 (healthEvents)
+  const [healthRange, setHealthRange]     = useState('month');
+  const [healthHistFrom, setHealthHistFrom] = useState('');
+  const [healthHistTo, setHealthHistTo]   = useState('');
 
   // 위험 키워드 → 위험도 (키워드 칩 색상용; 서버 KEYWORDS와 동기화)
   const KW_LEVEL = {
@@ -237,6 +241,7 @@ export default function App() {
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
   useEffect(() => { if (page === 'calls') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
+  useEffect(() => { if (page === 'health') fetchHealthHistory(); }, [page, healthRange, healthHistFrom, healthHistTo]); // eslint-disable-line
   // 통화 시각 ISO → "오늘 14:23" / "어제 09:10" / "6/14 15:30"
   const formatCallTime = (iso) => {
     if (!iso) return '통화 없음';
@@ -275,6 +280,17 @@ export default function App() {
       setCallsHistory(j.calls || []);
     } catch { setCallsHistory([]); }
     setCallsLoading(false);
+  };
+  const fetchHealthHistory = async () => {
+    try {
+      const now = new Date();
+      let from = new Date(now.getTime() - 30 * 86400000), to = now;
+      if (healthRange === 'week') from = new Date(now.getTime() - 7 * 86400000);
+      else if (healthRange === 'custom') { if (healthHistFrom) from = new Date(healthHistFrom); if (healthHistTo) to = new Date(healthHistTo + 'T23:59:59'); }
+      const r = await fetch(`${SERVER_URL}/health/history?from=${from.toISOString()}&to=${to.toISOString()}`);
+      const j = await r.json();
+      setHealthHistory(j.events || []);
+    } catch { setHealthHistory([]); }
   };
 
   useEffect(() => {
@@ -1290,6 +1306,43 @@ export default function App() {
                   </div>
                 </div>
               )}
+              {/* 건강 체크 이력 (일/월별) — healthEvents 컬렉션 */}
+              <div className="section">
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:14}}>
+                  <div className="section-title" style={{marginBottom:0}}>📅 건강 체크 이력 (일/월별)</div>
+                  <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                    {[['week','최근 7일'],['month','최근 30일'],['custom','직접 선택']].map(([k,label])=>(
+                      <button key={k} onClick={()=>setHealthRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(healthRange===k?'#1d4ed8':'#e2e8f0'),background:healthRange===k?'#eff6ff':'#fff',color:healthRange===k?'#1d4ed8':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
+                    ))}
+                    {healthRange==='custom' && (<>
+                      <input type="date" value={healthHistFrom} onChange={e=>setHealthHistFrom(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
+                      <span style={{color:'#94a3b8'}}>~</span>
+                      <input type="date" value={healthHistTo} onChange={e=>setHealthHistTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
+                    </>)}
+                  </div>
+                </div>
+                {healthHistory.length===0 ? (
+                  <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>이 기간 건강 체크 이력이 없습니다.</div>
+                ) : (()=>{
+                  const grouped={};
+                  healthHistory.forEach(h=>{const dk=h.date||(h.at?h.at.slice(0,10):'미상');(grouped[dk]=grouped[dk]||[]).push(h);});
+                  return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,evs])=>(
+                    <div key={date} style={{marginBottom:16}}>
+                      <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {evs.length}건</span></div>
+                      {evs.map((h,i)=>{
+                        const sc={good:'#16a34a',okay:'#f59e0b',bad:'#ef4444'}[h.status]||'#64748b';
+                        const sl={good:'😊 좋아요',okay:'😐 그럭저럭',bad:'😔 안 좋아요'}[h.status]||h.status||'-';
+                        const hm=h.at?new Date(h.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+                        return (<div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 14px',borderRadius:10,background:h.status==='bad'?'#fef2f2':'#f8fafc',marginBottom:6}}>
+                          <div style={{minWidth:80,fontWeight:700,fontSize:14}}>{h.name||h.phone||'미상'}</div>
+                          <div style={{minWidth:46,color:'#64748b',fontSize:13}}>{hm}</div>
+                          <div style={{fontWeight:700,fontSize:14,color:sc}}>{sl}</div>
+                        </div>);
+                      })}
+                    </div>
+                  ));
+                })()}
+              </div>
             </div>
           )}
 
