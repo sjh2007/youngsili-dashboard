@@ -442,6 +442,7 @@ export default function App() {
         const res = await fetch(`${SERVER_URL}/call/app`, {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
+            phone:        elder.phone,
             elderName:    elder.name,
             elderTitle:   elder.title || '어르신',
             region:       elder.region,
@@ -477,6 +478,7 @@ export default function App() {
       const res = await fetch(`${SERVER_URL}/call/app`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
+          phone:        elder.phone,
           elderName:    elder.name,
           elderTitle:   elder.title || '어르신',
           region:       elder.region,
