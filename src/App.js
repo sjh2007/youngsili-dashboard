@@ -511,12 +511,15 @@ export default function App() {
   };
   const nextStep = () => { if(validateStep(formStep)) setFormStep(s=>s+1); };
   const saveElder = () => {
-    if (editMode) { setElders(prev=>prev.map(e=>e.id===form.id?{...e,...form}:e)); setSelected(prev=>({...prev,...form})); }
-    else setElders(prev=>[...prev,{...form,id:Date.now(),status:'normal',lastCall:'아직 없음',keyword:null,visits:0,age:parseInt(form.age),callActive:true}]);
+    let saved;
+    if (editMode) { saved = {...form}; setElders(prev=>prev.map(e=>e.id===form.id?{...e,...form}:e)); setSelected(prev=>({...prev,...form})); }
+    else { saved = {...form,id:Date.now(),status:'normal',lastCall:'아직 없음',keyword:null,visits:0,age:parseInt(form.age),callActive:true}; setElders(prev=>[...prev,saved]); }
+    // 자동연동: 서버 elders에 저장 → 앱이 어르신 전화번호로 조회
+    fetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(saved) }).catch(()=>{});
     setSaveSuccess(true);
     setTimeout(()=>{setSaveSuccess(false);setPage(editMode?'detail':'elders');},1800);
   };
-  const deleteElder = id => { if(window.confirm('정말 삭제하시겠습니까?')){setElders(prev=>prev.filter(e=>e.id!==id));setPage('elders');setSelected(null);} };
+  const deleteElder = id => { if(window.confirm('정말 삭제하시겠습니까?')){const tgt=elders.find(e=>e.id===id);setElders(prev=>prev.filter(e=>e.id!==id));if(tgt?.phone)fetch(`${SERVER_URL}/elders/${tgt.phone.replace(/[^0-9]/g,'')}`,{method:'DELETE'}).catch(()=>{});setPage('elders');setSelected(null);} };
   const inp = field => ({ value:form[field]??'', onChange:e=>setForm(f=>({...f,[field]:e.target.value})), className:`form-input ${formErrors[field]?'input-error':''}` });
 
   const totalCalls = callLogs.length;
