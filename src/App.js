@@ -132,6 +132,11 @@ export default function App() {
   const [statsData, setStatsData]         = useState(null);    // 현재 기간 /stats
   const [statsPrev, setStatsPrev]         = useState(null);    // 직전 기간(추이 비교용)
   const [statsLoading, setStatsLoading]   = useState(false);
+  const [callsHistory, setCallsHistory]   = useState([]);     // 서버 /calls (통화별 1건)
+  const [callsLoading, setCallsLoading]   = useState(false);
+  const [callsRange, setCallsRange]       = useState('month'); // week | month | custom
+  const [callsFrom, setCallsFrom]         = useState('');
+  const [callsTo, setCallsTo]             = useState('');
 
   // 위험 키워드 → 위험도 (키워드 칩 색상용; 서버 KEYWORDS와 동기화)
   const KW_LEVEL = {
@@ -229,15 +234,45 @@ export default function App() {
 
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
+  useEffect(() => { if (page === 'calls') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
   // 통화 시각 ISO → "오늘 14:23" / "어제 09:10" / "6/14 15:30"
   const formatCallTime = (iso) => {
-    if (!iso) return '아직 없음';
+    if (!iso) return '통화 없음';
     const d = new Date(iso), now = new Date();
     const hm = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
-    const yest = new Date(now); yest.setDate(now.getDate() - 1);
-    if (d.toDateString() === now.toDateString()) return `오늘 ${hm}`;
-    if (d.toDateString() === yest.toDateString()) return `어제 ${hm}`;
-    return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+    const days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 86400000);
+    if (days === 0) return `오늘 ${hm}`;
+    if (days === 1) return `어제 ${hm}`;
+    return `${days}일 전 · ${d.getMonth() + 1}/${d.getDate()}`;
+  };
+  // 마지막 통화 후 경과일 (무응답 강조용: 0=오늘 … null=기록없음)
+  const daysSinceCall = (iso) => {
+    if (!iso) return null;
+    return Math.round((new Date(new Date().toDateString()) - new Date(new Date(iso).toDateString())) / 86400000);
+  };
+  // 통화기록 날짜 그룹 헤더: 'YYYY-MM-DD' → '6/23(월) · 오늘'
+  const formatDateHeader = (dateStr) => {
+    if (!dateStr) return '미상';
+    const d = new Date(dateStr + 'T00:00:00'), now = new Date();
+    const days = Math.round((new Date(now.toDateString()) - d) / 86400000);
+    const wd = ['일','월','화','수','목','금','토'][d.getDay()];
+    const md = `${d.getMonth() + 1}/${d.getDate()}(${wd})`;
+    if (days === 0) return `${md} · 오늘`;
+    if (days === 1) return `${md} · 어제`;
+    return md;
+  };
+  const fetchCalls = async () => {
+    setCallsLoading(true);
+    try {
+      const now = new Date();
+      let from = new Date(now.getTime() - 30 * 86400000), to = now;
+      if (callsRange === 'week') from = new Date(now.getTime() - 7 * 86400000);
+      else if (callsRange === 'custom') { if (callsFrom) from = new Date(callsFrom); if (callsTo) to = new Date(callsTo + 'T23:59:59'); }
+      const r = await fetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`);
+      const j = await r.json();
+      setCallsHistory(j.calls || []);
+    } catch { setCallsHistory([]); }
+    setCallsLoading(false);
   };
 
   useEffect(() => {
@@ -1053,26 +1088,44 @@ export default function App() {
 
           {page==='calls' && (
             <div className="fade-in">
-              <table className="table">
-                <thead><tr><th>어르신</th><th>유형</th><th>날짜</th><th>시간</th><th>통화 결과</th><th>감지 키워드</th><th>위험도</th></tr></thead>
-                <tbody>
-                  {callLogs.map(log=>{
-                    const elder = elders.find(e=>e.id===log.elderId);
-                    const statusConfig = {ringing:{label:'📱 앱 수신 대기',color:'#3b82f6'},completed:{label:'✅ 통화 완료',color:'#22c55e'},failed:{label:'❌ 연결 실패',color:'#ef4444'},unknown:{label:'❓ 상태 불명',color:'#94a3b8'}};
-                    const sc = statusConfig[log.callStatus] || null;
-                    return (
-                      <tr key={log.id} style={{background:log.callStatus==='failed'?'#fef2f2':log.callStatus==='completed'?'#f0fdf4':'inherit'}}>
-                        <td><strong>{elder?.name}</strong></td>
-                        <td><span className={`type-badge ${log.type==='manual'?'type-manual':'type-auto'}`}>{log.type==='manual'?'수동':'자동'}</span></td>
-                        <td>{log.date}</td><td>{log.time}</td>
-                        <td>{sc?<span style={{color:sc.color,fontWeight:700,fontSize:13}}>{sc.label}</span>:<span style={{fontSize:13,color:'#64748b'}}>{log.duration}</span>}</td>
-                        <td>{log.keywords.length>0?log.keywords.map((kw,i)=><span key={i} className="keyword-tag">{kw}</span>):<span style={{color:'#9ca3af'}}>없음</span>}</td>
-                        <td><span style={{color:RISK_CONFIG[log.risk]?.color||'#64748b',fontWeight:700}}>{RISK_CONFIG[log.risk]?.label||'-'}</span></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              {/* 기간 선택 (일/월별 조회) — 서버 calls 컬렉션 실데이터 */}
+              <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
+                {[['week','최근 7일'],['month','최근 30일'],['custom','직접 선택']].map(([k,label])=>(
+                  <button key={k} onClick={()=>setCallsRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(callsRange===k?'#1d4ed8':'#e2e8f0'),background:callsRange===k?'#eff6ff':'#fff',color:callsRange===k?'#1d4ed8':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
+                ))}
+                {callsRange==='custom' && (<>
+                  <input type="date" value={callsFrom} onChange={e=>setCallsFrom(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
+                  <span style={{color:'#94a3b8'}}>~</span>
+                  <input type="date" value={callsTo} onChange={e=>setCallsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
+                </>)}
+                <button onClick={fetchCalls} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'⏳':'🔄'}</button>
+                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.length}건</span>
+              </div>
+              {callsHistory.length===0 ? (
+                <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
+              ) : (()=>{
+                const grouped = {};
+                callsHistory.forEach(c=>{ const dk=c.date||(c.at?c.at.slice(0,10):'미상'); (grouped[dk]=grouped[dk]||[]).push(c); });
+                return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,logs])=>(
+                  <div key={date} style={{marginBottom:18}}>
+                    <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {logs.length}건</span></div>
+                    {logs.map(c=>{
+                      const R=RISK_CONFIG[c.riskLevel]||{};
+                      const hm=c.at?new Date(c.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+                      const dur=c.durationSec||0;
+                      return (
+                        <div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderRadius:10,background:c.riskLevel==='critical'?'#fef2f2':c.riskLevel==='urgent'?'#fff7ed':'#f8fafc',marginBottom:6,flexWrap:'wrap'}}>
+                          <div style={{minWidth:80,fontWeight:700,fontSize:14}}>{c.elderName||c.phone||'미상'}</div>
+                          <div style={{minWidth:46,color:'#64748b',fontSize:13}}>{hm}</div>
+                          <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
+                          <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
+                          <div style={{flex:1,minWidth:140,color:'#475569',fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(c.transcript||'').replace(/\n/g,' ')||'—'}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ));
+              })()}
             </div>
           )}
 
