@@ -143,6 +143,7 @@ export default function App() {
   const [healthRange, setHealthRange]     = useState('month');
   const [healthHistFrom, setHealthHistFrom] = useState('');
   const [healthHistTo, setHealthHistTo]   = useState('');
+  const [reportCalls, setReportCalls]     = useState([]);     // 리포트용 통화 실데이터 (calls)
 
   // 위험 키워드 → 위험도 (키워드 칩 색상용; 서버 KEYWORDS와 동기화)
   const KW_LEVEL = {
@@ -173,11 +174,12 @@ export default function App() {
       const span = to.getTime() - from.getTime();
       const prevTo = new Date(from.getTime() - 1);
       const prevFrom = new Date(prevTo.getTime() - span);
-      const [cur, prev] = await Promise.all([
+      const [cur, prev, callsRes] = await Promise.all([
         fetch(`${SERVER_URL}/stats?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
         fetch(`${SERVER_URL}/stats?from=${prevFrom.toISOString()}&to=${prevTo.toISOString()}`).then(r => r.json()),
+        fetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
       ]);
-      setStatsData(cur); setStatsPrev(prev);
+      setStatsData(cur); setStatsPrev(prev); setReportCalls(callsRes.calls || []);
     } catch { setStatsData({ available: false }); setStatsPrev(null); }
     finally { setStatsLoading(false); }
   };
@@ -257,6 +259,12 @@ export default function App() {
     if (!iso) return null;
     return Math.round((new Date(new Date().toDateString()) - new Date(new Date(iso).toDateString())) / 86400000);
   };
+  // 어르신 관리 "마지막 통화" 표시 — 무응답 3일 이상이면 빨강 강조 (며칠째 안 받았는지 한눈에)
+  const renderLastCall = (e) => {
+    const ds = daysSinceCall(e.lastCallAt);
+    const danger = ds != null && ds >= 3;
+    return <span style={{color: danger ? '#dc2626' : '#64748b', fontWeight: danger ? 800 : 600}}>{e.lastCall || '통화 없음'}{danger ? ` · ${ds}일째 무응답 ⚠️` : ''}</span>;
+  };
   // 통화기록 날짜 그룹 헤더: 'YYYY-MM-DD' → '6/23(월) · 오늘'
   const formatDateHeader = (dateStr) => {
     if (!dateStr) return '미상';
@@ -324,7 +332,7 @@ export default function App() {
       setElders(prev => prev.map(e => {
         const c = calls[e.name];
         if (!c) return e;
-        return { ...e, lastCall: formatCallTime(c.timestamp), lastCallRisk: c.riskLevel, lastTranscript: c.transcript };
+        return { ...e, lastCall: formatCallTime(c.timestamp), lastCallAt: c.timestamp, lastCallRisk: c.riskLevel, lastTranscript: c.transcript };
       }));
     }).catch(()=>{});
   }, 5000);
@@ -830,7 +838,7 @@ export default function App() {
                           <td>{elder.age}세</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
-                          <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
+                          <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
                           <td>{days===0?<span style={{color:'#22c55e',fontWeight:700,fontSize:12}}>정상</span>:<span style={{color:days>=3?'#ef4444':'#f59e0b',fontWeight:700,fontSize:12}}>{days>=99?'미통화':`${days}일`}</span>}</td>
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
                           <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
@@ -910,7 +918,7 @@ export default function App() {
                         <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                         <td><span className="cycle-badge">{cycleLabel(elder.callCycle)}</span></td>
                         <td><span className="time-badge">{elder.callTime}</span></td>
-                        <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
+                        <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
                         <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
                         <td><button className={`toggle-btn ${elder.callActive?'toggle-active':'toggle-paused'}`} onClick={()=>toggleCallActive(elder.id)}>{elder.callActive?'⏸ 중단':'▶ 재개'}</button></td>
                       </tr>
@@ -953,7 +961,7 @@ export default function App() {
                         <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
                         {elder.caregiver && <div className="elder-info" style={{color:'#1d4ed8',fontWeight:600}}>👤 담당: {elder.caregiver}</div>}
                         {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>📵 {noResponseDays >= 99 ? '미통화' : `${noResponseDays}일째 미응답`}</div>}
-                        <div className="elder-last">📞 마지막 통화: {elder.lastCall}</div>
+                        <div className="elder-last">📞 마지막 통화: {renderLastCall(elder)}</div>
                         {elder.keyword && <div className="keyword-tag mt8">⚠️ "{elder.keyword}" 감지</div>}
                         {elder.visits > 0 && <div className="visit-tag mt8">🏠 방문 필요 {elder.visits}회</div>}
                         {!elder.callActive && <div className="paused-tag mt8">⏸ 전화 중단 중</div>}
@@ -978,7 +986,7 @@ export default function App() {
                           <td>{elder.age}세</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
-                          <td style={{fontSize:13,color:'#64748b'}}>{elder.lastCall}</td>
+                          <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
                           <td>{noResponseDays===0?<span style={{color:'#22c55e',fontWeight:700}}>정상</span>:<span style={{color:noResponseDays>=3?'#ef4444':'#f59e0b',fontWeight:700}}>{noResponseDays>=99?'미통화':`${noResponseDays}일`}</span>}</td>
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
                           <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
@@ -1157,14 +1165,14 @@ export default function App() {
             <div className="fade-in">
               <div className="report-banner"><div className="report-banner-title">📊 {new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>📊 엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>⬇️ PDF 다운로드</button></div></div>
               <div className="report-stat-grid">
-                {[{label:'총 통화',value:'34건',icon:'📞',color:'#1d4ed8'},{label:'긴급 감지',value:'3건',icon:'🚨',color:'#ef4444'},{label:'주의 감지',value:'8건',icon:'⚠️',color:'#f59e0b'},{label:'방문 연결',value:'5건',icon:'🏠',color:'#16a34a'},{label:'총 통화 시간',value:'142분',icon:'⏱️',color:'#7c3aed'},{label:'관리 어르신',value:`${elders.length}명`,icon:'👥',color:'#0891b2'}].map((s,i)=>(
+                {[{label:'총 통화',value:`${reportCalls.length}건`,icon:'📞',color:'#1d4ed8'},{label:'긴급 감지',value:`${reportCalls.filter(c=>c.riskLevel==='critical').length}건`,icon:'🚨',color:'#ef4444'},{label:'주의 감지',value:`${reportCalls.filter(c=>c.riskLevel==='urgent').length}건`,icon:'⚠️',color:'#f59e0b'},{label:'정상 통화',value:`${reportCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length}건`,icon:'✅',color:'#16a34a'},{label:'총 통화 시간',value:`${Math.round(reportCalls.reduce((s,c)=>s+(c.durationSec||0),0)/60)}분`,icon:'⏱️',color:'#7c3aed'},{label:'관리 어르신',value:`${elders.length}명`,icon:'👥',color:'#0891b2'}].map((s,i)=>(
                   <div key={i} className="report-stat-card"><div className="report-stat-icon">{s.icon}</div><div className="report-stat-value" style={{color:s.color}}>{s.value}</div><div className="report-stat-label">{s.label}</div></div>
                 ))}
               </div>
               <div className="section">
-                <div className="section-title">📈 주간 통화 현황</div>
+                <div className="section-title">📈 주간 통화 현황 (최근 7일)</div>
                 <div className="chart-wrap">
-                  {WEEKLY_DATA.map((d,i)=>{const maxCalls=Math.max(...WEEKLY_DATA.map(x=>x.calls));return(<div key={i} className="chart-col"><div className="chart-bar-wrap"><div className="chart-bar-total" style={{height:`${d.calls/maxCalls*100}%`}}><div className="chart-bar-danger" style={{height:`${d.danger/d.calls*100}%`}}/><div className="chart-bar-warning" style={{height:`${d.warning/d.calls*100}%`}}/></div></div><div className="chart-val">{d.calls}</div><div className="chart-day">{d.day}</div></div>);})}
+                  {(()=>{const last7=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const ds=d.toISOString().slice(0,10);const dn=['일','월','화','수','목','금','토'][d.getDay()];const dc=reportCalls.filter(c=>(c.date||(c.at?c.at.slice(0,10):''))===ds);return{day:dn,calls:dc.length,danger:dc.filter(c=>c.riskLevel==='critical').length,warning:dc.filter(c=>c.riskLevel==='urgent').length};});const maxCalls=Math.max(1,...last7.map(x=>x.calls));return last7.map((d,i)=>(<div key={i} className="chart-col"><div className="chart-bar-wrap"><div className="chart-bar-total" style={{height:`${d.calls/maxCalls*100}%`}}><div className="chart-bar-danger" style={{height:`${d.calls?d.danger/d.calls*100:0}%`}}/><div className="chart-bar-warning" style={{height:`${d.calls?d.warning/d.calls*100:0}%`}}/></div></div><div className="chart-val">{d.calls}</div><div className="chart-day">{d.day}</div></div>));})()}
                 </div>
                 <div className="chart-legend"><span className="legend-item"><span className="legend-dot" style={{background:'#ef4444'}}/>긴급</span><span className="legend-item"><span className="legend-dot" style={{background:'#f59e0b'}}/>주의</span><span className="legend-item"><span className="legend-dot" style={{background:'#3b82f6'}}/>정상</span></div>
               </div>
