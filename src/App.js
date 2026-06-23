@@ -946,11 +946,17 @@ export default function App() {
                   {Object.entries(weatherData).map(([region, data]) => (
                     <div key={region} className={`weather-card ${data.alert!=='none'?'weather-alert':''}`}>
                       <div className="weather-region">{region}</div>
-                      <div className="weather-icon" style={{fontSize:34,lineHeight:1,margin:'4px 0'}}>{getWeatherIcon(data.condition)}</div>
-                      <div className="weather-temp">{data.temp}°C</div>
-                      <div className="weather-condition">{data.condition}</div>
-                      {weatherTime && <div className="weather-time" style={{fontSize:11,color:'#94a3b8',marginTop:3}}>{weatherTime}</div>}
-                      {data.alertText && <div className="weather-badge">{data.alertText}</div>}
+                      {data.noData ? (
+                        <div style={{fontSize:15,color:'#94a3b8',padding:'20px 0',fontWeight:600}}>정보 없음</div>
+                      ) : (
+                        <>
+                          <div className="weather-icon" style={{fontSize:34,lineHeight:1,margin:'4px 0'}}>{getWeatherIcon(data.condition)}</div>
+                          <div className="weather-temp">{data.temp}°C</div>
+                          <div className="weather-condition">{data.condition}</div>
+                          {weatherTime && <div className="weather-time" style={{fontSize:11,color:'#94a3b8',marginTop:3}}>{weatherTime}</div>}
+                          {data.alertText && <div className="weather-badge">{data.alertText}</div>}
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
