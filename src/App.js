@@ -1151,7 +1151,7 @@ export default function App() {
                           <div style={{minWidth:46,color:'#64748b',fontSize:13}}>{hm}</div>
                           <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                           <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
-                          <div style={{flex:1,minWidth:140,color:'#475569',fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(c.transcript||'').replace(/\n/g,' ')||'—'}</div>
+                          <div style={{flex:1,minWidth:140,color:'#475569',fontSize:13,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.45,wordBreak:'break-word'}}>{(c.transcript||'').replace(/\n/g,' ')||'—'}</div>
                         </div>
                       );
                     })}
@@ -1470,7 +1470,7 @@ export default function App() {
                             <div style={{minWidth:96,color:'#64748b',fontSize:13}}>{c.date} {hm}</div>
                             <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                             <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
-                            <div style={{flex:1,minWidth:140,color:'#475569',fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(c.transcript||'').replace(/\n/g,' ')||'—'}</div>
+                            <div style={{flex:1,minWidth:140,color:'#475569',fontSize:13,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.45,wordBreak:'break-word'}}>{(c.transcript||'').replace(/\n/g,' ')||'—'}</div>
                           </div>
                         );
                       });
