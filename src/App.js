@@ -242,7 +242,7 @@ export default function App() {
 
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
-  useEffect(() => { if (page === 'calls') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
+  useEffect(() => { if (page === 'calls' || page === 'elders') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealthHistory(); }, [page, healthRange, healthHistFrom, healthHistTo]); // eslint-disable-line
   // 통화 시각 ISO → "오늘 14:23" / "어제 09:10" / "6/14 15:30"
   const formatCallTime = (iso) => {
@@ -1457,19 +1457,24 @@ export default function App() {
                       <div className="section-title" style={{marginBottom:0}}>📞 통화 기록</div>
                       <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>{ if(window.confirm('이 어르신의 통화 기록을 모두 삭제할까요?\n(되돌릴 수 없습니다)')) setCallLogs(prev=>prev.filter(l=>l.elderId!==selected.id)); }}>🗑️ 이전 기록 정리</button>
                     </div>
-                    {callLogs.filter(c=>c.elderId===selected.id).map(log=>{
-                      const callStatusConfig={ringing:{label:'📱 앱 수신 대기',color:'#3b82f6',bg:'#eff6ff'},completed:{label:'✅ 통화 완료',color:'#22c55e',bg:'#f0fdf4'},failed:{label:'❌ 연결 실패',color:'#ef4444',bg:'#fef2f2'},unknown:{label:'❓ 상태 불명',color:'#94a3b8',bg:'#f8fafc'}};
-                      const sc=callStatusConfig[log.callStatus];
-                      return (
-                        <div key={log.id} className={`call-log-item ${log.callStatus==='failed'?'risk-critical':log.callStatus==='completed'?'risk-normal':'risk-'+log.risk}`}>
-                          <span className={`type-badge ${log.type==='manual'?'type-manual':'type-auto'}`}>{log.type==='manual'?'수동':'자동'}</span>
-                          <div className="call-log-time">{log.time}</div>
-                          <div className="call-log-duration">{sc?<span style={{color:sc.color,fontWeight:800,fontSize:13,background:sc.bg,padding:'3px 8px',borderRadius:6}}>{sc.label}</span>:<span>{log.duration}</span>}</div>
-                          <div>{log.keywords.length>0?log.keywords.map((kw,i)=><span key={i} className="keyword-tag">{kw}</span>):<span style={{color:'#9ca3af',fontSize:13}}>이상 없음</span>}</div>
-                        </div>
-                      );
-                    })}
-                    {callLogs.filter(c=>c.elderId===selected.id).length===0&&<div style={{color:'#9ca3af',fontSize:14,padding:'16px 0'}}>통화 기록 없음</div>}
+                    {(()=>{
+                      // 통화기록 메뉴와 동일한 서버 데이터(callsHistory)에서 이 어르신만 필터 (이름 또는 전화번호 매칭)
+                      const mine = callsHistory.filter(c=>c.elderName===selected.name||(c.phone&&selected.phone&&String(c.phone).replace(/\D/g,'')===String(selected.phone).replace(/\D/g,'')));
+                      if(mine.length===0) return <div style={{color:'#9ca3af',fontSize:14,padding:'16px 0'}}>통화 기록 없음</div>;
+                      return mine.map(c=>{
+                        const R=RISK_CONFIG[c.riskLevel]||{};
+                        const hm=c.at?new Date(c.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+                        const dur=c.durationSec||0;
+                        return (
+                          <div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderRadius:10,background:c.riskLevel==='critical'?'#fef2f2':c.riskLevel==='urgent'?'#fff7ed':'#f8fafc',marginBottom:6,flexWrap:'wrap'}}>
+                            <div style={{minWidth:96,color:'#64748b',fontSize:13}}>{c.date} {hm}</div>
+                            <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
+                            <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
+                            <div style={{flex:1,minWidth:140,color:'#475569',fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(c.transcript||'').replace(/\n/g,' ')||'—'}</div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               </div>
