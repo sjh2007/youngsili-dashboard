@@ -1295,7 +1295,7 @@ export default function App() {
                   {alertsData.filter(a=>!a.read).map((alert,i) => (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 18px',marginBottom:10}}>
                       <span style={{fontSize:24}}>⚠️</span>
-                      <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'#dc2626'}}>{alert.name} · 🚨 "{alert.keyword || (alert.message ? alert.message.split('감지:').pop().trim() : alert.message)}"</div><div style={{fontSize:12,color:'#ef4444',marginTop:2}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
+                      <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'#dc2626'}}>{nameByPhone(alert.phone, alert.name)} · 🚨 "{alert.keyword || (alert.message ? alert.message.split('감지:').pop().trim() : alert.message)}"</div><div style={{fontSize:12,color:'#ef4444',marginTop:2}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
                       <button className="btn-small" onClick={async()=>{await fetch(`${SERVER_URL}/alerts/${alert.id}/read`,{method:'POST'});fetchHealth();}}>확인</button>
                     </div>
                   ))}
@@ -1310,12 +1310,12 @@ export default function App() {
                     <thead><tr><th>어르신</th><th>건강 상태</th><th>체크 시간</th><th>담당 복지사</th><th>조치</th></tr></thead>
                     <tbody>
                       {healthData.sort((a,b)=>{const order={bad:0,okay:1,good:2};return order[a.status]-order[b.status];}).map((h,i)=>{
-                        const elder=elders.find(e=>e.name===h.name);
+                        const elder=elders.find(e=>String(e.phone||'').replace(/\D/g,'')===String(h.phone||'').replace(/\D/g,''))||elders.find(e=>e.name===h.name);
                         const statusColor={good:'#16a34a',okay:'#f59e0b',bad:'#ef4444'}[h.status];
                         const statusLabel={good:'😊 좋아요',okay:'😐 그럭저럭',bad:'😔 안 좋아요'}[h.status];
                         return (
                           <tr key={i} style={{background:h.status==='bad'?'#fff5f5':'inherit'}}>
-                            <td><strong>{h.name}</strong></td>
+                            <td><strong>{nameByPhone(h.phone, h.name)}</strong></td>
                             <td><span style={{color:statusColor,fontWeight:700,fontSize:15}}>{statusLabel}</span></td>
                             <td style={{fontSize:13,color:'#6b7280'}}>{new Date(h.timestamp).toLocaleString('ko-KR')}</td>
                             <td>{elder?.caregiver||'-'}</td>
