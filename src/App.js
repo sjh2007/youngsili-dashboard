@@ -236,8 +236,9 @@ export default function App() {
     }
   };
 
-  useEffect(() => { fetchElders(); }, []); // eslint-disable-line  마운트 시 서버에서 어르신 목록 로드
-  useEffect(() => { if (page === 'elders' || page === 'dashboard') fetchElders(); }, [page]); // eslint-disable-line  진입 시 갱신
+  // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
+  useEffect(() => { fetchElders(); }, []); // eslint-disable-line
+  useEffect(() => { if (page === 'elders' || page === 'dashboard') fetchElders(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
   useEffect(() => { if (page === 'calls' || page === 'elders') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
