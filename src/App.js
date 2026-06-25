@@ -411,6 +411,12 @@ export default function App() {
   const normal  = elders.filter(e => e.status==='normal').length;
   const filtered = filter==='all' ? elders : elders.filter(e => e.status===filter); // eslint-disable-line
   const cycleLabel = (c, days) => c==='daily'?'매일':c==='custom'?((days&&days.length)?`매주 ${days.join('·')}`:'요일 미정'):c==='every2days'?'격일':'주 1회';
+  // 통화기록의 전화번호로 현재 명단(elders)의 이름을 찾음 — 이름 변경/재등록돼도 통화기록이 명단과 일치
+  const nameByPhone = (phone, fallback) => {
+    const p = String(phone || '').replace(/\D/g, '');
+    const e = p && elders.find(el => String(el.phone || '').replace(/\D/g, '') === p);
+    return e ? e.name : (fallback || phone || '미상');
+  };
 
   const getNoResponseDays = (lastCall) => {
     if (!lastCall || lastCall === '아직 없음') return 99;
@@ -1147,14 +1153,14 @@ export default function App() {
                 <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="🔍 이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#1d4ed8':'#e2e8f0'),fontSize:13,width:120}}/>
                 <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#1d4ed8':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#1d4ed8':'#334155',background:'#fff',cursor:'pointer'}}>
                   <option value="">전체 어르신</option>
-                  {[...new Map(callsHistory.map(c=>[(c.phone||c.elderName||'미상'),(c.elderName||c.phone||'미상')])).entries()].map(([key,name])=>(<option key={key} value={key}>{name}</option>))}
+                  {[...new Map(callsHistory.map(c=>[(c.phone||c.elderName||'미상'),nameByPhone(c.phone,c.elderName)])).entries()].map(([key,name])=>(<option key={key} value={key}>{name}</option>))}
                 </select>
-                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.filter(c=>(!callsPhone||(c.phone||c.elderName||'미상')===callsPhone)&&(!callsSearch||(c.elderName||c.phone||'').includes(callsSearch))).length}건</span>
+                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.filter(c=>(!callsPhone||(c.phone||c.elderName||'미상')===callsPhone)&&(!callsSearch||nameByPhone(c.phone,c.elderName).includes(callsSearch))).length}건</span>
               </div>
               {callsHistory.length===0 ? (
                 <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
               ) : (()=>{
-                const src = callsHistory.filter(c=>(!callsPhone||(c.phone||c.elderName||'미상')===callsPhone)&&(!callsSearch||(c.elderName||c.phone||'').includes(callsSearch)));
+                const src = callsHistory.filter(c=>(!callsPhone||(c.phone||c.elderName||'미상')===callsPhone)&&(!callsSearch||nameByPhone(c.phone,c.elderName).includes(callsSearch)));
                 const grouped = {};
                 src.forEach(c=>{ const dk=c.date||(c.at?c.at.slice(0,10):'미상'); (grouped[dk]=grouped[dk]||[]).push(c); });
                 return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,logs])=>(
@@ -1166,7 +1172,7 @@ export default function App() {
                       const dur=c.durationSec||0;
                       return (
                         <div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderRadius:10,background:c.riskLevel==='critical'?'#fef2f2':c.riskLevel==='urgent'?'#fff7ed':'#f8fafc',marginBottom:6,flexWrap:'wrap'}}>
-                          <div style={{minWidth:80,fontWeight:700,fontSize:14}}>{c.elderName||c.phone||'미상'}</div>
+                          <div style={{minWidth:80,fontWeight:700,fontSize:14}}>{nameByPhone(c.phone,c.elderName)}</div>
                           <div style={{minWidth:46,color:'#64748b',fontSize:13}}>{hm}</div>
                           <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                           <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
