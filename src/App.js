@@ -374,6 +374,7 @@ export default function App() {
   const [weatherData, setWeatherData]   = useState(WEATHER_DATA);
   const [formErrors, setFormErrors] = useState({});
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [savedAuthCode, setSavedAuthCode] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [calling, setCalling]   = useState(null);
   const [callResult, setCallResult] = useState(null);
@@ -576,7 +577,7 @@ export default function App() {
     if (editMode) { saved = {...form}; setElders(prev=>prev.map(e=>e.id===form.id?{...e,...form}:e)); setSelected(prev=>({...prev,...form})); }
     else { saved = {...form,id:Date.now(),status:'normal',lastCall:'아직 없음',keyword:null,visits:0,age:parseInt(form.age),callActive:true}; setElders(prev=>[...prev,saved]); }
     // 자동연동: 서버 elders에 저장 → 앱이 어르신 전화번호로 조회
-    fetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(saved) }).catch(()=>{});
+    fetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(saved) }).then(r=>r.json()).then(d=>{ if(d&&d.authCode){ setSavedAuthCode(d.authCode); fetchElders(); } }).catch(()=>{});
     setSaveSuccess(true);
     setTimeout(()=>{setSaveSuccess(false);setPage(editMode?'detail':'elders');},1800);
   };
@@ -1449,6 +1450,7 @@ export default function App() {
                   {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',selected.address],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
                 </div>
                 <div className="detail-right">
+                  {selected.authCode&&<div className="section" style={{background:'#eff6ff',marginBottom:12}}><div className="section-title" style={{marginBottom:6}}>📱 앱 인증코드</div><div style={{fontSize:24,fontWeight:900,letterSpacing:3,color:'#1d4ed8'}}>{selected.authCode}</div><div style={{fontSize:13,color:'#64748b',marginTop:4}}>어르신 폰 앱 설정에서 전화번호와 함께 입력</div></div>}
                   {selected.keyword&&<div className="alert-box"><div className="alert-box-title">🚨 감지된 위험 키워드</div><div className="alert-box-keyword">"{selected.keyword}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
                   <div className="section">
                     <div className="script-editor-header" style={{marginBottom:12}}>
@@ -1482,7 +1484,7 @@ export default function App() {
           {page==='register' && (
             <div className="fade-in">
               <button className="back-btn" onClick={()=>setPage(editMode?'detail':'elders')}>← 돌아가기</button>
-              {saveSuccess&&<div className="success-banner">✅ {editMode?'수정이 완료되었습니다!':'어르신 등록이 완료되었습니다!'}</div>}
+              {saveSuccess&&<div className="success-banner">✅ {editMode?'수정이 완료되었습니다!':'어르신 등록이 완료되었습니다!'}{savedAuthCode&&<div style={{marginTop:8,fontSize:15}}>📱 앱 인증코드: <b style={{fontSize:20,letterSpacing:2}}>{savedAuthCode}</b> — 어르신 폰 앱 설정에 전화번호와 함께 입력하세요</div>}</div>}
               <div className="step-bar">
                 {[{n:1,label:'기본 정보'},{n:2,label:'보호자 정보'},{n:3,label:'AI 전화 설정'}].map(step=>(<div key={step.n} className={`step-item ${formStep===step.n?'step-active':formStep>step.n?'step-done':''}`}><div className="step-circle">{formStep>step.n?'✓':step.n}</div><div className="step-label">{step.label}</div>{step.n<3&&<div className="step-line"/>}</div>))}
               </div>
