@@ -109,6 +109,7 @@ export default function App() {
     { id: 2, text: '오후 2시 팀 회의 있음', time: '08:00', done: false },
   ]);
   const [healthData, setHealthData]     = useState([]);
+  const [caregivers, setCaregivers]     = useState(CAREGIVERS);
   const [alertsData, setAlertsData]     = useState([]);
   const [alertCount, setAlertCount]     = useState(0);
   const [healthLoading, setHealthLoading] = useState(false);
@@ -217,6 +218,23 @@ export default function App() {
     } catch (err) { console.error('어르신 목록 오류:', err); }
   };
 
+  const fetchCaregivers = async () => {
+    try {
+      const res = await fetch(`${SERVER_URL}/settings/caregivers`);
+      const d = await res.json();
+      if (Array.isArray(d.list) && d.list.length) setCaregivers(d.list);
+    } catch { /* 서버 미응답 시 기본 목록 유지 */ }
+  };
+  const addCaregiver = () => {
+    const name = (window.prompt('새 담당 복지사 이름을 입력하세요') || '').trim();
+    if (!name) return;
+    const isNew = !caregivers.includes(name);
+    const next = isNew ? [...caregivers, name] : caregivers;
+    setCaregivers(next);
+    setForm(f => ({ ...f, caregiver: name }));
+    if (isNew) fetch(`${SERVER_URL}/settings/caregivers`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ list: next }) }).catch(()=>{});
+  };
+
   const fetchHealth = async () => {
     setHealthLoading(true);
     try {
@@ -237,7 +255,7 @@ export default function App() {
   };
 
   // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
-  useEffect(() => { fetchElders(); }, []); // eslint-disable-line
+  useEffect(() => { fetchElders(); fetchCaregivers(); }, []); // eslint-disable-line
   useEffect(() => { if (page === 'elders' || page === 'dashboard') fetchElders(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
@@ -1502,7 +1520,7 @@ export default function App() {
                   <div className="form-field"><label className="form-label">지병</label><input {...inp('disease')} placeholder="예: 고혈압, 당뇨"/></div>
                   <div className="form-field"><label className="form-label">복용 중인 약</label><input {...inp('medicine')} placeholder="예: 혈압약"/></div>
                   <div className="form-field full-width"><label className="form-label">거동 상태</label><div className="radio-group">{['독립보행 가능','보조기구 필요','거동 불가'].map(opt=><label key={opt} className={`radio-option ${form.mobility===opt?'radio-selected':''}`}><input type="radio" name="mobility" value={opt} checked={form.mobility===opt} onChange={e=>setForm(f=>({...f,mobility:e.target.value}))} style={{display:'none'}}/>{opt}</label>)}</div></div>
-                  <div className="form-field full-width"><label className="form-label">담당 복지사</label><select {...inp('caregiver')}><option value="">선택 안 함</option>{CAREGIVERS.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+                  <div className="form-field full-width"><label className="form-label">담당 복지사</label><div style={{display:'flex',gap:8}}><select {...inp('caregiver')} style={{flex:1}}><option value="">선택 안 함</option>{caregivers.map(c=><option key={c} value={c}>{c}</option>)}</select><button type="button" onClick={addCaregiver} style={{padding:'0 16px',borderRadius:8,border:'1px solid #2563eb',background:'#eff6ff',color:'#1d4ed8',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>+ 추가</button></div></div>
                   <div className="form-field full-width"><label className="form-label">복지사 전화번호</label><input {...inp('caregiverPhone')} placeholder="010-0000-0000" /></div>
                 </div><div className="form-footer"><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
                 {formStep===2&&(<div className="fade-in"><div className="form-section-title">👨‍👩‍👧 보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">💡 위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
