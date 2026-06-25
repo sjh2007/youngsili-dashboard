@@ -256,7 +256,7 @@ export default function App() {
 
   // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
   useEffect(() => { fetchElders(); fetchCaregivers(); }, []); // eslint-disable-line
-  useEffect(() => { if (page === 'elders' || page === 'dashboard') fetchElders(); }, [page]); // eslint-disable-line
+  useEffect(() => { if (page === 'elders' || page === 'dashboard' || page === 'calls') fetchElders(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
   useEffect(() => { if (page === 'calls' || page === 'elders') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
@@ -1153,14 +1153,14 @@ export default function App() {
                 <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="🔍 이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#1d4ed8':'#e2e8f0'),fontSize:13,width:120}}/>
                 <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#1d4ed8':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#1d4ed8':'#334155',background:'#fff',cursor:'pointer'}}>
                   <option value="">전체 어르신</option>
-                  {[...new Map(callsHistory.map(c=>[(c.phone||c.elderName||'미상'),nameByPhone(c.phone,c.elderName)])).entries()].map(([key,name])=>(<option key={key} value={key}>{name}</option>))}
+                  {elders.map(e=>{const k=String(e.phone||'').replace(/\D/g,'');return <option key={k} value={k}>{e.name}</option>;})}
                 </select>
-                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.filter(c=>(!callsPhone||(c.phone||c.elderName||'미상')===callsPhone)&&(!callsSearch||nameByPhone(c.phone,c.elderName).includes(callsSearch))).length}건</span>
+                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||nameByPhone(c.phone,c.elderName).includes(callsSearch))).length}건</span>
               </div>
               {callsHistory.length===0 ? (
                 <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
               ) : (()=>{
-                const src = callsHistory.filter(c=>(!callsPhone||(c.phone||c.elderName||'미상')===callsPhone)&&(!callsSearch||nameByPhone(c.phone,c.elderName).includes(callsSearch)));
+                const src = callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||nameByPhone(c.phone,c.elderName).includes(callsSearch)));
                 const grouped = {};
                 src.forEach(c=>{ const dk=c.date||(c.at?c.at.slice(0,10):'미상'); (grouped[dk]=grouped[dk]||[]).push(c); });
                 return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,logs])=>(
