@@ -3,14 +3,7 @@ import './App.css';
 
 const SERVER_URL = 'https://youngsili-server-production.up.railway.app';
 const CAREGIVERS = ['신주환', '이정훈', '박미경'];
-const INIT_ELDERS = [
-  { id: 1, name: '김순자', age: 78, gender:'female', title:'할머니', region: '대구 북구',   address: '대구 북구 침산동 123',   phone: '010-1234-5678', caregiver: '신주환', guardian: '김민준', guardianPhone: '010-9876-5432', disease: '고혈압, 당뇨',  medicine: '혈압약',  mobility: '보조기구 필요',   status: 'danger',  lastCall: '오늘 09:12', keyword: '가슴이 아파', visits: 2, callCycle: 'daily',      callTime: '09:00', callActive: true  },
-  { id: 2, name: '이철수', age: 82, gender:'male',   title:'할아버지', region: '대구 달서구', address: '대구 달서구 월성동 456', phone: '010-2345-6789', caregiver: '신주환', guardian: '이영희', guardianPhone: '010-8765-4321', disease: '관절염',       medicine: '진통제',  mobility: '독립보행 가능',   status: 'warning', lastCall: '오늘 10:45', keyword: '어지러워',  visits: 1, callCycle: 'daily',      callTime: '10:00', callActive: true  },
-  { id: 3, name: '박영희', age: 75, gender:'female', title:'할머니', region: '대구 수성구', address: '대구 수성구 범어동 789', phone: '010-3456-7890', caregiver: '이정훈', guardian: '박철호', guardianPhone: '010-7654-3210', disease: '없음',          medicine: '없음',    mobility: '독립보행 가능',   status: 'normal',  lastCall: '오늘 11:20', keyword: null,        visits: 0, callCycle: 'every2days', callTime: '11:00', callActive: true  },
-  { id: 4, name: '최동수', age: 80, gender:'male',   title:'할아버지', region: '대구 중구',   address: '대구 중구 대봉동 321',   phone: '010-4567-8901', caregiver: '이정훈', guardian: '최지영', guardianPhone: '010-6543-2109', disease: '심장병',       medicine: '심장약',  mobility: '보조기구 필요',   status: 'normal',  lastCall: '어제 15:30', keyword: null,        visits: 0, callCycle: 'weekly',     callTime: '15:00', callActive: false },
-  { id: 5, name: '정말순', age: 71, gender:'female', title:'어머니', region: '대구 동구',   address: '대구 동구 신천동 654',   phone: '010-5678-9012', caregiver: '박미경', guardian: '정대호', guardianPhone: '010-5432-1098', disease: '골다공증',     medicine: '칼슘제',  mobility: '독립보행 가능',   status: 'warning', lastCall: '오늘 08:55', keyword: '넘어졌어',  visits: 1, callCycle: 'daily',      callTime: '09:00', callActive: true  },
-  { id: 6, name: '한복남', age: 85, gender:'male',   title:'아버지', region: '대구 서구',   address: '대구 서구 평리동 987',   phone: '010-6789-0123', caregiver: '박미경', guardian: '한미래', guardianPhone: '010-4321-0987', disease: '치매 초기',    medicine: '치매약',  mobility: '보조기구 필요',   status: 'normal',  lastCall: '오늘 13:10', keyword: null,        visits: 0, callCycle: 'daily',      callTime: '13:00', callActive: true  },
-];
+// (더미 INIT_ELDERS 제거 — 어르신 목록은 서버 /elders에서 로드)
 
 const PUBLIC_DATA = [
   { region: '북구',   total: 4820, managed: 312, ratio: 6.5 },
@@ -94,12 +87,7 @@ const getWeatherIcon = (c = '') => {
 
 export default function App() {
   const [page, setPage]         = useState('dashboard');
-  const [elders, setElders] = useState(() => {
-    try {
-      const saved = localStorage.getItem('youngsili_elders');
-      return saved ? JSON.parse(saved) : INIT_ELDERS;
-    } catch { return INIT_ELDERS; }
-  });
+  const [elders, setElders] = useState([]);  // 서버(Firestore) /elders에서 로드 (localStorage 더미 폐지)
   const [callLogs, setCallLogs] = useState(() => {
     try {
       const saved = localStorage.getItem('youngsili_callLogs');
@@ -221,6 +209,14 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const fetchElders = async () => {
+    try {
+      const res = await fetch(`${SERVER_URL}/elders`);
+      const data = await res.json();
+      if (Array.isArray(data)) setElders(data.filter(e => e && e.phone));  // 번호 없는 잘못된 문서 제외
+    } catch (err) { console.error('어르신 목록 오류:', err); }
+  };
+
   const fetchHealth = async () => {
     setHealthLoading(true);
     try {
@@ -240,6 +236,8 @@ export default function App() {
     }
   };
 
+  useEffect(() => { fetchElders(); }, []); // eslint-disable-line  마운트 시 서버에서 어르신 목록 로드
+  useEffect(() => { if (page === 'elders' || page === 'dashboard') fetchElders(); }, [page]); // eslint-disable-line  진입 시 갱신
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
   useEffect(() => { if (page === 'calls' || page === 'elders') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
@@ -354,7 +352,7 @@ export default function App() {
   };
 
   useEffect(() => { if (page === 'data' && !popData) fetchPopulation(); }, [page]); // eslint-disable-line
-  useEffect(() => { localStorage.setItem('youngsili_elders', JSON.stringify(elders)); }, [elders]);
+  // 어르신 목록은 서버(Firestore)가 원본 — localStorage 저장 제거 (PC마다 다르게 노는 문제 방지)
   useEffect(() => { localStorage.setItem('youngsili_callLogs', JSON.stringify(callLogs)); }, [callLogs]);
   useEffect(() => {
     setCallLogs(prev => prev.map(log => {
