@@ -534,6 +534,7 @@ export default function App() {
             region:       elder.region,
             script:       mainScript,
             alertMessage: activeAlert !== 'none' ? alertScript.replace(/{{지역}}/g, elder.region) : '',
+            alertType: activeAlert,
           }),
         });
         const data = await res.json();
