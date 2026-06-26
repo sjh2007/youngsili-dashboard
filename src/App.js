@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import './App.css';
+import { auth, authEnabled } from './firebase';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 
 const SERVER_URL = 'https://youngsili-server-production.up.railway.app';
 const CAREGIVERS = ['신주환', '이정훈', '박미경'];
@@ -87,6 +89,18 @@ const getWeatherIcon = (c = '') => {
 
 export default function App() {
   const [page, setPage]         = useState('dashboard');
+  const [authUser, setAuthUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPw, setLoginPw] = useState('');
+  const [loginErr, setLoginErr] = useState('');
+  useEffect(() => { if (!authEnabled) { setAuthChecked(true); return; } const unsub = onAuthStateChanged(auth, u => { setAuthUser(u); setAuthChecked(true); }); return unsub; }, []); // eslint-disable-line
+  const doLogin = async () => {
+    setLoginErr('');
+    try { await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPw); }
+    catch (e) { setLoginErr('이메일 또는 비밀번호가 올바르지 않습니다.'); }
+  };
+  const doLogout = () => signOut(auth);
   const [elders, setElders] = useState([]);  // 서버(Firestore) /elders에서 로드 (localStorage 더미 폐지)
   const [callLogs, setCallLogs] = useState(() => {
     try {
@@ -616,6 +630,23 @@ export default function App() {
   const urgentCount   = callLogs.filter(c=>c.risk==='urgent').length;
   const manualCount   = callLogs.filter(c=>c.type==='manual').length;
 
+  // ── 로그인 가드: 인증 안 된 사용자는 대시보드(어르신 정보) 접근 불가 ──
+  if (authEnabled && !authChecked) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b'}}>로딩 중…</div>;
+  if (authEnabled && !authUser) {
+    return (
+      <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f1f5f9'}}>
+        <div style={{background:'#fff',borderRadius:16,padding:40,width:360,boxShadow:'0 4px 20px rgba(0,0,0,0.08)'}}>
+          <h2 style={{margin:'0 0 8px',color:'#1e3a6e'}}>AI 영실이 관제</h2>
+          <p style={{margin:'0 0 24px',color:'#64748b',fontSize:14}}>발급받은 기관 계정으로 로그인하세요.</p>
+          <input type="email" placeholder="이메일 (기관 계정)" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} style={{width:'100%',padding:12,marginBottom:10,borderRadius:8,border:'1px solid #cbd5e1',boxSizing:'border-box'}}/>
+          <input type="password" placeholder="비밀번호" value={loginPw} onChange={e=>setLoginPw(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doLogin()} style={{width:'100%',padding:12,marginBottom:10,borderRadius:8,border:'1px solid #cbd5e1',boxSizing:'border-box'}}/>
+          {loginErr && <div style={{color:'#ef4444',fontSize:13,marginBottom:10}}>{loginErr}</div>}
+          <button onClick={doLogin} style={{width:'100%',padding:13,borderRadius:8,border:'none',background:'#2563eb',color:'#fff',fontWeight:700,fontSize:15,cursor:'pointer'}}>관제 대시보드 로그인 →</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       {callModal && (
@@ -644,7 +675,7 @@ export default function App() {
             {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
             {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
             {id:'calls',     icon:'📞', label:'통화 기록'},
-            {id:'health', icon:'💊', label: alertCount > 0 ? `💊 건강 상태 🔴${alertCount}` : '💊 건강 상태'},
+            {id:'health', icon:'💊', label: alertCount > 0 ? `건강 상태 🔴${alertCount}` : '건강 상태'},
             {id:'report',    icon:'📊', label:'리포트 / 통계'},
             {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
           ].map(item=>(
@@ -658,8 +689,9 @@ export default function App() {
         <div className="sidebar-footer">
           <div className="worker-info">
             <div className="worker-avatar">복</div>
-            <div><div className="worker-name">김복지 사회복지사</div><div className="worker-region">대구광역시</div></div>
+            <div><div className="worker-name">김복지 사회복지사</div><div className="worker-region">{authEnabled&&authUser?authUser.email:'대구광역시'}</div></div>
           </div>
+          {authEnabled&&authUser&&<button onClick={doLogout} style={{marginTop:10,width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #cbd5e1',background:'#fff',color:'#475569',fontSize:13,fontWeight:600,cursor:'pointer'}}>로그아웃</button>}
         </div>
       </aside>
 
@@ -1400,7 +1432,7 @@ export default function App() {
                       <thead><tr><th>구</th><th>전체 인구</th><th>65세 이상</th><th>고령화율</th><th>추정 독거노인</th><th>영실이 관리</th><th>관리 비율</th><th>커버리지</th></tr></thead>
                       <tbody>
                         {popData.regions.sort((a,b)=>b.solitary-a.solitary).map((d,i)=>{
-                          const managed=elders.filter(e=>e.region===d.region).length;
+                          const managed=elders.filter(e=>(e.region||'').replace('대구광역시','').replace('대구','').trim()===d.region).length;
                           const managedRatio=d.solitary>0?(managed/d.solitary*100).toFixed(2):0;
                           const isHighAge=d.elderlyRatio>=20;
                           return (
