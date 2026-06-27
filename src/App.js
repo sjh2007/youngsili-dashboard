@@ -420,6 +420,9 @@ export default function App() {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkDone, setBulkDone]     = useState([]);
   const [bulkCurrent, setBulkCurrent] = useState(null);
+  const [batchSize, setBatchSize]   = useState(5);    // 배치당 발신 인원 (AI서버 동시통화 부하 분산)
+  const [batchIntervalSec, setBatchIntervalSec] = useState(90);  // 배치 간 대기(초)
+  const [batchWait, setBatchWait]   = useState(0);    // 다음 배치까지 남은 초(카운트다운 표시)
   const bulkRef = useRef(false);
 
   const danger  = elders.filter(e => e.status==='danger').length;
@@ -550,7 +553,8 @@ export default function App() {
     const queue = Array.isArray(customQueue) ? customQueue : elders.filter(e => checked.includes(e.id));
     if (queue.length === 0) return;
     setBulkQueue(queue); setBulkDone([]); setBulkRunning(true); bulkRef.current = true;
-    for (const elder of queue) {
+    for (let i = 0; i < queue.length; i++) {
+      const elder = queue[i];
       if (!bulkRef.current) break;
       setBulkCurrent(elder.id);
       try {
@@ -577,12 +581,21 @@ export default function App() {
       } catch {
         setBulkDone(prev => [...prev, { id: elder.id, success: false, status: 'failed' }]);
       }
-      await new Promise(r => setTimeout(r, 1500));
+      // 배치 분산: batchSize명마다 batchIntervalSec초 대기(AI서버 동시통화 부하 완화). 배치 내는 1.5초 간격
+      const isLast = i === queue.length - 1;
+      if (!isLast) {
+        if ((i + 1) % batchSize === 0) {
+          for (let s = batchIntervalSec; s > 0 && bulkRef.current; s--) { setBatchWait(s); await new Promise(r => setTimeout(r, 1000)); }
+          setBatchWait(0);
+        } else {
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      }
     }
-    setBulkCurrent(null); setBulkRunning(false); bulkRef.current = false;
+    setBulkCurrent(null); setBulkRunning(false); bulkRef.current = false; setBatchWait(0);
   };
 
-  const stopBulkCall = () => { bulkRef.current = false; setBulkRunning(false); setBulkCurrent(null); };
+  const stopBulkCall = () => { bulkRef.current = false; setBulkRunning(false); setBulkCurrent(null); setBatchWait(0); };
 
   // 발신 후 받음/부재중 상태 폴링(5초) — 수신대기/통화중이 남은 동안만 동작, 모두 확정되면 자동 중지
   useEffect(() => {
@@ -926,6 +939,12 @@ export default function App() {
                   <span className="check-count">{checked.length}명 선택됨</span>
                   <button className="btn-secondary" onClick={checkAll}>전체선택</button>
                   <button className="btn-secondary" onClick={uncheckAll}>선택해제</button>
+                  {!bulkRunning && checked.length > batchSize && (
+                    <span style={{fontSize:12,color:'#64748b',display:'flex',alignItems:'center',gap:4}} title="AI서버 동시통화 부하를 줄이려 나눠서 발신합니다">
+                      배치 <input type="number" min="1" max="50" value={batchSize} onChange={e=>setBatchSize(Math.max(1,Number(e.target.value)||1))} style={{width:42,padding:'3px 4px',border:'1px solid #cbd5e1',borderRadius:6,textAlign:'center'}}/>명/
+                      <input type="number" min="0" max="600" value={batchIntervalSec} onChange={e=>setBatchIntervalSec(Math.max(0,Number(e.target.value)||0))} style={{width:48,padding:'3px 4px',border:'1px solid #cbd5e1',borderRadius:6,textAlign:'center'}}/>초
+                    </span>
+                  )}
                   {!bulkRunning
                     ? <button className={`btn-bulk-call ${checked.length===0?'btn-disabled':''}`} onClick={()=>startBulkCall()} disabled={checked.length===0}>📱 앱 알림 발신 ({checked.length}명)</button>
                     : <button className="btn-bulk-stop" onClick={stopBulkCall}>⏹ 발신 중단</button>
@@ -940,6 +959,7 @@ export default function App() {
                     <span className="bulk-progress-count">{bulkDone.length} / {bulkQueue.length}</span>
                   </div>
                   <div className="bulk-bar-wrap"><div className="bulk-bar" style={{width:`${bulkQueue.length?bulkDone.length/bulkQueue.length*100:0}%`}}/></div>
+                  {batchWait > 0 && <div style={{fontSize:13,color:'#f59e0b',fontWeight:700,margin:'8px 0'}}>⏳ AI서버 부하 분산 — 다음 {batchSize}명 발신까지 {batchWait}초 대기…</div>}
                   <div className="bulk-result-list">
                     {bulkQueue.map(elder=>{
                       const done = bulkDone.find(d=>d.id===elder.id);
