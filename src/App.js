@@ -41,8 +41,11 @@ const STATUS_CONFIG = {
 const RISK_CONFIG = {
   critical: { label: '긴급', color: '#ef4444' },
   urgent:   { label: '주의', color: '#f59e0b' },
+  warning:  { label: '주의', color: '#f59e0b' },   // 앱이 어지럼·소화·기력저하 등을 warning으로 보냄 → 주의 표시
   normal:   { label: '정상', color: '#22c55e' },
 };
+// SPA 페이지 목록 (URL 해시 라우팅 — F5 시 현재 페이지 유지)
+const PAGES = ['dashboard','elders','schedule','script','calls','health','report','data'];
 const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'대구 북구', address:'', phone:'', caregiver:'', caregiverPhone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
 
 const TITLE_OPTIONS = {
@@ -88,7 +91,7 @@ const getWeatherIcon = (c = '') => {
 };
 
 export default function App() {
-  const [page, setPage]         = useState('dashboard');
+  const [page, setPage]         = useState(() => { try { const h = (window.location.hash || '').replace('#',''); return PAGES.includes(h) ? h : 'dashboard'; } catch { return 'dashboard'; } });
   const [authUser, setAuthUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
@@ -116,7 +119,6 @@ export default function App() {
   const [regionFilter, setRegionFilter] = useState('전체');
   const [sortBy, setSortBy]           = useState('status');
   const [viewMode, setViewMode]       = useState('card');
-  const [todoChecked, setTodoChecked] = useState([]);
   const [memoText, setMemoText]       = useState('');
   const [memos, setMemos]             = useState([
     { id: 1, text: '김순자 할머니 딸 연락 옴 - 다음주 방문 예정', time: '09:30', done: false },
@@ -513,6 +515,19 @@ export default function App() {
   const resetScript = () => { setEditScript(DEFAULT_SCRIPT); setMainScript(DEFAULT_SCRIPT); };
 
   const goPage  = p => { setPage(p); setSelected(null); setCallResult(null); };
+  // 실시간 위험 알림: 등록된 어르신 것만 표시 (테스트/더미 이름 제외)
+  const _normPhone = s => String(s||'').replace(/[^0-9]/g,'');
+  const alertIsReal = a => elders.some(e => e.name === a.name || (_normPhone(a.phone) && _normPhone(e.phone) === _normPhone(a.phone)));
+  // 브라우저 뒤로가기 → 대시보드 홈 (SPA 히스토리 연동: 하위 탭에서 뒤로가기 시 새 탭/이탈 대신 홈으로)
+  // URL 해시에 페이지 기록 → 새로고침(F5) 시 현재 페이지 유지, 뒤로가기 시 이전 페이지로
+  useEffect(() => {
+    if (((window.location.hash || '').replace('#','') || 'dashboard') !== page) window.history.pushState({ page }, '', '#' + page);
+  }, [page]);
+  useEffect(() => {
+    const onPop = () => { const h = (window.location.hash || '').replace('#',''); setPage(PAGES.includes(h) ? h : 'dashboard'); setSelected(null); setCallResult(null); };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   const openDetail = elder => { setSelected(elder); setCallResult(null); setPage('detail'); };
   const genAuthCode = () => String(Math.floor(100000 + Math.random() * 900000));  // 6자리 앱 인증코드
   const openRegister = () => { setForm({...EMPTY_FORM, authCode: genAuthCode()}); setFormStep(1); setFormErrors({}); setSaveSuccess(false); setEditMode(false); setPage('register'); };
@@ -531,9 +546,9 @@ export default function App() {
   const applySmartFilter = f => { setSmartFilter(f); setChecked([]); };
 
   // ── 일괄 발신 (FCM 앱 푸시) ──
-  const startBulkCall = async () => {
-    if (checked.length === 0) return;
-    const queue = elders.filter(e => checked.includes(e.id));
+  const startBulkCall = async (customQueue) => {
+    const queue = Array.isArray(customQueue) ? customQueue : elders.filter(e => checked.includes(e.id));
+    if (queue.length === 0) return;
     setBulkQueue(queue); setBulkDone([]); setBulkRunning(true); bulkRef.current = true;
     for (const elder of queue) {
       if (!bulkRef.current) break;
@@ -554,13 +569,13 @@ export default function App() {
         const data = await res.json();
         const now = new Date();
         const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-        setBulkDone(prev => [...prev, { id: elder.id, success: data.success }]);
+        setBulkDone(prev => [...prev, { id: elder.id, callId: data.callId, success: data.success, status: data.success ? 'ringing' : 'failed' }]);
         if (data.success) {
           setCallLogs(prev => [{ id: Date.now(), elderId: elder.id, date:'오늘', time:timeStr, duration:'📱 앱 수신 대기', keywords:[], risk:'normal', type:'manual', callStatus:'ringing' }, ...prev]);
           setElders(prev => prev.map(e => e.id===elder.id ? {...e, lastCall:`오늘 ${timeStr}`} : e));
         }
       } catch {
-        setBulkDone(prev => [...prev, { id: elder.id, success: false }]);
+        setBulkDone(prev => [...prev, { id: elder.id, success: false, status: 'failed' }]);
       }
       await new Promise(r => setTimeout(r, 1500));
     }
@@ -568,6 +583,46 @@ export default function App() {
   };
 
   const stopBulkCall = () => { bulkRef.current = false; setBulkRunning(false); setBulkCurrent(null); };
+
+  // 발신 후 받음/부재중 상태 폴링(5초) — 수신대기/통화중이 남은 동안만 동작, 모두 확정되면 자동 중지
+  useEffect(() => {
+    const ids = bulkDone.filter(d => d.callId && (d.status === 'ringing' || d.status === 'answered')).map(d => d.callId);
+    if (ids.length === 0) return;
+    const t = setInterval(async () => {
+      try {
+        const r = await fetch(`${SERVER_URL}/call/dispatch-statuses?ids=${ids.join(',')}`);
+        const m = await r.json();
+        setBulkDone(prev => prev.map(d => (d.callId && m[d.callId]) ? { ...d, status: m[d.callId].status, durationSec: m[d.callId].durationSec } : d));
+      } catch {}
+    }, 5000);
+    return () => clearInterval(t);
+  }, [bulkDone]); // eslint-disable-line
+
+  // 부재중인 어르신만 다시 발신
+  const resendMissed = () => {
+    const ids = bulkDone.filter(d => d.status === 'missed').map(d => d.id);
+    const queue = elders.filter(e => ids.includes(e.id));
+    if (queue.length > 0) startBulkCall(queue);
+  };
+
+  // 발신 내역 복원: 발신 페이지 진입/새로고침 시 서버에서 오늘 발신 상태를 불러와 패널 복원
+  const loadDispatches = async () => {
+    try {
+      const r = await fetch(`${SERVER_URL}/call/dispatches`);
+      const d = await r.json();
+      if (!d.available || !(d.dispatches || []).length) return;
+      const np = s => String(s || '').replace(/\D/g, '');
+      const seen = new Set();
+      const rows = d.dispatches.map(x => {
+        const el = elders.find(e => np(e.phone) && np(e.phone) === np(x.phone)) || elders.find(e => e.name === x.name);
+        return el ? { elder: el, done: { id: el.id, callId: x.callId, status: x.status, durationSec: x.durationSec, success: x.status !== 'failed' } } : null;
+      }).filter(Boolean).filter(r => { if (seen.has(r.elder.id)) return false; seen.add(r.elder.id); return true; });
+      if (!rows.length) return;
+      setBulkQueue(rows.map(r => r.elder));
+      setBulkDone(rows.map(r => r.done));
+    } catch {}
+  };
+  useEffect(() => { if (page === 'schedule' && !bulkRunning && bulkDone.length === 0 && elders.length > 0) loadDispatches(); }, [page, elders]); // eslint-disable-line
 
   // ── 단건 전화 (FCM 앱 푸시) ──
   const makeCall = async elder => {
@@ -664,8 +719,8 @@ export default function App() {
       )}
 
       <aside className="sidebar">
-        <div className="logo">
-          <div className="logo-icon">영</div>
+        <div className="logo" onClick={()=>goPage('dashboard')} style={{cursor:'pointer'}} title="대시보드 홈으로">
+          <img src="/youngsili.png" alt="영실이" className="logo-icon" style={{width:42,height:42,borderRadius:12,objectFit:'cover',padding:0}} />
           <div><div className="logo-title">영실이</div><div className="logo-sub">복지사 관리 시스템</div></div>
         </div>
         <nav className="nav">
@@ -714,7 +769,7 @@ export default function App() {
                 // 1) 통화 중 위험 키워드 감지 — 서버 알림(alertsData) 직접 표시 (키워드+시각, localStorage 매칭 무관)
                 //    keyword 필드가 비어도(구버전 서버) message에서 "감지: 뒤"를 파싱해 키워드만 깔끔히.
                 alertsData
-                  .filter(a => !a.read && (a.level === 'critical' || a.level === 'urgent'))
+                  .filter(a => !a.read && (a.level === 'critical' || a.level === 'urgent') && alertIsReal(a))
                   .slice(0, 10)
                   .forEach(a => {
                     const kw = a.keyword || (a.message ? a.message.split('감지:').pop().trim() : '') || a.message;
@@ -757,41 +812,12 @@ export default function App() {
               <div className="dash-two-col">
                 <div className="dash-col-left">
                   <div className="section">
-                    <div className="section-title">✅ 오늘 할 일</div>
-                    <div className="todo-list">
-                      {[
-                        { id:'noResponse', icon:'📵', label:`미응답 어르신 확인`, count: elders.filter(e=>getNoResponseDays(e.lastCall)>=1).length, color:'#ef4444' },
-                        { id:'callToday',  icon:'📱', label:`오늘 앱 알림 예정`,  count: elders.filter(e=>e.callActive).length, color:'#1d4ed8' },
-                        { id:'visit',      icon:'🏠', label:`방문 필요`,          count: elders.filter(e=>e.visits>0).length, color:'#16a34a' },
-                        { id:'heatwave',   icon:'🌡️', label:`폭염경보 안전 확인`, count: elders.filter(e=>weatherData[e.region]?.alert==='heatwave').length, color:'#f59e0b' },
-                      ].map(item => (
-                        <div key={item.id} className={`todo-item ${todoChecked.includes(item.id)?'todo-done':''}`}
-                          onClick={()=>setTodoChecked(prev=>prev.includes(item.id)?prev.filter(x=>x!==item.id):[...prev,item.id])}>
-                          <div className="todo-check">{todoChecked.includes(item.id)?'✅':'⬜'}</div>
-                          <div className="todo-icon">{item.icon}</div>
-                          <div className="todo-label">{item.label}</div>
-                          {item.count > 0 && <div className="todo-count" style={{background:item.color}}>{item.count}명</div>}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="todo-progress"><div className="todo-progress-bar" style={{width:`${todoChecked.length/4*100}%`}}/></div>
-                    <div className="todo-progress-label">{todoChecked.length}/4 완료</div>
-                  </div>
-
-                  <div className="section">
                     <div className="section-title">📞 오늘 통화 현황</div>
                     <div className="call-summary">
                       <div className="call-stat"><div className="call-num">{totalCalls}건</div><div className="call-label">총 통화</div></div>
                       <div className="call-stat"><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
                       <div className="call-stat"><div className="call-num" style={{color:'#f59e0b'}}>{urgentCount}건</div><div className="call-label">주의 키워드</div></div>
                       <div className="call-stat"><div className="call-num" style={{color:'#3b82f6'}}>{manualCount}건</div><div className="call-label">수동 전화</div></div>
-                    </div>
-                    <div style={{marginTop:16}}>
-                      <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:6}}>
-                        <span style={{color:'#64748b',fontWeight:600}}>오늘 통화 완료율</span>
-                        <span style={{fontWeight:800,color:'#1d4ed8'}}>{Math.round(totalCalls/elders.length*100)}%</span>
-                      </div>
-                      <div className="todo-progress"><div className="todo-progress-bar" style={{width:`${totalCalls/elders.length*100}%`}}/></div>
                     </div>
                   </div>
 
@@ -851,31 +877,6 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-
-                  <div className="section">
-                    <div className="section-title">🚨 즉시 확인 필요</div>
-                    <div className="alert-list">
-                      {elders.filter(e=>e.status!=='normal').length === 0
-                        ? <div style={{color:'#22c55e',fontWeight:700,padding:'12px 0'}}>✅ 위험 어르신 없음</div>
-                        : elders.filter(e=>e.status!=='normal').map(elder=>(
-                          <div key={elder.id} className={`alert-card alert-${elder.status}`}>
-                            <div className="alert-left" onClick={()=>openDetail(elder)} style={{cursor:'pointer',flex:1}}>
-                              <div className={`status-dot dot-${elder.status}`}/>
-                              <div>
-                                <div className="alert-name">{elder.gender==='female'?'👵':'👴'} {elder.name} ({elder.age}세)</div>
-                                <div className="alert-region">{elder.region}</div>
-                              </div>
-                              {elder.keyword&&<div className="keyword-tag">"{elder.keyword}"</div>}
-                            </div>
-                            <div className="alert-right">
-                              <div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div>
-                              <button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'발신 중':'📱 앱 전화'}</button>
-                            </div>
-                          </div>
-                        ))
-                      }
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -926,7 +927,7 @@ export default function App() {
                   <button className="btn-secondary" onClick={checkAll}>전체선택</button>
                   <button className="btn-secondary" onClick={uncheckAll}>선택해제</button>
                   {!bulkRunning
-                    ? <button className={`btn-bulk-call ${checked.length===0?'btn-disabled':''}`} onClick={startBulkCall} disabled={checked.length===0}>📱 앱 알림 발신 ({checked.length}명)</button>
+                    ? <button className={`btn-bulk-call ${checked.length===0?'btn-disabled':''}`} onClick={()=>startBulkCall()} disabled={checked.length===0}>📱 앱 알림 발신 ({checked.length}명)</button>
                     : <button className="btn-bulk-stop" onClick={stopBulkCall}>⏹ 발신 중단</button>
                   }
                 </div>
@@ -948,15 +949,26 @@ export default function App() {
                           <div className="table-avatar">{elder.name[0]}</div>
                           <span className="bulk-name">{elder.name}</span>
                           <span className="bulk-phone">{elder.phone}</span>
-                          <span className="bulk-status-icon">{isCurrent?'⏳ 발신 중':done?done.success?'✅ 성공':'❌ 실패':'⏸ 대기'}</span>
+                          <span className="bulk-status-icon">{
+                            isCurrent ? '⏳ 발신 중'
+                            : !done ? '⏸ 대기'
+                            : done.status==='ringing' ? '📲 수신대기'
+                            : done.status==='answered' ? '📞 통화중'
+                            : done.status==='completed' ? `✅ 받음 (${done.durationSec||0}초)`
+                            : done.status==='missed' ? '📵 부재중'
+                            : (done.status==='failed'||done.success===false) ? '❌ 발신실패'
+                            : '✅ 전송됨'
+                          }</span>
                         </div>
                       );
                     })}
                   </div>
                   {!bulkRunning && bulkDone.length>0 && (
                     <div className="bulk-summary">
-                      <span className="bulk-success-count">✅ 성공 {bulkDone.filter(d=>d.success).length}건</span>
-                      <span className="bulk-fail-count">❌ 실패 {bulkDone.filter(d=>!d.success).length}건</span>
+                      <span className="bulk-success-count">✅ 받음 {bulkDone.filter(d=>d.status==='completed'||d.status==='answered').length}</span>
+                      <span style={{color:'#f59e0b',fontWeight:700}}>📲 수신대기 {bulkDone.filter(d=>d.status==='ringing').length}</span>
+                      <span className="bulk-fail-count">📵 부재중 {bulkDone.filter(d=>d.status==='missed').length} · ❌ 실패 {bulkDone.filter(d=>d.status==='failed').length}</span>
+                      {bulkDone.filter(d=>d.status==='missed').length>0 && <button className="btn-bulk-call" onClick={resendMissed}>📵 부재중 {bulkDone.filter(d=>d.status==='missed').length}명 다시 발신</button>}
                       <button className="btn-secondary" onClick={()=>{setBulkDone([]);setBulkQueue([]);setChecked([]);}}>닫기</button>
                     </div>
                   )}
@@ -971,7 +983,7 @@ export default function App() {
                     return (
                       <tr key={elder.id} className={`${checked.includes(elder.id)?'row-checked':''} ${done?done.success?'row-success':'row-fail':''}`}>
                         <td><input type="checkbox" checked={checked.includes(elder.id)} onChange={()=>toggleCheck(elder.id)} className="cb"/></td>
-                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><div><div style={{fontWeight:700}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age}세</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'✅':'❌'}</span>}</div></td>
+                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><div onClick={()=>openEdit(elder)} style={{cursor:'pointer'}} title="클릭 → 어르신 정보 수정"><div style={{fontWeight:700,color:'#1d4ed8'}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age}세</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'✅':'❌'}</span>}</div></td>
                         <td style={{fontSize:13}}>{elder.phone}</td>
                         <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                         <td><span className="cycle-badge">{cycleLabel(elder.callCycle, elder.callDays)}</span></td>
@@ -1255,6 +1267,7 @@ export default function App() {
                   <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{statsLoading?'불러오는 중...':'아직 통계 데이터가 없습니다. 통화 중 위험 키워드가 감지되면 자동으로 쌓입니다.'}</div>
                 ) : (()=>{
                   const elderEntries = Object.entries(statsData.elders||{})
+                    .filter(([name])=>elders.some(e=>e.name===name))  // 등록된 어르신만 (옛 이름·더미 제외)
                     .map(([name,es])=>({ name, es, score: priorityScore(es), prevTotal: (statsPrev&&statsPrev.elders&&statsPrev.elders[name]&&statsPrev.elders[name].total)||0 }))
                     .sort((a,b)=>b.score-a.score);
                   const topKw = (statsData.topKeywords||[])[0];
@@ -1322,10 +1335,10 @@ export default function App() {
                 <div className="report-stat-card"><div className="report-stat-icon">😔</div><div className="report-stat-value" style={{color:'#ef4444'}}>{healthData.filter(h=>h.status==='bad').length}명</div><div className="report-stat-label">안 좋아요</div></div>
                 <div className="report-stat-card"><div className="report-stat-icon">📱</div><div className="report-stat-value" style={{color:'#6b7280'}}>{elders.length - healthData.length}명</div><div className="report-stat-label">미체크</div></div>
               </div>
-              {alertsData.filter(a=>!a.read).length > 0 && (
+              {alertsData.filter(a=>!a.read&&alertIsReal(a)).length > 0 && (
                 <div className="section" style={{marginBottom:20}}>
-                  <div className="section-title">🚨 미확인 알림 ({alertsData.filter(a=>!a.read).length}건)</div>
-                  {alertsData.filter(a=>!a.read).map((alert,i) => (
+                  <div className="section-title">🚨 미확인 알림 ({alertsData.filter(a=>!a.read&&alertIsReal(a)).length}건)</div>
+                  {alertsData.filter(a=>!a.read&&alertIsReal(a)).map((alert,i) => (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 18px',marginBottom:10}}>
                       <span style={{fontSize:24}}>⚠️</span>
                       <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'#dc2626'}}>{nameByPhone(alert.phone, alert.name)} · 🚨 "{alert.keyword || (alert.message ? alert.message.split('감지:').pop().trim() : alert.message)}"</div><div style={{fontSize:12,color:'#ef4444',marginTop:2}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
@@ -1342,7 +1355,7 @@ export default function App() {
                   <table className="table">
                     <thead><tr><th>어르신</th><th>건강 상태</th><th>체크 시간</th><th>담당 복지사</th><th>조치</th></tr></thead>
                     <tbody>
-                      {healthData.sort((a,b)=>{const order={bad:0,okay:1,good:2};return order[a.status]-order[b.status];}).map((h,i)=>{
+                      {healthData.filter(alertIsReal).sort((a,b)=>{const order={bad:0,okay:1,good:2};return order[a.status]-order[b.status];}).map((h,i)=>{
                         const elder=elders.find(e=>String(e.phone||'').replace(/\D/g,'')===String(h.phone||'').replace(/\D/g,''))||elders.find(e=>e.name===h.name);
                         const statusColor={good:'#16a34a',okay:'#f59e0b',bad:'#ef4444'}[h.status];
                         const statusLabel={good:'😊 좋아요',okay:'😐 그럭저럭',bad:'😔 안 좋아요'}[h.status];
@@ -1387,11 +1400,11 @@ export default function App() {
                     </>)}
                   </div>
                 </div>
-                {healthHistory.length===0 ? (
-                  <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>이 기간 건강 체크 이력이 없습니다.</div>
-                ) : (()=>{
+                {(()=>{
+                  const histReal = healthHistory.filter(alertIsReal);
+                  if (histReal.length===0) return <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>이 기간 건강 체크 이력이 없습니다.</div>;
                   const grouped={};
-                  healthHistory.forEach(h=>{const dk=h.date||(h.at?h.at.slice(0,10):'미상');(grouped[dk]=grouped[dk]||[]).push(h);});
+                  histReal.forEach(h=>{const dk=h.date||(h.at?h.at.slice(0,10):'미상');(grouped[dk]=grouped[dk]||[]).push(h);});
                   return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,evs])=>(
                     <div key={date} style={{marginBottom:16}}>
                       <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {evs.length}건</span></div>
