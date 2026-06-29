@@ -4,35 +4,10 @@ import { auth, authEnabled } from './firebase';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 
 const SERVER_URL = 'https://youngsili-server-production.up.railway.app';
-const CAREGIVERS = ['신주환', '이정훈', '박미경'];
+const CAREGIVERS = [];  // 서버 /settings/caregivers + 등록된 어르신의 담당 복지사에서 파생 (더미 폐지)
 // (더미 INIT_ELDERS 제거 — 어르신 목록은 서버 /elders에서 로드)
 
-const PUBLIC_DATA = [
-  { region: '북구',   total: 4820, managed: 312, ratio: 6.5 },
-  { region: '달서구', total: 6210, managed: 418, ratio: 6.7 },
-  { region: '수성구', total: 3940, managed: 267, ratio: 6.8 },
-  { region: '중구',   total: 2180, managed: 156, ratio: 7.2 },
-  { region: '동구',   total: 5130, managed: 341, ratio: 6.6 },
-  { region: '서구',   total: 3760, managed: 249, ratio: 6.6 },
-];
-
-const INIT_CALL_LOGS = [
-  { id: 1, elderId: 1, date: '오늘', time: '09:12', duration: '4분 32초', keywords: ['가슴이 아파', '119'], risk: 'critical', type: 'auto' },
-  { id: 2, elderId: 2, date: '오늘', time: '10:45', duration: '3분 18초', keywords: ['어지러워'],            risk: 'urgent',   type: 'auto' },
-  { id: 3, elderId: 3, date: '오늘', time: '11:20', duration: '5분 02초', keywords: [],                     risk: 'normal',   type: 'auto' },
-  { id: 4, elderId: 5, date: '오늘', time: '08:55', duration: '2분 47초', keywords: ['넘어졌어'],            risk: 'urgent',   type: 'auto' },
-];
-
-const WEEKLY_DATA = [
-  { day: '월', calls: 5, danger: 1, warning: 2 },
-  { day: '화', calls: 6, danger: 0, warning: 1 },
-  { day: '수', calls: 4, danger: 2, warning: 1 },
-  { day: '목', calls: 7, danger: 1, warning: 3 },
-  { day: '금', calls: 5, danger: 0, warning: 2 },
-  { day: '토', calls: 3, danger: 1, warning: 0 },
-  { day: '일', calls: 4, danger: 0, warning: 1 },
-];
-
+// 본 서비스: 모든 통계·통화·현황은 서버(Firestore) 실데이터로 표시 (고정 더미 폐지)
 const STATUS_CONFIG = {
   danger:  { label: '위험', color: '#ef4444', bg: '#fef2f2' },
   warning: { label: '주의', color: '#f59e0b', bg: '#fffbeb' },
@@ -51,7 +26,6 @@ const PAGES = ['dashboard','elders','schedule','script','calls','health','report
 class PageErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
-  componentDidUpdate(prev) { if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null }); }
   render() {
     if (this.state.error) return (
       <div style={{padding:40,textAlign:'center'}}>
@@ -64,7 +38,7 @@ class PageErrorBoundary extends Component {
     return this.props.children;
   }
 }
-const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'대구 북구', address:'', phone:'', caregiver:'', caregiverPhone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
+const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', caregiver:'', caregiverPhone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
 
 const TITLE_OPTIONS = {
   female: ['할머니', '어머니', '여사님'],
@@ -87,15 +61,6 @@ const ALERT_TEMPLATES = {
   typhoon:  `{{지역}} 태풍 영향권에 들어있어요. 외출을 삼가시고 안전한 실내에 계세요.`,
   wildfire: `오늘 {{지역}} 인근에 산불이 발생했어요. 안내 방송에 귀 기울이시고, 대피 안내가 있으면 꼭 따르세요. 위급하면 119로 연락하세요.`,
   none:     ``,
-};
-
-const WEATHER_DATA = {
-  '대구 북구':   { temp: 36, condition: '폭염', alert: 'heatwave', alertText: '폭염경보' },
-  '대구 달서구': { temp: 35, condition: '폭염', alert: 'heatwave', alertText: '폭염경보' },
-  '대구 수성구': { temp: 28, condition: '맑음', alert: 'none',     alertText: '' },
-  '대구 중구':   { temp: 34, condition: '폭염', alert: 'heatwave', alertText: '폭염경보' },
-  '대구 동구':   { temp: 18, condition: '비',   alert: 'rain',     alertText: '호우주의보' },
-  '대구 서구':   { temp: 29, condition: '흐림', alert: 'none',     alertText: '' },
 };
 
 const getWeatherIcon = (c = '') => {
@@ -123,12 +88,6 @@ export default function App() {
   };
   const doLogout = () => signOut(auth);
   const [elders, setElders] = useState([]);  // 서버(Firestore) /elders에서 로드 (localStorage 더미 폐지)
-  const [callLogs, setCallLogs] = useState(() => {
-    try {
-      const saved = localStorage.getItem('youngsili_callLogs');
-      return saved ? JSON.parse(saved) : INIT_CALL_LOGS;
-    } catch { return INIT_CALL_LOGS; }
-  });
   const [selected, setSelected] = useState(null);
   const [filter, setFilter]     = useState('all');
   const [form, setForm]         = useState(EMPTY_FORM);
@@ -138,10 +97,7 @@ export default function App() {
   const [sortBy, setSortBy]           = useState('status');
   const [viewMode, setViewMode]       = useState('card');
   const [memoText, setMemoText]       = useState('');
-  const [memos, setMemos]             = useState([
-    { id: 1, text: '김순자 할머니 딸 연락 옴 - 다음주 방문 예정', time: '09:30', done: false },
-    { id: 2, text: '오후 2시 팀 회의 있음', time: '08:00', done: false },
-  ]);
+  const [memos, setMemos]             = useState(() => { try { return JSON.parse(localStorage.getItem('youngsili_memos')) || []; } catch { return []; } });
   const [healthData, setHealthData]     = useState([]);
   const [caregivers, setCaregivers]     = useState(CAREGIVERS);
   const [alertsData, setAlertsData]     = useState([]);
@@ -293,7 +249,7 @@ export default function App() {
   useEffect(() => { if (page === 'elders' || page === 'dashboard' || page === 'calls') fetchElders(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
-  useEffect(() => { if (page === 'calls' || page === 'elders') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
+  useEffect(() => { if (page === 'calls' || page === 'elders' || page === 'dashboard') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealthHistory(); }, [page, healthRange, healthHistFrom, healthHistTo]); // eslint-disable-line
   // 통화 시각 ISO → "오늘 14:23" / "어제 09:10" / "6/14 15:30"
   const formatCallTime = (iso) => {
@@ -310,11 +266,26 @@ export default function App() {
     if (!iso) return null;
     return Math.round((new Date(new Date().toDateString()) - new Date(new Date(iso).toDateString())) / 86400000);
   };
-  // 어르신 관리 "마지막 통화" 표시 — 무응답 3일 이상이면 빨강 강조 (며칠째 안 받았는지 한눈에)
+  // 통화 시각 포맷 (오전/오후 H:MM)
+  const fmtCallTime = (iso) => {
+    const d = new Date(iso), hh = d.getHours(), mm = String(d.getMinutes()).padStart(2,'0');
+    return `${hh < 12 ? '오전' : '오후'} ${(hh % 12) || 12}:${mm}`;
+  };
+  // 어르신 관리 "마지막 통화" 표시 — lastCallAt(실제 타임스탬프) 기준으로 오늘/어제/날짜 정확히 계산
+  // (lastCall 문자열은 갱신 안 되는 옛 더미가 박힐 수 있어 타임스탬프를 우선 사용)
   const renderLastCall = (e) => {
     const ds = daysSinceCall(e.lastCallAt);
+    let label;
+    if (e.lastCallAt && ds != null) {
+      const d = new Date(e.lastCallAt);
+      label = ds === 0 ? `오늘 ${fmtCallTime(e.lastCallAt)}`
+            : ds === 1 ? `어제 ${fmtCallTime(e.lastCallAt)}`
+            : `${d.getMonth()+1}월 ${d.getDate()}일 ${fmtCallTime(e.lastCallAt)}`;
+    } else {
+      label = e.lastCall || '통화 없음';
+    }
     const danger = ds != null && ds >= 3;
-    return <span style={{color: danger ? '#dc2626' : '#64748b', fontWeight: danger ? 800 : 600}}>{e.lastCall || '통화 없음'}{danger ? ` · ${ds}일째 무응답 ⚠️` : ''}</span>;
+    return <span style={{color: danger ? '#dc2626' : '#64748b', fontWeight: danger ? 800 : 600}}>{label}{danger ? ` · ${ds}일째 무응답 ⚠️` : ''}</span>;
   };
   // 통화기록 날짜 그룹 헤더: 'YYYY-MM-DD' → '6/23(월) · 오늘'
   const formatDateHeader = (dateStr) => {
@@ -352,43 +323,40 @@ export default function App() {
     } catch { setHealthHistory([]); }
   };
 
+  // 실시간 폴링 — 위험 알림(사이드바 🔴 배지)은 항상, 마지막통화는 필요한 페이지에서만.
+  // 15초 주기(서버 부하·비용 절감) + 페이지 진입 시 즉시 1회 갱신.
   useEffect(() => {
-  const t = setInterval(() => {
-    fetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
+    const pollAlerts = () => fetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
       setAlertsData(data);
       const unread = data.filter(a=>!a.read);
       setAlertCount(unread.length);
       // 어르신별 "가장 최근" 위험 알림만 반영 (data는 최신순 → 이름별 첫 항목이 최신)
       const latestByName = {};
       unread.forEach(a => {
-        if ((a.level === 'critical' || a.level === 'urgent') && !latestByName[a.name]) {
-          latestByName[a.name] = a;
-        }
+        if ((a.level === 'critical' || a.level === 'urgent') && !latestByName[a.name]) latestByName[a.name] = a;
       });
       setElders(prev => prev.map(e => {
         const a = latestByName[e.name];
         if (!a) return e;
-        // keyword 필드 없으면(구버전 서버) message의 "감지: 뒤"를 파싱
         const kw = a.keyword || (a.message ? a.message.split('감지:').pop().trim() : '') || a.message;
-        return {
-          ...e,
-          status: a.level === 'critical' ? 'danger' : 'warning',
-          keyword: kw,
-          keywordAt: a.timestamp,
-        };
+        return { ...e, status: a.level === 'critical' ? 'danger' : 'warning', keyword: kw, keywordAt: a.timestamp };
       }));
     }).catch(()=>{});
-    // 최근 통화 → 마지막 통화 시각/상태 실시간 갱신 (위험 없어도 항상)
-    fetch(`${SERVER_URL}/calls/recent`).then(r=>r.json()).then(calls => {
-      setElders(prev => prev.map(e => {
-        const c = calls[e.name];
-        if (!c) return e;
-        return { ...e, lastCall: formatCallTime(c.timestamp), lastCallAt: c.timestamp, lastCallRisk: c.riskLevel, lastTranscript: c.transcript };
-      }));
-    }).catch(()=>{});
-  }, 5000);
-  return () => clearInterval(t);
-}, []); // eslint-disable-line
+    // 최근 통화 → 마지막 통화 시각/상태 갱신 (마지막통화를 보여주는 페이지에서만)
+    const pollRecent = () => {
+      if (!['dashboard','elders','schedule'].includes(page)) return;
+      fetch(`${SERVER_URL}/calls/recent`).then(r=>r.json()).then(calls => {
+        setElders(prev => prev.map(e => {
+          const c = calls[e.name];
+          if (!c) return e;
+          return { ...e, lastCall: formatCallTime(c.timestamp), lastCallAt: c.timestamp, lastCallRisk: c.riskLevel, lastTranscript: c.transcript };
+        }));
+      }).catch(()=>{});
+    };
+    pollAlerts(); pollRecent();   // 진입 즉시 1회
+    const t = setInterval(() => { pollAlerts(); pollRecent(); }, 15000);
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
 
   const [popData, setPopData]       = useState(null);
   const [popLoading, setPopLoading] = useState(false);
@@ -406,16 +374,8 @@ export default function App() {
 
   useEffect(() => { if (page === 'data' && !popData) fetchPopulation(); }, [page]); // eslint-disable-line
   // 어르신 목록은 서버(Firestore)가 원본 — localStorage 저장 제거 (PC마다 다르게 노는 문제 방지)
-  useEffect(() => { localStorage.setItem('youngsili_callLogs', JSON.stringify(callLogs)); }, [callLogs]);
-  useEffect(() => {
-    setCallLogs(prev => prev.map(log => {
-      if (log.duration === '연결 중...' || log.duration?.includes('재발신') || log.duration?.includes('발신 중')) {
-        return { ...log, duration: '❌ 연결 실패 (미응답)', callStatus: 'failed', risk: 'urgent' };
-      }
-      return log;
-    }));
-  }, []); // eslint-disable-line
-
+  useEffect(() => { try { localStorage.setItem('youngsili_memos', JSON.stringify(memos)); } catch {} }, [memos]);
+  useEffect(() => { localStorage.removeItem('youngsili_callLogs'); }, []);  // 옛 더미 통화로그 1회 정리
   const [mainScript, setMainScript]     = useState(DEFAULT_SCRIPT);
   const [editScript, setEditScript]     = useState(DEFAULT_SCRIPT);
   const [activeAlert, setActiveAlert]   = useState('none');
@@ -424,7 +384,7 @@ export default function App() {
   const [scriptSaved, setScriptSaved]   = useState(false);
   const [fetchingWeather, setFetchingWeather] = useState(false);
   const [weatherTime, setWeatherTime] = useState('');
-  const [weatherData, setWeatherData]   = useState(WEATHER_DATA);
+  const [weatherData, setWeatherData]   = useState({});  // 서버 /weather 실데이터로 로드 (가짜 날씨 폐지)
   const [formErrors, setFormErrors] = useState({});
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [savedAuthCode, setSavedAuthCode] = useState('');
@@ -455,7 +415,9 @@ export default function App() {
     return e ? e.name : (fallback || phone || '미상');
   };
 
-  const getNoResponseDays = (lastCall) => {
+  const getNoResponseDays = (lastCall, lastCallAt) => {
+    const ds = daysSinceCall(lastCallAt);   // 실제 타임스탬프가 있으면 우선 (옛 더미 문자열 무시)
+    if (ds != null) return ds;
     if (!lastCall || lastCall === '아직 없음') return 99;
     if (lastCall.includes('오늘')) return 0;
     if (lastCall.includes('어제')) return 1;
@@ -466,7 +428,7 @@ export default function App() {
 
   const getSolitudeRisk = (elder) => {
     let score = 0;
-    const days = getNoResponseDays(elder.lastCall);
+    const days = getNoResponseDays(elder.lastCall, elder.lastCallAt);
     if (days >= 3) score += 40;
     else if (days >= 1) score += 20;
     if (elder.keyword) score += 25;
@@ -491,7 +453,7 @@ export default function App() {
     .sort((a, b) => {
       if (sortBy === 'status') { const order = { danger: 0, warning: 1, normal: 2 }; return order[a.status] - order[b.status]; }
       if (sortBy === 'risk') { const riskOrder = { high: 0, medium: 1, low: 2 }; return riskOrder[getSolitudeRisk(a).level] - riskOrder[getSolitudeRisk(b).level]; }
-      if (sortBy === 'noResponse') return getNoResponseDays(b.lastCall) - getNoResponseDays(a.lastCall);
+      if (sortBy === 'noResponse') return getNoResponseDays(b.lastCall, b.lastCallAt) - getNoResponseDays(a.lastCall, a.lastCallAt);
       if (sortBy === 'age') return b.age - a.age;
       if (sortBy === 'name') return (a.name||'').localeCompare(b.name||'');
       return 0;
@@ -603,7 +565,6 @@ export default function App() {
         const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
         setBulkDone(prev => [...prev, { id: elder.id, callId: data.callId, success: data.success, status: data.success ? 'ringing' : 'failed' }]);
         if (data.success) {
-          setCallLogs(prev => [{ id: Date.now(), elderId: elder.id, date:'오늘', time:timeStr, duration:'📱 앱 수신 대기', keywords:[], risk:'normal', type:'manual', callStatus:'ringing' }, ...prev]);
           setElders(prev => prev.map(e => e.id===elder.id ? {...e, lastCall:`오늘 ${timeStr}`} : e));
         }
       } catch {
@@ -668,7 +629,6 @@ export default function App() {
   // ── 단건 전화 (FCM 앱 푸시) ──
   const makeCall = async elder => {
     setCallModal(null); setCalling(elder.id); setCallResult(null);
-    const logId = Date.now();
     const now = new Date();
     const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
     try {
@@ -685,7 +645,6 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success) {
-        setCallLogs(prev => [{id:logId, elderId:elder.id, date:'오늘', time:timeStr, duration:'📱 앱 수신 대기', keywords:[], risk:'normal', type:'manual', callStatus:'ringing'},...prev]);
         setElders(prev => prev.map(e => e.id===elder.id?{...e,lastCall:`오늘 ${timeStr}`}:e));
         if (selected?.id===elder.id) setSelected(prev=>({...prev,lastCall:`오늘 ${timeStr}`}));
         setCallResult({elderId:elder.id, status:'success', message:`📱 ${elder.name} ${elder.title||'어르신'} 앱으로 수신 알림 전송 완료!`});
@@ -721,10 +680,31 @@ export default function App() {
   const deleteElder = id => { if(window.confirm('정말 삭제하시겠습니까?')){const tgt=elders.find(e=>e.id===id);setElders(prev=>prev.filter(e=>e.id!==id));if(tgt?.phone)fetch(`${SERVER_URL}/elders/${tgt.phone.replace(/[^0-9]/g,'')}`,{method:'DELETE'}).catch(()=>{});setPage('elders');setSelected(null);} };
   const inp = field => ({ value:form[field]??'', onChange:e=>setForm(f=>({...f,[field]:e.target.value})), className:`form-input ${formErrors[field]?'input-error':''}` });
 
-  const totalCalls = callLogs.length;
-  const criticalCount = callLogs.filter(c=>c.risk==='critical').length;
-  const urgentCount   = callLogs.filter(c=>c.risk==='urgent').length;
-  const manualCount   = callLogs.filter(c=>c.type==='manual').length;
+  // 다음(카카오) 우편번호 검색 → 주소 자동입력 + 관할구역(시/구) 자동추출
+  const openAddressSearch = () => {
+    const SIDO = {'서울특별시':'서울','부산광역시':'부산','대구광역시':'대구','인천광역시':'인천','광주광역시':'광주','대전광역시':'대전','울산광역시':'울산','세종특별자치시':'세종','경기도':'경기','강원특별자치도':'강원','강원도':'강원','충청북도':'충북','충청남도':'충남','전북특별자치도':'전북','전라북도':'전북','전라남도':'전남','경상북도':'경북','경상남도':'경남','제주특별자치도':'제주'};
+    const run = () => {
+      new window.daum.Postcode({ oncomplete: (data) => {
+        const sido = SIDO[data.sido] || data.sido;
+        setForm(f => ({ ...f, address: data.roadAddress || data.address, region: `${sido} ${data.sigungu}`.trim() }));
+        setFormErrors(e => ({ ...e, address: '' }));
+      }}).open();
+    };
+    if (window.daum && window.daum.Postcode) return run();
+    const s = document.createElement('script');
+    s.src = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+    s.onload = run;
+    s.onerror = () => window.alert('주소 검색을 불러오지 못했습니다. 네트워크를 확인해 주세요.');
+    document.body.appendChild(s);
+  };
+
+  // 홈 "오늘 통화 현황" — 서버 실통화(callsHistory)에서 오늘 날짜만 집계 (더미 폐지)
+  const _todayStr = new Date().toLocaleDateString('sv-SE');  // YYYY-MM-DD (로컬/KST)
+  const todayCalls = callsHistory.filter(c => c.date === _todayStr);
+  const totalCalls = todayCalls.length;
+  const criticalCount = todayCalls.filter(c=>c.riskLevel==='critical').length;
+  const urgentCount   = todayCalls.filter(c=>c.riskLevel==='urgent'||c.riskLevel==='warning').length;
+  const normalCount   = todayCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length;
 
   // ── 로그인 가드: 인증 안 된 사용자는 대시보드(어르신 정보) 접근 불가 ──
   if (authEnabled && !authChecked) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b'}}>로딩 중…</div>;
@@ -802,7 +782,7 @@ export default function App() {
         </header>
 
         <div className="content">
-          <PageErrorBoundary resetKey={page}>
+          <PageErrorBoundary key={page}>
 
           {page==='dashboard' && (
             <div className="fade-in">
@@ -820,7 +800,7 @@ export default function App() {
                   });
                 // 2) 미응답 (어르신 데이터 기반)
                 elders.forEach(e => {
-                  const days = getNoResponseDays(e.lastCall);
+                  const days = getNoResponseDays(e.lastCall, e.lastCallAt);
                   // 미통화(99 sentinel=신규/통화이력 없음)는 '미응답'이 아님 → 긴급 알림 제외. 실제 무응답(3~98일)만 알림.
                   if (days >= 3 && days < 99) alerts.push({ elder: e, type: 'noResponse', msg: `${days}일째 미응답 → 즉시 확인 필요`, color: '#ef4444', bg: '#fef2f2', icon: '📵' });
                 });
@@ -860,7 +840,7 @@ export default function App() {
                       <div className="call-stat"><div className="call-num">{totalCalls}건</div><div className="call-label">총 통화</div></div>
                       <div className="call-stat"><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
                       <div className="call-stat"><div className="call-num" style={{color:'#f59e0b'}}>{urgentCount}건</div><div className="call-label">주의 키워드</div></div>
-                      <div className="call-stat"><div className="call-num" style={{color:'#3b82f6'}}>{manualCount}건</div><div className="call-label">수동 전화</div></div>
+                      <div className="call-stat"><div className="call-num" style={{color:'#22c55e'}}>{normalCount}건</div><div className="call-label">정상 통화</div></div>
                     </div>
                   </div>
 
@@ -933,7 +913,7 @@ export default function App() {
                   <tbody>
                     {elders.sort((a,b)=>{const order={danger:0,warning:1,normal:2};return order[a.status]-order[b.status];}).map(elder=>{
                       const risk = getSolitudeRisk(elder);
-                      const days = getNoResponseDays(elder.lastCall);
+                      const days = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                       return (
                         <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
                           <td><div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:18}}>{elder.gender==='female'?'👵':'👴'}</span><span style={{fontWeight:700}}>{elder.name}</span>{elder.keyword&&<span className="keyword-tag">"{elder.keyword}"</span>}</div></td>
@@ -1089,7 +1069,7 @@ export default function App() {
                   {filteredElders.length === 0 && <div className="empty-result">검색 결과가 없습니다 🔍</div>}
                   {filteredElders.map(elder => {
                     const risk = getSolitudeRisk(elder);
-                    const noResponseDays = getNoResponseDays(elder.lastCall);
+                    const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                     return (
                       <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)}>
                         <div className="elder-top"><div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
@@ -1114,7 +1094,7 @@ export default function App() {
                     {filteredElders.length === 0 && <tr><td colSpan={11} style={{textAlign:'center',color:'#94a3b8',padding:32}}>검색 결과가 없습니다 🔍</td></tr>}
                     {filteredElders.map(elder => {
                       const risk = getSolitudeRisk(elder);
-                      const noResponseDays = getNoResponseDays(elder.lastCall);
+                      const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                       return (
                         <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
                           <td><div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:20}}>{elder.gender==='female'?'👵':'👴'}</span><strong>{elder.name}</strong></div></td>
@@ -1574,7 +1554,7 @@ export default function App() {
                 <button className="back-btn" onClick={()=>{setPage('elders');setSelected(null);}}>← 목록으로</button>
                 <div className="detail-actions"><button className="btn-secondary" onClick={()=>openEdit(selected)}>✏️ 정보 수정</button><button className="btn-danger-outline" onClick={()=>deleteElder(selected.id)}>🗑️ 삭제</button></div>
               </div>
-              {callResult?.elderId===selected.id&&<div className={`call-result-banner ${callResult.status}`}>{callResult.status==='success'?'✅':'❌'} {callResult.message}</div>}
+              {callResult&&callResult.elderId===selected.id&&<div className={`call-result-banner ${callResult.status}`}>{callResult.status==='success'?'✅':'❌'} {callResult.message}</div>}
               <div className="detail-grid">
                 <div className="detail-card">
                   <div className="detail-avatar">{(selected.name||'?')[0]}</div>
@@ -1585,7 +1565,7 @@ export default function App() {
                     <button className={`btn-call-lg ${calling===selected.id?'btn-calling':''} ${!selected.callActive?'btn-disabled':''}`} onClick={()=>selected.callActive&&setCallModal(selected)} disabled={calling===selected.id||!selected.callActive}>{calling===selected.id?'⏳ 발신 중...':'📱 앱으로 전화하기'}</button>
                     <button className={`toggle-btn-lg ${selected.callActive?'toggle-active':'toggle-paused'}`} onClick={()=>toggleCallActive(selected.id)}>{selected.callActive?'⏸ 자동전화 중단':'▶ 자동전화 재개'}</button>
                   </div>
-                  {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',selected.address],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle, selected.callDays)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
+                  {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',`${selected.address||''} ${selected.addressDetail||''}`.trim()],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle, selected.callDays)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
                 </div>
                 <div className="detail-right">
                   {selected.authCode&&<div className="section" style={{background:'#eff6ff',marginBottom:12}}><div className="section-title" style={{marginBottom:6}}>📱 앱 인증코드</div><div style={{fontSize:24,fontWeight:900,letterSpacing:3,color:'#1d4ed8'}}>{selected.authCode}</div><div style={{fontSize:13,color:'#64748b',marginTop:4}}>어르신 폰 앱 설정에서 전화번호와 함께 입력</div></div>}
@@ -1593,7 +1573,6 @@ export default function App() {
                   <div className="section">
                     <div className="script-editor-header" style={{marginBottom:12}}>
                       <div className="section-title" style={{marginBottom:0}}>📞 통화 기록</div>
-                      <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>{ if(window.confirm('이 어르신의 통화 기록을 모두 삭제할까요?\n(되돌릴 수 없습니다)')) setCallLogs(prev=>prev.filter(l=>l.elderId!==selected.id)); }}>🗑️ 이전 기록 정리</button>
                     </div>
                     {(()=>{
                       // 통화기록 메뉴와 동일한 서버 데이터(callsHistory)에서 이 어르신만 필터 (이름 또는 전화번호 매칭)
@@ -1633,12 +1612,13 @@ export default function App() {
                   <div className="form-field"><label className="form-label">이름 <span className="required">*</span></label><input {...inp('name')} placeholder="예: 김순자"/>{formErrors.name&&<div className="error-msg">{formErrors.name}</div>}</div>
                   <div className="form-field"><label className="form-label">나이 <span className="required">*</span></label><input {...inp('age')} type="number" placeholder="예: 78"/>{formErrors.age&&<div className="error-msg">{formErrors.age}</div>}</div>
                   <div className="form-field"><label className="form-label">전화번호 <span className="required">*</span></label><input {...inp('phone')} placeholder="예: 010-1234-5678"/>{formErrors.phone&&<div className="error-msg">{formErrors.phone}</div>}</div>
-                  <div className="form-field"><label className="form-label">관할 구역</label><select {...inp('region')} className="form-input">{['대구 북구','대구 달서구','대구 수성구','대구 중구','대구 동구','대구 서구','대구 남구','대구 달성군'].map(r=><option key={r} value={r}>{r}</option>)}</select></div>
-                  <div className="form-field full-width"><label className="form-label">주소 <span className="required">*</span></label><input {...inp('address')} placeholder="예: 대구 북구 침산동 123"/>{formErrors.address&&<div className="error-msg">{formErrors.address}</div>}</div>
+                  <div className="form-field"><label className="form-label">관할 구역 <span style={{fontSize:11,color:'#94a3b8'}}>(주소에서 자동)</span></label><input className="form-input" value={form.region||''} readOnly placeholder="주소 검색 시 자동 입력" style={{background:'#f8fafc'}}/></div>
+                  <div className="form-field full-width"><label className="form-label">주소 <span className="required">*</span></label><div style={{display:'flex',gap:8}}><input {...inp('address')} placeholder="🔍 주소 검색을 눌러 선택" style={{flex:1}}/><button type="button" className="btn-secondary" onClick={openAddressSearch} style={{whiteSpace:'nowrap',padding:'0 18px',fontWeight:700}}>🔍 주소 검색</button></div>{formErrors.address&&<div className="error-msg">{formErrors.address}</div>}</div>
+                  <div className="form-field full-width"><label className="form-label">상세 주소 <span style={{fontSize:11,color:'#94a3b8'}}>(아파트 동/호수 등)</span></label><input {...inp('addressDetail')} placeholder="예: 101동 1202호"/></div>
                   <div className="form-field"><label className="form-label">지병</label><input {...inp('disease')} placeholder="예: 고혈압, 당뇨"/></div>
                   <div className="form-field"><label className="form-label">복용 중인 약</label><input {...inp('medicine')} placeholder="예: 혈압약"/></div>
                   <div className="form-field full-width"><label className="form-label">거동 상태</label><div className="radio-group">{['독립보행 가능','보조기구 필요','거동 불가'].map(opt=><label key={opt} className={`radio-option ${form.mobility===opt?'radio-selected':''}`}><input type="radio" name="mobility" value={opt} checked={form.mobility===opt} onChange={e=>setForm(f=>({...f,mobility:e.target.value}))} style={{display:'none'}}/>{opt}</label>)}</div></div>
-                  <div className="form-field full-width"><label className="form-label">담당 복지사</label><div style={{display:'flex',gap:8}}><select {...inp('caregiver')} style={{flex:1}}><option value="">선택 안 함</option>{caregivers.map(c=><option key={c} value={c}>{c}</option>)}</select><button type="button" onClick={addCaregiver} style={{padding:'0 16px',borderRadius:8,border:'1px solid #2563eb',background:'#eff6ff',color:'#1d4ed8',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>+ 추가</button></div></div>
+                  <div className="form-field full-width"><label className="form-label">담당 복지사</label><div style={{display:'flex',gap:8}}><select {...inp('caregiver')} style={{flex:1}}><option value="">선택 안 함</option>{[...new Set([...caregivers, ...elders.map(e=>e.caregiver).filter(Boolean)])].map(c=><option key={c} value={c}>{c}</option>)}</select><button type="button" onClick={addCaregiver} style={{padding:'0 16px',borderRadius:8,border:'1px solid #2563eb',background:'#eff6ff',color:'#1d4ed8',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>+ 추가</button></div></div>
                   <div className="form-field full-width"><label className="form-label">복지사 전화번호</label><input {...inp('caregiverPhone')} placeholder="010-0000-0000" /></div>
                 </div><div className="form-footer"><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
                 {formStep===2&&(<div className="fade-in"><div className="form-section-title">👨‍👩‍👧 보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">💡 위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
