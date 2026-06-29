@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Component } from 'react';
 import './App.css';
 import { auth, authEnabled } from './firebase';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import HelpGuide, { LATEST_NOTICE } from './HelpGuide';
 
 const SERVER_URL = 'https://youngsili-server-production.up.railway.app';
 
@@ -33,7 +34,7 @@ const RISK_CONFIG = {
   normal:   { label: '정상', color: '#22c55e' },
 };
 // SPA 페이지 목록 (URL 해시 라우팅 — F5 시 현재 페이지 유지)
-const PAGES = ['dashboard','elders','schedule','script','calls','health','report','data','admin'];
+const PAGES = ['dashboard','elders','schedule','script','calls','health','report','data','admin','help'];
 
 // 페이지 렌더 오류가 앱 전체를 흰 화면으로 만들지 않게 방어. 오류 시 메시지 표시 + 메뉴 이동(resetKey) 시 복구.
 class PageErrorBoundary extends Component {
@@ -124,6 +125,9 @@ export default function App() {
   const [newAcct, setNewAcct]     = useState({ email:'', password:'', orgId:'', role:'admin' });
   const [adminMsg, setAdminMsg]   = useState('');
   const isSuper = me?.role === 'superadmin';
+  // 도움말 '업데이트 소식' 읽음 추적 → 새 소식 있으면 메뉴에 🔴
+  const [helpSeen, setHelpSeen] = useState(() => { try { return Number(localStorage.getItem('youngsili_help_seen') || 0); } catch { return 0; } });
+  const hasNewNotice = LATEST_NOTICE > helpSeen;
 
   // ── 통계(리포트) 상태 ──
   const [statsRange, setStatsRange]       = useState('month'); // week | month | 3month | custom
@@ -314,6 +318,7 @@ export default function App() {
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
   useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'admin' && isSuper) { fetchOrgs(); fetchAccounts(); setAdminMsg(''); } }, [page, isSuper]); // eslint-disable-line
+  useEffect(() => { if (page === 'help' && hasNewNotice) { try { localStorage.setItem('youngsili_help_seen', String(LATEST_NOTICE)); } catch {} setHelpSeen(LATEST_NOTICE); } }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'elders' || page === 'dashboard' || page === 'calls') fetchElders(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
@@ -824,6 +829,7 @@ export default function App() {
             {id:'report',    icon:'📊', label:'리포트 / 통계'},
             {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
             ...(isSuper ? [{id:'admin', icon:'🏢', label:'기관 관리'}] : []),
+            {id:'help',      icon:'📖', label: hasNewNotice ? '도움말 🔴' : '도움말'},
           ].map(item=>(
             <button key={item.id}
               className={`nav-item ${(page===item.id||(page==='detail'&&item.id==='elders')||(page==='register'&&item.id==='elders'))?'active':''}`}
@@ -845,7 +851,7 @@ export default function App() {
         <header className="header">
           <div className="header-title">
             {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}
-            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='admin'&&'🏢 기관 관리 (운영자)'}
+            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='admin'&&'🏢 기관 관리 (운영자)'}{page==='help'&&'📖 사용 설명서'}
             {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
           </div>
           <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
@@ -1667,6 +1673,8 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {page==='help' && <HelpGuide orgCode={me?.orgCode} />}
 
           {page==='admin' && (
             <div className="fade-in">
