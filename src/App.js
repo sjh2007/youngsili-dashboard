@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Component } from 'react';
 import './App.css';
 import { auth, authEnabled } from './firebase';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
@@ -46,6 +46,24 @@ const RISK_CONFIG = {
 };
 // SPA 페이지 목록 (URL 해시 라우팅 — F5 시 현재 페이지 유지)
 const PAGES = ['dashboard','elders','schedule','script','calls','health','report','data'];
+
+// 페이지 렌더 오류가 앱 전체를 흰 화면으로 만들지 않게 방어. 오류 시 메시지 표시 + 메뉴 이동(resetKey) 시 복구.
+class PageErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidUpdate(prev) { if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null }); }
+  render() {
+    if (this.state.error) return (
+      <div style={{padding:40,textAlign:'center'}}>
+        <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
+        <h3 style={{color:'#dc2626',margin:'0 0 8px'}}>이 페이지를 표시하는 중 오류가 발생했습니다</h3>
+        <pre style={{whiteSpace:'pre-wrap',fontSize:12,color:'#64748b',background:'#f8fafc',padding:12,borderRadius:8,textAlign:'left',overflow:'auto'}}>{String((this.state.error && this.state.error.message) || this.state.error)}</pre>
+        <p style={{color:'#64748b',fontSize:14}}>다른 메뉴를 누르거나 새로고침(F5) 해주세요.</p>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'대구 북구', address:'', phone:'', caregiver:'', caregiverPhone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
 
 const TITLE_OPTIONS = {
@@ -469,13 +487,13 @@ export default function App() {
     .filter(e => e.approved !== false)   // 승인 대기(앱 신청)는 별도 '승인 대기' 섹션에 표시
     .filter(e => filter === 'all' || e.status === filter)
     .filter(e => regionFilter === '전체' || e.region === regionFilter)
-    .filter(e => searchName === '' || e.name.includes(searchName))
+    .filter(e => searchName === '' || (e.name||'').includes(searchName))
     .sort((a, b) => {
       if (sortBy === 'status') { const order = { danger: 0, warning: 1, normal: 2 }; return order[a.status] - order[b.status]; }
       if (sortBy === 'risk') { const riskOrder = { high: 0, medium: 1, low: 2 }; return riskOrder[getSolitudeRisk(a).level] - riskOrder[getSolitudeRisk(b).level]; }
       if (sortBy === 'noResponse') return getNoResponseDays(b.lastCall) - getNoResponseDays(a.lastCall);
       if (sortBy === 'age') return b.age - a.age;
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      if (sortBy === 'name') return (a.name||'').localeCompare(b.name||'');
       return 0;
     });
 
@@ -548,7 +566,7 @@ export default function App() {
 
   const smartElders = (() => {
     if (smartFilter==='danger')  return elders.filter(e=>e.status==='danger'||e.status==='warning');
-    if (smartFilter==='noCall')  return elders.filter(e=>e.lastCall==='아직 없음'||e.lastCall.includes('어제')||e.lastCall.includes('2일'));
+    if (smartFilter==='noCall')  return elders.filter(e=>e.lastCall==='아직 없음'||(e.lastCall||'').includes('어제')||(e.lastCall||'').includes('2일'));
     if (smartFilter==='active')  return elders.filter(e=>e.callActive);
     return elders;
   })();
@@ -784,6 +802,7 @@ export default function App() {
         </header>
 
         <div className="content">
+          <PageErrorBoundary resetKey={page}>
 
           {page==='dashboard' && (
             <div className="fade-in">
@@ -924,7 +943,7 @@ export default function App() {
                           <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
                           <td>{days===0?<span style={{color:'#22c55e',fontWeight:700,fontSize:12}}>정상</span>:<span style={{color:days>=3?'#ef4444':'#f59e0b',fontWeight:700,fontSize:12}}>{days>=99?'미통화':`${days}일`}</span>}</td>
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
-                          <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
+                          <td><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div></td>
                           <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'⏳':'📱 전화'}</button></td>
                         </tr>
                       );
@@ -941,7 +960,7 @@ export default function App() {
                 <div className="bulk-left">
                   <div className="bulk-title">스마트 선택</div>
                   <div className="smart-filters">
-                    {[{id:'all',label:'전체',count:elders.length},{id:'danger',label:'⚠️ 위험/주의만',count:elders.filter(e=>e.status!=='normal').length},{id:'noCall',label:'📵 미통화',count:elders.filter(e=>e.lastCall==='아직 없음'||e.lastCall.includes('어제')).length},{id:'active',label:'✅ 활성만',count:elders.filter(e=>e.callActive).length}].map(f=>(
+                    {[{id:'all',label:'전체',count:elders.length},{id:'danger',label:'⚠️ 위험/주의만',count:elders.filter(e=>e.status!=='normal').length},{id:'noCall',label:'📵 미통화',count:elders.filter(e=>e.lastCall==='아직 없음'||(e.lastCall||'').includes('어제')).length},{id:'active',label:'✅ 활성만',count:elders.filter(e=>e.callActive).length}].map(f=>(
                       <button key={f.id} className={`smart-btn ${smartFilter===f.id?'smart-active':''}`} onClick={()=>applySmartFilter(f.id)}>{f.label} <span className="filter-count">{f.count}</span></button>
                     ))}
                   </div>
@@ -977,7 +996,7 @@ export default function App() {
                       const isCurrent = bulkCurrent===elder.id;
                       return (
                         <div key={elder.id} className={`bulk-result-item ${isCurrent?'bulk-current':done?done.success?'bulk-success':'bulk-fail':''}`}>
-                          <div className="table-avatar">{elder.name[0]}</div>
+                          <div className="table-avatar">{(elder.name||'?')[0]}</div>
                           <span className="bulk-name">{elder.name}</span>
                           <span className="bulk-phone">{elder.phone}</span>
                           <span className="bulk-status-icon">{
@@ -1014,13 +1033,13 @@ export default function App() {
                     return (
                       <tr key={elder.id} className={`${checked.includes(elder.id)?'row-checked':''} ${done?done.success?'row-success':'row-fail':''}`}>
                         <td><input type="checkbox" checked={checked.includes(elder.id)} onChange={()=>toggleCheck(elder.id)} className="cb"/></td>
-                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{elder.name[0]}</div><div onClick={()=>openEdit(elder)} style={{cursor:'pointer'}} title="클릭 → 어르신 정보 수정"><div style={{fontWeight:700,color:'#1d4ed8'}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age}세</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'✅':'❌'}</span>}</div></td>
+                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><div onClick={()=>openEdit(elder)} style={{cursor:'pointer'}} title="클릭 → 어르신 정보 수정"><div style={{fontWeight:700,color:'#1d4ed8'}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age}세</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'✅':'❌'}</span>}</div></td>
                         <td style={{fontSize:13}}>{elder.phone}</td>
                         <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                         <td><span className="cycle-badge">{cycleLabel(elder.callCycle, elder.callDays)}</span></td>
                         <td><span className="time-badge">{elder.callTime}</span></td>
                         <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
-                        <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
+                        <td><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div></td>
                         <td><button className={`toggle-btn ${elder.callActive?'toggle-active':'toggle-paused'}`} onClick={()=>toggleCallActive(elder.id)}>{elder.callActive?'⏸ 중단':'▶ 재개'}</button></td>
                       </tr>
                     );
@@ -1073,7 +1092,7 @@ export default function App() {
                     const noResponseDays = getNoResponseDays(elder.lastCall);
                     return (
                       <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)}>
-                        <div className="elder-top"><div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
+                        <div className="elder-top"><div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
                         <div className="elder-name">{elder.name}</div>
                         <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
                         {elder.caregiver && <div className="elder-info" style={{color:'#1d4ed8',fontWeight:600}}>👤 담당: {elder.caregiver}</div>}
@@ -1106,7 +1125,7 @@ export default function App() {
                           <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
                           <td>{noResponseDays===0?<span style={{color:'#22c55e',fontWeight:700}}>정상</span>:<span style={{color:noResponseDays>=3?'#ef4444':'#f59e0b',fontWeight:700}}>{noResponseDays>=99?'미통화':`${noResponseDays}일`}</span>}</td>
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
-                          <td><div className={`status-badge badge-${elder.status}`}>{STATUS_CONFIG[elder.status].label}</div></td>
+                          <td><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div></td>
                           <td>{elder.keyword ? <span className="keyword-tag">"{elder.keyword}"</span> : <span style={{color:'#9ca3af',fontSize:12}}>없음</span>}</td>
                           <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'⏳':'📱'}</button></td>
                         </tr>
@@ -1219,7 +1238,7 @@ export default function App() {
                 <div className="script-preview">
                   {previewElder ? (
                     <div>
-                      <div className="preview-header"><div className="preview-avatar">{previewElder.name[0]}</div><div><div className="preview-name">{previewElder.name} 어르신</div><div className="preview-region">{previewElder.region} · {previewElder.phone}</div></div>{weatherData[previewElder.region]?.alertText && <div className="weather-badge">{weatherData[previewElder.region].alertText}</div>}</div>
+                      <div className="preview-header"><div className="preview-avatar">{(previewElder.name||'?')[0]}</div><div><div className="preview-name">{previewElder.name} 어르신</div><div className="preview-region">{previewElder.region} · {previewElder.phone}</div></div>{weatherData[previewElder.region]?.alertText && <div className="weather-badge">{weatherData[previewElder.region].alertText}</div>}</div>
                       <div className="preview-divider"/>
                       <div className="preview-script">{buildPreview(previewElder).split('\n').map((line, i) => (<div key={i} className="preview-line"><span className="preview-dot">🔊</span><span>{line}</span></div>))}</div>
                     </div>
@@ -1247,12 +1266,12 @@ export default function App() {
                   <option value="">전체 어르신</option>
                   {elders.map(e=>{const k=String(e.phone||'').replace(/\D/g,'');return <option key={k} value={k}>{e.name}</option>;})}
                 </select>
-                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||nameByPhone(c.phone,c.elderName).includes(callsSearch))).length}건</span>
+                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch))).length}건</span>
               </div>
               {callsHistory.length===0 ? (
                 <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
               ) : (()=>{
-                const src = callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||nameByPhone(c.phone,c.elderName).includes(callsSearch)));
+                const src = callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch)));
                 const grouped = {};
                 src.forEach(c=>{ const dk=c.date||(c.at?c.at.slice(0,10):'미상'); (grouped[dk]=grouped[dk]||[]).push(c); });
                 return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,logs])=>(
@@ -1558,10 +1577,10 @@ export default function App() {
               {callResult?.elderId===selected.id&&<div className={`call-result-banner ${callResult.status}`}>{callResult.status==='success'?'✅':'❌'} {callResult.message}</div>}
               <div className="detail-grid">
                 <div className="detail-card">
-                  <div className="detail-avatar">{selected.name[0]}</div>
+                  <div className="detail-avatar">{(selected.name||'?')[0]}</div>
                   <div className="detail-name">{selected.name}</div>
                   <div className="detail-sub">{selected.age}세 · {selected.region}</div>
-                  <div className={`status-badge badge-${selected.status} mt16`}>{STATUS_CONFIG[selected.status].label}</div>
+                  <div className={`status-badge badge-${selected.status} mt16`}>{(STATUS_CONFIG[selected.status]||STATUS_CONFIG.normal).label}</div>
                   <div className="call-action-box">
                     <button className={`btn-call-lg ${calling===selected.id?'btn-calling':''} ${!selected.callActive?'btn-disabled':''}`} onClick={()=>selected.callActive&&setCallModal(selected)} disabled={calling===selected.id||!selected.callActive}>{calling===selected.id?'⏳ 발신 중...':'📱 앱으로 전화하기'}</button>
                     <button className={`toggle-btn-lg ${selected.callActive?'toggle-active':'toggle-paused'}`} onClick={()=>toggleCallActive(selected.id)}>{selected.callActive?'⏸ 자동전화 중단':'▶ 자동전화 재개'}</button>
@@ -1628,6 +1647,7 @@ export default function App() {
             </div>
           )}
 
+          </PageErrorBoundary>
         </div>
       </main>
     </div>
