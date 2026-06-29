@@ -33,7 +33,7 @@ const RISK_CONFIG = {
   normal:   { label: '정상', color: '#22c55e' },
 };
 // SPA 페이지 목록 (URL 해시 라우팅 — F5 시 현재 페이지 유지)
-const PAGES = ['dashboard','elders','schedule','script','calls','health','report','data'];
+const PAGES = ['dashboard','elders','schedule','script','calls','health','report','data','admin'];
 
 // 페이지 렌더 오류가 앱 전체를 흰 화면으로 만들지 않게 방어. 오류 시 메시지 표시 + 메뉴 이동(resetKey) 시 복구.
 class PageErrorBoundary extends Component {
@@ -116,6 +116,14 @@ export default function App() {
   const [alertsData, setAlertsData]     = useState([]);
   const [alertCount, setAlertCount]     = useState(0);
   const [healthLoading, setHealthLoading] = useState(false);
+  // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
+  const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
+  const [orgs, setOrgs]           = useState([]);
+  const [accounts, setAccounts]   = useState([]);
+  const [newOrgName, setNewOrgName] = useState('');
+  const [newAcct, setNewAcct]     = useState({ email:'', password:'', orgId:'', role:'admin' });
+  const [adminMsg, setAdminMsg]   = useState('');
+  const isSuper = me?.role === 'superadmin';
 
   // ── 통계(리포트) 상태 ──
   const [statsRange, setStatsRange]       = useState('month'); // week | month | 3month | custom
@@ -238,6 +246,48 @@ export default function App() {
     if (isNew) authFetch(`${SERVER_URL}/settings/caregivers`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ list: next }) }).catch(()=>{});
   };
 
+  // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
+  const fetchMe = async () => {
+    try { const r = await authFetch(`${SERVER_URL}/me`); if (r.ok) setMe(await r.json()); } catch {}
+  };
+  const fetchOrgs = async () => {
+    try { const r = await authFetch(`${SERVER_URL}/admin/orgs`); const d = await r.json(); setOrgs(Array.isArray(d) ? d : []); } catch { setOrgs([]); }
+  };
+  const fetchAccounts = async () => {
+    try { const r = await authFetch(`${SERVER_URL}/admin/users`); const d = await r.json(); setAccounts(Array.isArray(d) ? d : []); } catch { setAccounts([]); }
+  };
+  const createOrg = async () => {
+    const name = newOrgName.trim();
+    if (!name) { setAdminMsg('기관명을 입력하세요'); return; }
+    setAdminMsg('생성 중…');
+    try {
+      const r = await authFetch(`${SERVER_URL}/admin/orgs`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+      const d = await r.json();
+      if (d.success) { setAdminMsg(`✅ "${name}" 생성됨 · 기관코드: ${d.code}`); setNewOrgName(''); fetchOrgs(); }
+      else setAdminMsg('❌ ' + (d.error || '생성 실패'));
+    } catch { setAdminMsg('❌ 네트워크 오류'); }
+  };
+  const createAccount = async () => {
+    const { email, password, orgId, role } = newAcct;
+    if (!email || !password || !orgId) { setAdminMsg('이메일·비밀번호·기관을 모두 입력하세요'); return; }
+    setAdminMsg('생성 중…');
+    try {
+      const r = await authFetch(`${SERVER_URL}/admin/users`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, password, orgId, role }) });
+      const d = await r.json();
+      if (d.success) { setAdminMsg(`✅ 계정 생성됨: ${email}`); setNewAcct({ email:'', password:'', orgId:'', role:'admin' }); fetchAccounts(); }
+      else setAdminMsg('❌ ' + (d.error || '생성 실패'));
+    } catch { setAdminMsg('❌ 네트워크 오류'); }
+  };
+  const deleteAccount = async (uid, email) => {
+    if (!window.confirm(`계정 "${email}"을(를) 삭제할까요?\n(어르신 데이터는 유지됩니다)`)) return;
+    try {
+      const r = await authFetch(`${SERVER_URL}/admin/users/${uid}`, { method:'DELETE' });
+      const d = await r.json();
+      if (d.success) { setAdminMsg(`🗑️ 삭제됨: ${email}`); fetchAccounts(); }
+      else setAdminMsg('❌ ' + (d.error || '삭제 실패'));
+    } catch { setAdminMsg('❌ 네트워크 오류'); }
+  };
+
   const fetchHealth = async () => {
     setHealthLoading(true);
     try {
@@ -262,7 +312,8 @@ export default function App() {
 
   // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
-  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); }, [authUser]); // eslint-disable-line
+  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); }, [authUser]); // eslint-disable-line
+  useEffect(() => { if (page === 'admin' && isSuper) { fetchOrgs(); fetchAccounts(); setAdminMsg(''); } }, [page, isSuper]); // eslint-disable-line
   useEffect(() => { if (page === 'elders' || page === 'dashboard' || page === 'calls') fetchElders(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
@@ -772,6 +823,7 @@ export default function App() {
             {id:'health', icon:'💊', label: alertCount > 0 ? `건강 상태 🔴${alertCount}` : '건강 상태'},
             {id:'report',    icon:'📊', label:'리포트 / 통계'},
             {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
+            ...(isSuper ? [{id:'admin', icon:'🏢', label:'기관 관리'}] : []),
           ].map(item=>(
             <button key={item.id}
               className={`nav-item ${(page===item.id||(page==='detail'&&item.id==='elders')||(page==='register'&&item.id==='elders'))?'active':''}`}
@@ -783,7 +835,7 @@ export default function App() {
         <div className="sidebar-footer">
           <div className="worker-info">
             <div className="worker-avatar">복</div>
-            <div><div className="worker-name">김복지 사회복지사</div><div className="worker-region">{authEnabled&&authUser?authUser.email:'대구광역시'}</div></div>
+            <div><div className="worker-name">{me?.orgName || (isSuper ? '운영자' : '복지사 관리')}</div><div className="worker-region">{authEnabled&&authUser?authUser.email:'대구광역시'}{isSuper?' · 운영자':''}</div></div>
           </div>
           {authEnabled&&authUser&&<button onClick={doLogout} style={{marginTop:10,width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #cbd5e1',background:'#fff',color:'#475569',fontSize:13,fontWeight:600,cursor:'pointer'}}>로그아웃</button>}
         </div>
@@ -793,7 +845,7 @@ export default function App() {
         <header className="header">
           <div className="header-title">
             {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}
-            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}
+            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='admin'&&'🏢 기관 관리 (운영자)'}
             {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
           </div>
           <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
@@ -1613,6 +1665,82 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {page==='admin' && (
+            <div className="fade-in">
+              {!isSuper ? (
+                <div className="section" style={{textAlign:'center',color:'#94a3b8',padding:40}}>운영자 전용 화면입니다.</div>
+              ) : (
+              <>
+                {adminMsg && <div className="success-banner" style={{marginBottom:16}}>{adminMsg}</div>}
+
+                {/* 새 기관 만들기 */}
+                <div className="section" style={{marginBottom:16}}>
+                  <div className="section-title">🏢 새 기관(복지관) 만들기</div>
+                  <div style={{fontSize:13,color:'#64748b',marginBottom:10}}>기관을 만들면 <b>기관코드</b>가 자동 발급됩니다. 이 코드를 복지사에게 전달하면, 복지사가 어르신 폰 앱에 입력해 해당 기관으로 등록됩니다.</div>
+                  <div style={{display:'flex',gap:8,maxWidth:520}}>
+                    <input className="form-input" style={{flex:1}} value={newOrgName} onChange={e=>setNewOrgName(e.target.value)} placeholder="예) ○○구 노인복지관" onKeyDown={e=>e.key==='Enter'&&createOrg()}/>
+                    <button className="btn-primary" style={{whiteSpace:'nowrap',padding:'0 20px'}} onClick={createOrg}>+ 기관 생성</button>
+                  </div>
+                </div>
+
+                {/* 기관 목록 */}
+                <div className="section" style={{marginBottom:16}}>
+                  <div className="section-title">📋 기관 목록 ({orgs.length})</div>
+                  <table className="table">
+                    <thead><tr><th>기관명</th><th>기관코드</th><th>어르신</th><th>계정</th></tr></thead>
+                    <tbody>
+                      {orgs.length===0 && <tr><td colSpan={4} style={{textAlign:'center',color:'#94a3b8',padding:24}}>기관이 없습니다</td></tr>}
+                      {orgs.map(o=>(
+                        <tr key={o.orgId}>
+                          <td><strong>{o.name}</strong></td>
+                          <td><span className="cycle-badge" style={{fontFamily:'monospace',fontWeight:800,letterSpacing:1,color:'#1d4ed8',background:'#eff6ff'}}>{o.code}</span></td>
+                          <td>{o.elderCount}명</td>
+                          <td>{o.userCount}개</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 새 복지사 계정 */}
+                <div className="section" style={{marginBottom:16}}>
+                  <div className="section-title">👤 새 복지사 계정 만들기</div>
+                  <div style={{fontSize:13,color:'#64748b',marginBottom:10}}>해당 기관 담당 복지사의 대시보드 로그인 계정을 만듭니다. 이 계정으로 로그인하면 <b>그 기관의 어르신만</b> 보입니다.</div>
+                  <div className="form-grid" style={{maxWidth:720}}>
+                    <div className="form-field"><label className="form-label">이메일(로그인 ID)</label><input className="form-input" value={newAcct.email} onChange={e=>setNewAcct(a=>({...a,email:e.target.value}))} placeholder="worker@example.com" autoComplete="off"/></div>
+                    <div className="form-field"><label className="form-label">초기 비밀번호(6자 이상)</label><input className="form-input" type="password" value={newAcct.password} onChange={e=>setNewAcct(a=>({...a,password:e.target.value}))} placeholder="복지사에게 전달" autoComplete="new-password"/></div>
+                    <div className="form-field"><label className="form-label">소속 기관</label><select className="form-input" value={newAcct.orgId} onChange={e=>setNewAcct(a=>({...a,orgId:e.target.value}))}><option value="">기관 선택</option>{orgs.map(o=><option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>)}</select></div>
+                    <div className="form-field"><label className="form-label">역할</label><select className="form-input" value={newAcct.role} onChange={e=>setNewAcct(a=>({...a,role:e.target.value}))}><option value="admin">복지사/관리자 (자기 기관만)</option><option value="superadmin">운영자 (전체 + 기관관리)</option></select></div>
+                  </div>
+                  <button className="btn-primary" style={{marginTop:12,padding:'10px 20px'}} onClick={createAccount}>+ 계정 생성</button>
+                </div>
+
+                {/* 계정 목록 */}
+                <div className="section">
+                  <div className="section-title">🔑 대시보드 계정 ({accounts.length})</div>
+                  <table className="table">
+                    <thead><tr><th>이메일</th><th>소속 기관</th><th>역할</th><th>관리</th></tr></thead>
+                    <tbody>
+                      {accounts.length===0 && <tr><td colSpan={4} style={{textAlign:'center',color:'#94a3b8',padding:24}}>계정이 없습니다</td></tr>}
+                      {accounts.map(u=>{
+                        const org = orgs.find(o=>o.orgId===u.orgId);
+                        return (
+                          <tr key={u.uid}>
+                            <td><strong>{u.email}</strong>{u.uid===me?.uid&&<span style={{fontSize:11,color:'#16a34a',marginLeft:6}}>(나)</span>}</td>
+                            <td style={{fontSize:13,color:'#64748b'}}>{org?org.name:u.orgId}</td>
+                            <td>{u.role==='superadmin'?<span className="status-badge badge-warning">운영자</span>:<span className="status-badge badge-normal">복지사</span>}</td>
+                            <td>{(u.role!=='superadmin'&&u.uid!==me?.uid)?<button className="btn-danger-outline" style={{fontSize:12,padding:'4px 10px'}} onClick={()=>deleteAccount(u.uid,u.email)}>🗑️ 삭제</button>:<span style={{color:'#cbd5e1',fontSize:12}}>—</span>}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+              )}
             </div>
           )}
 
