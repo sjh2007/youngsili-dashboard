@@ -4,6 +4,19 @@ import { auth, authEnabled } from './firebase';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 
 const SERVER_URL = 'https://youngsili-server-production.up.railway.app';
+
+// 모든 서버 요청에 Firebase ID 토큰 첨부 → 서버가 기관(orgId)을 식별·격리.
+// (서버는 토큰의 uid로 users/{uid}.orgId를 조회해 본인 기관 데이터만 반환)
+async function authFetch(url, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  try {
+    if (authEnabled && auth && auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      headers['Authorization'] = 'Bearer ' + token;
+    }
+  } catch (e) { /* 토큰 실패 시 무첨부 → 서버 401 */ }
+  return fetch(url, { ...opts, headers });
+}
 const CAREGIVERS = [];  // 서버 /settings/caregivers + 등록된 어르신의 담당 복지사에서 파생 (더미 폐지)
 // (더미 INIT_ELDERS 제거 — 어르신 목록은 서버 /elders에서 로드)
 
@@ -154,9 +167,9 @@ export default function App() {
       const prevTo = new Date(from.getTime() - 1);
       const prevFrom = new Date(prevTo.getTime() - span);
       const [cur, prev, callsRes] = await Promise.all([
-        fetch(`${SERVER_URL}/stats?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
-        fetch(`${SERVER_URL}/stats?from=${prevFrom.toISOString()}&to=${prevTo.toISOString()}`).then(r => r.json()),
-        fetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
+        authFetch(`${SERVER_URL}/stats?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
+        authFetch(`${SERVER_URL}/stats?from=${prevFrom.toISOString()}&to=${prevTo.toISOString()}`).then(r => r.json()),
+        authFetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
       ]);
       setStatsData(cur); setStatsPrev(prev); setReportCalls(callsRes.calls || []);
     } catch { setStatsData({ available: false }); setStatsPrev(null); }
@@ -202,7 +215,7 @@ export default function App() {
 
   const fetchElders = async () => {
     try {
-      const res = await fetch(`${SERVER_URL}/elders`);
+      const res = await authFetch(`${SERVER_URL}/elders`);
       const data = await res.json();
       if (Array.isArray(data)) setElders(data.filter(e => e && e.phone));  // 번호 없는 잘못된 문서 제외
     } catch (err) { console.error('어르신 목록 오류:', err); }
@@ -210,7 +223,7 @@ export default function App() {
 
   const fetchCaregivers = async () => {
     try {
-      const res = await fetch(`${SERVER_URL}/settings/caregivers`);
+      const res = await authFetch(`${SERVER_URL}/settings/caregivers`);
       const d = await res.json();
       if (Array.isArray(d.list) && d.list.length) setCaregivers(d.list);
     } catch { /* 서버 미응답 시 기본 목록 유지 */ }
@@ -222,15 +235,15 @@ export default function App() {
     const next = isNew ? [...caregivers, name] : caregivers;
     setCaregivers(next);
     setForm(f => ({ ...f, caregiver: name }));
-    if (isNew) fetch(`${SERVER_URL}/settings/caregivers`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ list: next }) }).catch(()=>{});
+    if (isNew) authFetch(`${SERVER_URL}/settings/caregivers`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ list: next }) }).catch(()=>{});
   };
 
   const fetchHealth = async () => {
     setHealthLoading(true);
     try {
       const [hRes, aRes] = await Promise.all([
-        fetch(`${SERVER_URL}/health/all`),
-        fetch(`${SERVER_URL}/alerts`),
+        authFetch(`${SERVER_URL}/health/all`),
+        authFetch(`${SERVER_URL}/alerts`),
       ]);
       const hData = await hRes.json();
       const aData = await aRes.json();
@@ -245,7 +258,8 @@ export default function App() {
   };
 
   // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
-  useEffect(() => { fetchElders(); fetchCaregivers(); }, []); // eslint-disable-line
+  // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
+  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'elders' || page === 'dashboard' || page === 'calls') fetchElders(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
@@ -305,7 +319,7 @@ export default function App() {
       let from = new Date(now.getTime() - 30 * 86400000), to = now;
       if (callsRange === 'week') from = new Date(now.getTime() - 7 * 86400000);
       else if (callsRange === 'custom') { if (callsFrom) from = new Date(callsFrom); if (callsTo) to = new Date(callsTo + 'T23:59:59'); }
-      const r = await fetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`);
+      const r = await authFetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`);
       const j = await r.json();
       setCallsHistory(j.calls || []);
     } catch { setCallsHistory([]); }
@@ -317,7 +331,7 @@ export default function App() {
       let from = new Date(now.getTime() - 30 * 86400000), to = now;
       if (healthRange === 'week') from = new Date(now.getTime() - 7 * 86400000);
       else if (healthRange === 'custom') { if (healthHistFrom) from = new Date(healthHistFrom); if (healthHistTo) to = new Date(healthHistTo + 'T23:59:59'); }
-      const r = await fetch(`${SERVER_URL}/health/history?from=${from.toISOString()}&to=${to.toISOString()}`);
+      const r = await authFetch(`${SERVER_URL}/health/history?from=${from.toISOString()}&to=${to.toISOString()}`);
       const j = await r.json();
       setHealthHistory(j.events || []);
     } catch { setHealthHistory([]); }
@@ -326,7 +340,7 @@ export default function App() {
   // 실시간 폴링 — 위험 알림(사이드바 🔴 배지)은 항상, 마지막통화는 필요한 페이지에서만.
   // 15초 주기(서버 부하·비용 절감) + 페이지 진입 시 즉시 1회 갱신.
   useEffect(() => {
-    const pollAlerts = () => fetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
+    const pollAlerts = () => authFetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
       setAlertsData(data);
       const unread = data.filter(a=>!a.read);
       setAlertCount(unread.length);
@@ -345,7 +359,7 @@ export default function App() {
     // 최근 통화 → 마지막 통화 시각/상태 갱신 (마지막통화를 보여주는 페이지에서만)
     const pollRecent = () => {
       if (!['dashboard','elders','schedule'].includes(page)) return;
-      fetch(`${SERVER_URL}/calls/recent`).then(r=>r.json()).then(calls => {
+      authFetch(`${SERVER_URL}/calls/recent`).then(r=>r.json()).then(calls => {
         setElders(prev => prev.map(e => {
           const c = calls[e.name];
           if (!c) return e;
@@ -365,7 +379,7 @@ export default function App() {
   const fetchPopulation = async () => {
     setPopLoading(true); setPopError(null);
     try {
-      const res = await fetch(`${SERVER_URL}/population`);
+      const res = await authFetch(`${SERVER_URL}/population`);
       const data = await res.json();
       setPopData(data);
     } catch { setPopError('데이터를 불러오지 못했습니다.'); }
@@ -463,7 +477,7 @@ export default function App() {
   const pendingElders = elders.filter(e => e.approved === false);
   const approveElder = async (phone) => {
     try {
-      await fetch(`${SERVER_URL}/elder/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+      await authFetch(`${SERVER_URL}/elder/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
       fetchElders();
     } catch (e) { console.error('승인 실패:', e); }
   };
@@ -481,7 +495,7 @@ export default function App() {
   const fetchWeather = async () => {
     setFetchingWeather(true);
     try {
-      const res = await fetch(`${SERVER_URL}/weather`);
+      const res = await authFetch(`${SERVER_URL}/weather`);
       if (res.ok) {
         const data = await res.json();
         setWeatherData(data);
@@ -548,7 +562,7 @@ export default function App() {
       if (!bulkRef.current) break;
       setBulkCurrent(elder.id);
       try {
-        const res = await fetch(`${SERVER_URL}/call/app`, {
+        const res = await authFetch(`${SERVER_URL}/call/app`, {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             phone:        elder.phone,
@@ -592,7 +606,7 @@ export default function App() {
     if (ids.length === 0) return;
     const t = setInterval(async () => {
       try {
-        const r = await fetch(`${SERVER_URL}/call/dispatch-statuses?ids=${ids.join(',')}`);
+        const r = await authFetch(`${SERVER_URL}/call/dispatch-statuses?ids=${ids.join(',')}`);
         const m = await r.json();
         setBulkDone(prev => prev.map(d => (d.callId && m[d.callId]) ? { ...d, status: m[d.callId].status, durationSec: m[d.callId].durationSec } : d));
       } catch {}
@@ -610,7 +624,7 @@ export default function App() {
   // 발신 내역 복원: 발신 페이지 진입/새로고침 시 서버에서 오늘 발신 상태를 불러와 패널 복원
   const loadDispatches = async () => {
     try {
-      const r = await fetch(`${SERVER_URL}/call/dispatches`);
+      const r = await authFetch(`${SERVER_URL}/call/dispatches`);
       const d = await r.json();
       if (!d.available || !(d.dispatches || []).length) return;
       const np = s => String(s || '').replace(/\D/g, '');
@@ -632,7 +646,7 @@ export default function App() {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
     try {
-      const res = await fetch(`${SERVER_URL}/call/app`, {
+      const res = await authFetch(`${SERVER_URL}/call/app`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
           phone:        elder.phone,
@@ -673,11 +687,11 @@ export default function App() {
     if (editMode) { saved = {...form}; setElders(prev=>prev.map(e=>e.id===form.id?{...e,...form}:e)); setSelected(prev=>({...prev,...form})); }
     else { saved = {...form,id:Date.now(),status:'normal',lastCall:'아직 없음',keyword:null,visits:0,age:parseInt(form.age),callActive:true}; setElders(prev=>[...prev,saved]); }
     // 자동연동: 서버 elders에 저장 → 앱이 어르신 전화번호로 조회
-    fetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(saved) }).then(r=>r.json()).then(d=>{ if(d&&d.authCode){ setSavedAuthCode(d.authCode); fetchElders(); } }).catch(()=>{});
+    authFetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(saved) }).then(r=>r.json()).then(d=>{ if(d&&d.authCode){ setSavedAuthCode(d.authCode); fetchElders(); } }).catch(()=>{});
     setSaveSuccess(true);
     setTimeout(()=>{setSaveSuccess(false);setPage(editMode?'detail':'elders');},1800);
   };
-  const deleteElder = id => { if(window.confirm('정말 삭제하시겠습니까?')){const tgt=elders.find(e=>e.id===id);setElders(prev=>prev.filter(e=>e.id!==id));if(tgt?.phone)fetch(`${SERVER_URL}/elders/${tgt.phone.replace(/[^0-9]/g,'')}`,{method:'DELETE'}).catch(()=>{});setPage('elders');setSelected(null);} };
+  const deleteElder = id => { if(window.confirm('정말 삭제하시겠습니까?')){const tgt=elders.find(e=>e.id===id);setElders(prev=>prev.filter(e=>e.id!==id));if(tgt?.phone)authFetch(`${SERVER_URL}/elders/${tgt.phone.replace(/[^0-9]/g,'')}`,{method:'DELETE'}).catch(()=>{});setPage('elders');setSelected(null);} };
   const inp = field => ({ value:form[field]??'', onChange:e=>setForm(f=>({...f,[field]:e.target.value})), className:`form-input ${formErrors[field]?'input-error':''}` });
 
   // 다음(카카오) 우편번호 검색 → 주소 자동입력 + 관할구역(시/구) 자동추출
@@ -1388,7 +1402,7 @@ export default function App() {
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 18px',marginBottom:10}}>
                       <span style={{fontSize:24}}>⚠️</span>
                       <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'#dc2626'}}>{nameByPhone(alert.phone, alert.name)} · 🚨 "{alert.keyword || (alert.message ? alert.message.split('감지:').pop().trim() : alert.message)}"</div><div style={{fontSize:12,color:'#ef4444',marginTop:2}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
-                      <button className="btn-small" onClick={async()=>{await fetch(`${SERVER_URL}/alerts/${alert.id}/read`,{method:'POST'});fetchHealth();}}>확인</button>
+                      <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/read`,{method:'POST'});fetchHealth();}}>확인</button>
                     </div>
                   ))}
                 </div>
