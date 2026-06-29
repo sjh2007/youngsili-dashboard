@@ -792,7 +792,8 @@ export default function App() {
                 // 2) 미응답 (어르신 데이터 기반)
                 elders.forEach(e => {
                   const days = getNoResponseDays(e.lastCall);
-                  if (days >= 3) alerts.push({ elder: e, type: 'noResponse', msg: `${days}일째 미응답 → 즉시 확인 필요`, color: '#ef4444', bg: '#fef2f2', icon: '📵' });
+                  // 미통화(99 sentinel=신규/통화이력 없음)는 '미응답'이 아님 → 긴급 알림 제외. 실제 무응답(3~98일)만 알림.
+                  if (days >= 3 && days < 99) alerts.push({ elder: e, type: 'noResponse', msg: `${days}일째 미응답 → 즉시 확인 필요`, color: '#ef4444', bg: '#fef2f2', icon: '📵' });
                 });
                 const heatwaveElders = elders.filter(e => weatherData[e.region]?.alert === 'heatwave');
                 if (heatwaveElders.length > 0) alerts.push({ type: 'weather', msg: `폭염경보 → ${heatwaveElders.map(e=>e.name).join(', ')} 어르신 안전 확인 필요`, color: '#f59e0b', bg: '#fffbeb', icon: '🌡️' });
