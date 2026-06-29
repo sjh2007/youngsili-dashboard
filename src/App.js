@@ -247,9 +247,12 @@ export default function App() {
       ]);
       const hData = await hRes.json();
       const aData = await aRes.json();
-      setHealthData(hData);
-      setAlertsData(aData);
-      setAlertCount(aData.filter(a => !a.read).length);
+      // 401/에러 응답은 배열이 아닌 객체 → .filter 크래시 방지 (로그아웃/토큰만료 시 흰화면 차단)
+      const hArr = Array.isArray(hData) ? hData : [];
+      const aArr = Array.isArray(aData) ? aData : [];
+      setHealthData(hArr);
+      setAlertsData(aArr);
+      setAlertCount(aArr.filter(a => !a.read).length);
     } catch (err) {
       console.error('건강 데이터 오류:', err);
     } finally {
@@ -340,7 +343,8 @@ export default function App() {
   // 실시간 폴링 — 위험 알림(사이드바 🔴 배지)은 항상, 마지막통화는 필요한 페이지에서만.
   // 15초 주기(서버 부하·비용 절감) + 페이지 진입 시 즉시 1회 갱신.
   useEffect(() => {
-    const pollAlerts = () => authFetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(data => {
+    const pollAlerts = () => authFetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(raw => {
+      const data = Array.isArray(raw) ? raw : [];   // 401/에러 응답(객체) 방어 → .filter 크래시 차단
       setAlertsData(data);
       const unread = data.filter(a=>!a.read);
       setAlertCount(unread.length);

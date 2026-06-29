@@ -15,10 +15,24 @@ const firebaseConfig = {
 };
 
 // config가 아직 placeholder면 인증 비활성화 (대시보드는 정상 작동, 가드만 꺼짐)
-export const authEnabled = !JSON.stringify(firebaseConfig).includes('REPLACE');
+const configReady = !JSON.stringify(firebaseConfig).includes('REPLACE');
 
+// ⚠️ Firebase 초기화를 try/catch로 감싼다.
+// 일부 브라우저 환경(시크릿 모드·확장프로그램·IndexedDB/스토리지 차단 등)에서
+// getAuth/initializeApp이 throw하면, 모듈 로드가 통째로 실패해 React가 아예
+// 마운트되지 않고 "흰 화면"이 된다. 초기화 실패 시 인증을 끈 상태로라도 앱은 뜨게 한다.
 let _auth = null;
-if (authEnabled) {
-  _auth = getAuth(initializeApp(firebaseConfig));
+let _ok = false;
+if (configReady) {
+  try {
+    _auth = getAuth(initializeApp(firebaseConfig));
+    _ok = true;
+  } catch (e) {
+    console.error('⚠️ Firebase 초기화 실패 — 인증 비활성 상태로 실행:', e && e.message);
+    _auth = null;
+    _ok = false;
+  }
 }
+// 초기화가 실제로 성공했을 때만 authEnabled=true (실패 시 auth=null과 모순되지 않게)
+export const authEnabled = configReady && _ok;
 export const auth = _auth;
