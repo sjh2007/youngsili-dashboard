@@ -466,6 +466,7 @@ export default function App() {
   const REGIONS = ['전체', '대구 북구', '대구 달서구', '대구 수성구', '대구 중구', '대구 동구', '대구 서구', '대구 남구', '대구 달성군'];
 
   const filteredElders = elders
+    .filter(e => e.approved !== false)   // 승인 대기(앱 신청)는 별도 '승인 대기' 섹션에 표시
     .filter(e => filter === 'all' || e.status === filter)
     .filter(e => regionFilter === '전체' || e.region === regionFilter)
     .filter(e => searchName === '' || e.name.includes(searchName))
@@ -477,6 +478,15 @@ export default function App() {
       if (sortBy === 'name') return a.name.localeCompare(b.name);
       return 0;
     });
+
+  // 방식2: 앱에서 등록 신청된 승인 대기 어르신
+  const pendingElders = elders.filter(e => e.approved === false);
+  const approveElder = async (phone) => {
+    try {
+      await fetch(`${SERVER_URL}/elder/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+      fetchElders();
+    } catch (e) { console.error('승인 실패:', e); }
+  };
 
   const buildPreview = (elder) => {
     const alertMsg = activeAlert !== 'none' ? alertScript.replace(/{{지역}}/g, elder?.region || '') : '';
@@ -1038,6 +1048,22 @@ export default function App() {
                 </div>
               </div>
               <div className="search-result-count">총 <strong>{filteredElders.length}명</strong>{searchName && <span> · "{searchName}" 검색결과</span>}{regionFilter !== '전체' && <span> · {regionFilter}</span>}</div>
+
+              {pendingElders.length > 0 && (
+                <div className="section" style={{marginBottom:16,border:'2px solid #fde68a',background:'#fffbeb'}}>
+                  <div className="section-title">🔔 승인 대기 ({pendingElders.length}) — 앱에서 등록 신청한 어르신</div>
+                  {pendingElders.map(e => (
+                    <div key={e.phone} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'#fff',border:'1px solid #fde68a',borderRadius:10,marginBottom:8}}>
+                      <div className="table-avatar">{(e.name||'?')[0]}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:700}}>{e.name} <span style={{fontSize:12,color:'#94a3b8'}}>{e.age?`${e.age}세 · `:''}{e.region||''}</span></div>
+                        <div style={{fontSize:13,color:'#64748b'}}>📞 {e.phone}{e.caregiver?` · 담당 ${e.caregiver}`:''}{e.guardianName?` · 보호자 ${e.guardianName}`:''}</div>
+                      </div>
+                      <button className="btn-primary" onClick={()=>approveElder(e.phone)}>✅ 승인·활성화</button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {viewMode === 'card' && (
                 <div className="elder-grid">
