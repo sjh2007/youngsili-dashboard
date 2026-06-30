@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, Component } from 'react';
 import './App.css';
 import { auth, authEnabled } from './firebase';
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from './HelpGuide';
+import AuthScreen from './AuthScreen';
 
 const SERVER_URL = 'https://youngsili-server-production.up.railway.app';
 
@@ -91,15 +92,9 @@ export default function App() {
   const [page, setPage]         = useState(() => { try { const h = (window.location.hash || '').replace('#',''); return PAGES.includes(h) ? h : 'dashboard'; } catch { return 'dashboard'; } });
   const [authUser, setAuthUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPw, setLoginPw] = useState('');
-  const [loginErr, setLoginErr] = useState('');
   useEffect(() => { if (!authEnabled) { setAuthChecked(true); return; } const unsub = onAuthStateChanged(auth, u => { setAuthUser(u); setAuthChecked(true); }); return unsub; }, []); // eslint-disable-line
-  const doLogin = async () => {
-    setLoginErr('');
-    try { await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPw); }
-    catch (e) { setLoginErr('이메일 또는 비밀번호가 올바르지 않습니다.'); }
-  };
+  // 이메일 인증 완료 후 사용자 새로고침 → 인증상태 반영
+  const reloadUser = async () => { try { await auth.currentUser?.reload(); } catch {} window.location.reload(); };
   const doLogout = () => signOut(auth);
   const [elders, setElders] = useState([]);  // 서버(Firestore) /elders에서 로드 (localStorage 더미 폐지)
   const [selected, setSelected] = useState(null);
@@ -780,21 +775,11 @@ export default function App() {
   const urgentCount   = todayCalls.filter(c=>c.riskLevel==='urgent'||c.riskLevel==='warning').length;
   const normalCount   = todayCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length;
 
-  // ── 로그인 가드: 인증 안 된 사용자는 대시보드(어르신 정보) 접근 불가 ──
+  // ── 로그인/회원가입 가드 ──
+  // 1) 미로그인 → 로그인/회원가입  2) 로그인했지만 이메일 미인증 → 인증대기  3) 기관 미설정 → 기관설정
   if (authEnabled && !authChecked) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b'}}>로딩 중…</div>;
-  if (authEnabled && !authUser) {
-    return (
-      <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f1f5f9'}}>
-        <div style={{background:'#fff',borderRadius:16,padding:40,width:360,boxShadow:'0 4px 20px rgba(0,0,0,0.08)'}}>
-          <h2 style={{margin:'0 0 8px',color:'#1e3a6e'}}>AI 영실이 관제</h2>
-          <p style={{margin:'0 0 24px',color:'#64748b',fontSize:14}}>발급받은 기관 계정으로 로그인하세요.</p>
-          <input type="email" placeholder="이메일 (기관 계정)" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} style={{width:'100%',padding:12,marginBottom:10,borderRadius:8,border:'1px solid #cbd5e1',boxSizing:'border-box'}}/>
-          <input type="password" placeholder="비밀번호" value={loginPw} onChange={e=>setLoginPw(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doLogin()} style={{width:'100%',padding:12,marginBottom:10,borderRadius:8,border:'1px solid #cbd5e1',boxSizing:'border-box'}}/>
-          {loginErr && <div style={{color:'#ef4444',fontSize:13,marginBottom:10}}>{loginErr}</div>}
-          <button onClick={doLogin} style={{width:'100%',padding:13,borderRadius:8,border:'none',background:'#2563eb',color:'#fff',fontWeight:700,fontSize:15,cursor:'pointer'}}>관제 대시보드 로그인 →</button>
-        </div>
-      </div>
-    );
+  if (authEnabled && (!authUser || !authUser.emailVerified || me?.needsProvision)) {
+    return <AuthScreen authUser={authUser} needsProvision={me?.needsProvision} authFetch={authFetch} serverUrl={SERVER_URL} onReload={reloadUser} onProvisioned={fetchMe} />;
   }
 
   return (
