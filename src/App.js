@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Component } from 'react';
 import './App.css';
 import { auth, authEnabled } from './firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from './HelpGuide';
 import AuthScreen from './AuthScreen';
 
@@ -103,6 +103,16 @@ export default function App() {
   // 이메일 인증 완료 후 사용자 새로고침 → 인증상태 반영
   const reloadUser = async () => { try { await auth.currentUser?.reload(); } catch {} window.location.reload(); };
   const doLogout = () => signOut(auth);
+  // 이메일 인증 리마인더(비차단): 재발송 + 쿨다운(한도 초과 방지)
+  const [verifyNote, setVerifyNote] = useState('');
+  const [verifyCooldown, setVerifyCooldown] = useState(0);
+  useEffect(() => { if (verifyCooldown <= 0) return; const t = setTimeout(() => setVerifyCooldown(c => c - 1), 1000); return () => clearTimeout(t); }, [verifyCooldown]);
+  const resendVerify = async () => {
+    if (verifyCooldown > 0 || !auth.currentUser) return;
+    setVerifyNote('');
+    try { await sendEmailVerification(auth.currentUser); setVerifyNote('✅ 인증 메일을 보냈습니다. 메일함(스팸함 포함)을 확인해 주세요.'); setVerifyCooldown(60); }
+    catch (e) { setVerifyNote(e.code === 'auth/too-many-requests' ? '⏳ 잠시 후 다시 시도해 주세요 (발송 한도).' : '발송에 실패했습니다. 잠시 후 다시 시도해 주세요.'); setVerifyCooldown(30); }
+  };
   const [elders, setElders] = useState([]);  // 서버(Firestore) /elders에서 로드 (localStorage 더미 폐지)
   const [selected, setSelected] = useState(null);
   const [filter, setFilter]     = useState('all');
@@ -783,7 +793,8 @@ export default function App() {
   // ── 로그인/회원가입 가드 ──
   // 1) 미로그인 → 로그인/회원가입  2) 로그인했지만 이메일 미인증 → 인증대기  3) 기관 미설정 → 기관설정
   if (authEnabled && !authChecked) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b'}}>로딩 중…</div>;
-  if (authEnabled && (!authUser || !authUser.emailVerified || me?.needsProvision)) {
+  // 이메일 미인증은 차단하지 않음(리마인더 배너로 안내). 미로그인/기관미설정만 차단.
+  if (authEnabled && (!authUser || me?.needsProvision)) {
     return <AuthScreen authUser={authUser} needsProvision={me?.needsProvision} authFetch={authFetch} serverUrl={SERVER_URL} onReload={reloadUser} onProvisioned={fetchMe} />;
   }
 
@@ -838,6 +849,16 @@ export default function App() {
       </aside>
 
       <main className="main">
+        {authEnabled && authUser && !authUser.emailVerified && (
+          <div style={{background:'#fffbeb',borderBottom:'1px solid #fde68a',padding:'10px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',fontSize:14}}>
+            <span style={{color:'#b45309',fontWeight:700}}>📧 이메일 인증을 완료해 주세요.</span>
+            <span style={{color:'#92400e'}}>{authUser.email}로 보낸 메일의 링크를 클릭하시면 됩니다. (지금도 사용 가능)</span>
+            <span style={{flex:1}}/>
+            {verifyNote && <span style={{color:'#166534',fontSize:13}}>{verifyNote}</span>}
+            <button className="btn-secondary" style={{fontSize:13,padding:'6px 12px'}} disabled={verifyCooldown>0} onClick={resendVerify}>{verifyCooldown>0?`재발송 (${verifyCooldown}초)`:'인증 메일 재발송'}</button>
+            <button className="btn-secondary" style={{fontSize:13,padding:'6px 12px'}} onClick={reloadUser}>인증 완료 → 새로고침</button>
+          </div>
+        )}
         <header className="header">
           <div className="header-title">
             {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}

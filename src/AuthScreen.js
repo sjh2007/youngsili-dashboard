@@ -41,35 +41,10 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
     </div>
   );
 
-  // ── 1) 인증 대기 (로그인됐지만 이메일 미인증) ──
-  if (authUser && !authUser.emailVerified) {
-    const resend = async () => {
-      setErr(''); setMsg(''); setBusy(true);
-      try { await sendEmailVerification(auth.currentUser); setMsg('인증 메일을 다시 보냈습니다. 메일함(스팸함 포함)을 확인하세요.'); }
-      catch (e) { setErr(e.code === 'auth/too-many-requests' ? '잠시 후 다시 시도해 주세요.' : '발송 실패. 잠시 후 다시 시도해 주세요.'); }
-      setBusy(false);
-    };
-    return (
-      <div style={wrap}><div style={card}>
-        <Header />
-        <div style={{ fontSize: 18, fontWeight: 800, color: NAVY, textAlign: 'center' }}>📧 이메일 인증이 필요합니다</div>
-        <div style={{ fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 10, lineHeight: 1.6 }}>
-          <b>{authUser.email}</b> 로 보낸 인증 메일의<br />링크를 클릭한 뒤 아래 버튼을 눌러주세요.
-        </div>
-        {msg && <div style={{ ...errBox, color: GREEN, background: '#f0fdf4' }}>{msg}</div>}
-        {err && <div style={errBox}>{err}</div>}
-        <button style={{ ...primaryBtn, background: GREEN }} disabled={busy} onClick={onReload}>✅ 인증 완료했어요</button>
-        <button style={{ ...primaryBtn, background: '#fff', color: BLUE, border: `1px solid ${BLUE}`, marginTop: 10 }} disabled={busy} onClick={resend}>인증 메일 재발송</button>
-        <div style={{ textAlign: 'center', marginTop: 16 }}>
-          <button style={linkBtn} onClick={() => signOut()}>다른 계정으로 로그인</button>
-        </div>
-      </div></div>
-    );
-    function signOut() { auth.signOut(); }
-  }
+  // (이메일 인증은 더 이상 차단하지 않음 — 대시보드 상단 리마인더 배너로 안내)
 
-  // ── 2) 기관 설정(가입 직후 provision 실패한 안전망) ──
-  if (authUser && authUser.emailVerified && needsProvision) {
+  // ── 기관 설정(가입 직후 provision 실패한 안전망) ──
+  if (authUser && needsProvision) {
     const provision = async () => {
       const name = orgName.trim();
       if (!name) { setErr('기관·단체명을 입력하세요'); return; }
