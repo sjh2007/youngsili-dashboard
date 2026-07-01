@@ -93,6 +93,13 @@ export default function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   useEffect(() => { if (!authEnabled) { setAuthChecked(true); return; } const unsub = onAuthStateChanged(auth, u => { setAuthUser(u); setAuthChecked(true); }); return unsub; }, []); // eslint-disable-line
+  // 랜딩(로그인/가입)에서 ?login 으로 오면 남아있는 다른 계정 세션을 로그아웃 → 신규 계정으로 새로 로그인하게
+  useEffect(() => {
+    if (authEnabled && new URLSearchParams(window.location.search).has('login')) {
+      signOut(auth).catch(() => {});
+      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    }
+  }, []); // eslint-disable-line
   // 이메일 인증 완료 후 사용자 새로고침 → 인증상태 반영
   const reloadUser = async () => { try { await auth.currentUser?.reload(); } catch {} window.location.reload(); };
   const doLogout = () => signOut(auth);
