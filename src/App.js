@@ -113,6 +113,9 @@ export default function App() {
     try { await sendEmailVerification(auth.currentUser); setVerifyNote('✅ 인증 메일을 보냈습니다. 메일함(스팸함 포함)을 확인해 주세요.'); setVerifyCooldown(60); }
     catch (e) { setVerifyNote(e.code === 'auth/too-many-requests' ? '⏳ 잠시 후 다시 시도해 주세요 (발송 한도).' : '발송에 실패했습니다. 잠시 후 다시 시도해 주세요.'); setVerifyCooldown(30); }
   };
+  // 기관코드 복사 (어르신 앱 등록 시 사용)
+  const [orgCopied, setOrgCopied] = useState(false);
+  const copyOrgCode = () => { if (!me?.orgCode) return; try { navigator.clipboard.writeText(me.orgCode); setOrgCopied(true); setTimeout(() => setOrgCopied(false), 1500); } catch {} };
   const [elders, setElders] = useState([]);  // 서버(Firestore) /elders에서 로드 (localStorage 더미 폐지)
   const [selected, setSelected] = useState(null);
   const [filter, setFilter]     = useState('all');
@@ -844,6 +847,13 @@ export default function App() {
             <div className="worker-avatar">복</div>
             <div><div className="worker-name">{me?.orgName || (isSuper ? '운영자' : '복지사 관리')}</div><div className="worker-region">{authEnabled&&authUser?authUser.email:'대구광역시'}{isSuper?' · 운영자':''}</div></div>
           </div>
+          {me?.orgCode && (
+            <div onClick={copyOrgCode} title="클릭하면 복사 · 어르신 앱 등록 시 입력" style={{marginTop:10,padding:'8px 10px',borderRadius:8,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:11,color:'#93c5fd'}}>🏢 기관코드</span>
+              <span style={{fontSize:14,fontWeight:800,letterSpacing:1,color:'#fff',fontFamily:'monospace'}}>{me.orgCode}</span>
+              <span style={{marginLeft:'auto',fontSize:11,color:orgCopied?'#4ade80':'#94a3b8'}}>{orgCopied?'✓ 복사됨':'📋 복사'}</span>
+            </div>
+          )}
           {authEnabled&&authUser&&<button onClick={doLogout} style={{marginTop:10,width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #cbd5e1',background:'#fff',color:'#475569',fontSize:13,fontWeight:600,cursor:'pointer'}}>로그아웃</button>}
         </div>
       </aside>
