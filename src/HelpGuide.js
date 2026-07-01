@@ -61,6 +61,20 @@ export default function HelpGuide() {
   }, [q]);
 
   const Item = ({ it, i }) => {
+    // 앱 설치·등록 항목(또는 link 지정)은 그림 매뉴얼로 연결 → 클릭 시 새 탭으로 열림
+    const link = it.link || (it.cat === '앱 설치·등록' ? SETUP_GUIDE_URL : null);
+    if (link) {
+      return (
+        <a href={link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none', border: '1px solid #bfdbfe', borderRadius: 10, marginBottom: 8, overflow: 'hidden', background: '#f8fbff' }}>
+          <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#1e3a6e' }}>
+            <span style={{ fontSize: 13, color: '#94a3b8' }}>{it.cat}</span>
+            <span style={{ flex: 1 }}>{it.q}</span>
+            <span style={{ color: '#2563eb', fontWeight: 800 }}>📄 자세히 보기 →</span>
+          </div>
+          <div style={{ padding: '0 14px 12px', color: '#475569', fontSize: 13, lineHeight: 1.5 }}>{it.a}</div>
+        </a>
+      );
+    }
     const key = it.cat + i + it.q;
     const isOpen = !!open[key] || !!q;   // 검색 중엔 펼쳐서 보여줌
     return (
