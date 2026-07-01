@@ -1128,6 +1128,19 @@ export default function App() {
 
           {page==='elders' && (
             <div className="fade-in">
+              {me?.orgCode && (
+                <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:12,padding:'12px 16px',marginBottom:16}}>
+                  <span style={{fontSize:22}}>📱</span>
+                  <div style={{flex:1,minWidth:220}}>
+                    <div style={{fontWeight:800,color:'#1e3a6e'}}>앱으로 어르신 등록하기</div>
+                    <div style={{fontSize:13,color:'#475569',marginTop:2}}>어르신 폰 <b>영실이 앱 설정</b>에 아래 <b>기관코드</b>를 입력하고 정보를 등록하면, 여기 <b>승인 대기</b>에 뜹니다.</div>
+                  </div>
+                  <div onClick={copyOrgCode} title="클릭하면 복사" style={{cursor:'pointer',display:'flex',alignItems:'center',gap:8,background:'#fff',border:'2px solid #2563eb',borderRadius:10,padding:'8px 14px'}}>
+                    <span style={{fontSize:20,fontWeight:900,letterSpacing:2,color:'#1d4ed8',fontFamily:'monospace'}}>{me.orgCode}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:orgCopied?'#16a34a':'#2563eb'}}>{orgCopied?'✓ 복사됨':'📋 복사'}</span>
+                  </div>
+                </div>
+              )}
               <div className="elder-toolbar">
                 <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="어르신 이름 검색..." value={searchName} onChange={e => setSearchName(e.target.value)}/>{searchName && <button className="search-clear" onClick={() => setSearchName('')}>✕</button>}</div>
                 <select className="form-input region-select" value={regionFilter} onChange={e => setRegionFilter(e.target.value)}>{REGIONS.map(r => <option key={r} value={r}>{r}</option>)}</select>
