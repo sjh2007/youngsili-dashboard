@@ -19,6 +19,40 @@ async function authFetch(url, opts = {}) {
   } catch (e) { /* 토큰 실패 시 무첨부 → 서버 401 */ }
   return fetch(url, { ...opts, headers });
 }
+
+// 통화내용 표시: 화자(영실이/어르신)별 줄바꿈 + 길면 그 자리서 펼치기(인라인). 잘림 없음.
+function CallTranscript({ text }) {
+  const [open, setOpen] = useState(false);
+  const raw = (text || '').trim();
+  if (!raw) return <div style={{ color: '#94a3b8', fontSize: 13 }}>—</div>;
+  // "영실이:" / "어르신:" 앞에서 분리해 화자별 턴으로 나눔
+  const turns = raw.split(/(?=영실이\s*[:：]|어르신\s*[:：])/g).map(s => s.trim()).filter(Boolean);
+  const PREVIEW = 4;
+  const shown = open ? turns : turns.slice(0, PREVIEW);
+  const more = turns.length - PREVIEW;
+  return (
+    <div style={{ width: '100%', fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
+      {shown.map((t, i) => {
+        const m = t.match(/^(영실이|어르신)\s*[:：]\s*([\s\S]*)$/);
+        const who = m ? m[1] : '';
+        const body = m ? m[2].trim() : t;
+        const isElder = who === '어르신';
+        return (
+          <div key={i} style={{ marginBottom: 3, wordBreak: 'break-word' }}>
+            {who && <span style={{ fontWeight: 700, color: isElder ? '#1e3a6e' : '#94a3b8', marginRight: 6 }}>{who}</span>}
+            <span style={{ color: isElder ? '#1f2937' : '#64748b' }}>{body}</span>
+          </div>
+        );
+      })}
+      {more > 0 && (
+        <button onClick={() => setOpen(o => !o)} style={{ marginTop: 4, background: 'none', border: 'none', color: '#2563eb', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+          {open ? '접기 ▴' : `전체 대화 ${more}턴 더 보기 ▾`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 const CAREGIVERS = [];  // 서버 /settings/caregivers + 등록된 어르신의 담당 복지사에서 파생 (더미 폐지)
 // (더미 INIT_ELDERS 제거 — 어르신 목록은 서버 /elders에서 로드)
 
@@ -1377,7 +1411,7 @@ export default function App() {
                           <div style={{minWidth:46,color:'#64748b',fontSize:13}}>{hm}</div>
                           <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                           <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
-                          <div style={{flex:1,minWidth:140,color:'#475569',fontSize:13,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.45,wordBreak:'break-word'}}>{(c.transcript||'').replace(/\n/g,' ')||'—'}</div>
+                          <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
                         </div>
                       );
                     })}
@@ -1696,7 +1730,7 @@ export default function App() {
                             <div style={{minWidth:96,color:'#64748b',fontSize:13}}>{c.date} {hm}</div>
                             <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                             <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
-                            <div style={{flex:1,minWidth:140,color:'#475569',fontSize:13,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.45,wordBreak:'break-word'}}>{(c.transcript||'').replace(/\n/g,' ')||'—'}</div>
+                            <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
                           </div>
                         );
                       });
