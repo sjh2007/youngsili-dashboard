@@ -1,196 +1,149 @@
-// 복지사용 사용 설명서 (대시보드 내 '도움말' 페이지)
-// ⚠️ 업데이트 소식을 추가하면 ANNOUNCEMENTS 맨 앞에 {id 증가, ...} 추가 →
-//    App.js의 LATEST_NOTICE도 같은 id로 올리면 메뉴에 🔴 배지가 뜬다.
-export const LATEST_NOTICE = 3;
+// 복지사용 도움말 센터 (대시보드 '도움말 보기' 페이지) — 검색 가능
+// ⚙️ 계속 업데이트: 아래 HELP_ITEMS 배열에 항목을 추가/수정하면 바로 반영됩니다.
+//    업데이트 소식을 추가하면 ANNOUNCEMENTS 맨 앞에 넣고 App.js의 LATEST_NOTICE도 같은 id로 올리세요.
+import { useState, useMemo } from 'react';
+
+export const LATEST_NOTICE = 4;
+
+const SETUP_GUIDE_URL = 'https://www.krafte.net/youngsili-setup-guide.html';  // 그림 설치 매뉴얼(별도 배포)
 
 const ANNOUNCEMENTS = [
-  { id: 3, date: '2026-06-29', tag: '신규', text: '기관코드 등록 방식이 추가됐어요. 어르신 폰 앱에서 기관코드를 입력해 바로 등록 신청할 수 있습니다.' },
+  { id: 4, date: '2026-07-01', tag: '신규', text: '앱 설치·등록 그림 매뉴얼과 도움말 검색이 추가됐어요. 키워드로 빠르게 찾아보세요.' },
+  { id: 3, date: '2026-06-29', tag: '신규', text: '기관코드 등록 방식이 추가됐어요. 어르신 폰 앱에 기관코드를 입력해 바로 등록 신청할 수 있습니다.' },
   { id: 2, date: '2026-06-29', tag: '개선', text: '"마지막 통화" 시각이 실제 통화 기준으로 정확히 표시되도록 개선했어요.' },
   { id: 1, date: '2026-06-29', tag: '개선', text: '대시보드 속도·안정성을 개선했습니다.' },
 ];
 
-// ── 작은 UI 조각 (목업용) ──
-const Phone = ({ title, children }) => (
-  <div style={{ width: 240, border: '8px solid #1e293b', borderRadius: 28, background: '#fff', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', flexShrink: 0 }}>
-    <div style={{ background: '#1e3a6e', color: '#fff', padding: '10px 14px', fontSize: 13, fontWeight: 700 }}>{title}</div>
-    <div style={{ padding: 14 }}>{children}</div>
-  </div>
-);
-const Field = ({ label, value, highlight }) => (
-  <div style={{ marginBottom: 10 }}>
-    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{label}</div>
-    <div style={{ border: highlight ? '2px solid #f59e0b' : '1px solid #cbd5e1', background: highlight ? '#fffbeb' : '#f8fafc', borderRadius: 8, padding: '8px 10px', fontSize: 14, fontWeight: highlight ? 800 : 500, color: highlight ? '#b45309' : '#334155', letterSpacing: highlight ? 1 : 0 }}>{value}</div>
-  </div>
-);
-const Btn = ({ color, children }) => (
-  <div style={{ background: color, color: '#fff', borderRadius: 10, padding: '11px 0', textAlign: 'center', fontWeight: 800, fontSize: 14, marginTop: 6 }}>{children}</div>
-);
-const Step = ({ n }) => (
-  <span style={{ display: 'inline-flex', width: 26, height: 26, borderRadius: 13, background: '#2563eb', color: '#fff', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, marginRight: 8, flexShrink: 0 }}>{n}</span>
-);
-const Card = ({ children, style }) => (
-  <div className="section" style={{ marginBottom: 16, ...style }}>{children}</div>
-);
-const H = ({ children }) => <div className="section-title" style={{ fontSize: 18 }}>{children}</div>;
+// 도움말 항목 (검색 대상: 제목 q + 키워드 kw + 본문 a)
+const HELP_ITEMS = [
+  // 시작하기
+  { cat: '시작하기', q: '처음 시작하는 3단계', kw: '시작 로그인 등록 확인 quickstart', a: '① 발급받은 기관 계정으로 로그인 → ② 담당 어르신 등록(대시보드에서 직접 또는 어르신 폰 앱) → ③ 통화·건강·위험 알림을 매일 확인하고 필요하면 전화를 보냅니다.' },
+  { cat: '시작하기', q: '대시보드 메뉴가 각각 무슨 역할인가요?', kw: '메뉴 대시보드 어르신관리 전화발신 통화기록 건강 리포트 공공데이터', a: '대시보드=전체 현황 / 어르신 관리=등록·수정·즉시전화 / 전화 발신 관리=여러 명 한번에 앱 알림 / 전화 멘트 관리=영실이 인사말 / 통화 기록=통화 내용·위험도 / 건강 상태=앱 건강체크·알림 / 리포트=통계 / 공공데이터=지역 현황.' },
 
-export default function HelpGuide({ orgCode }) {
-  const code = orgCode || 'YS-0001';
+  // 앱 설치·등록 (setup guide 요약)
+  { cat: '앱 설치·등록', q: '영실이 앱 설치하기', kw: '설치 다운로드 플레이스토어 play store apk', a: '어르신 폰에서 Play 스토어를 열고 "영실이"를 검색해 설치합니다. (출시 전이면 받은 테스트 링크/APK로 설치)' },
+  { cat: '앱 설치·등록', q: '권한 허용 (마이크·알림·배터리)', kw: '권한 허용 마이크 알림 배터리 최적화 절전', a: '앱 첫 실행 시 마이크·알림을 모두 허용하고, 배터리 최적화 제외를 설정하세요. 특히 배터리 최적화 제외가 안 되면 절전 상태에서 전화가 안 올 수 있어요.' },
+  { cat: '앱 설치·등록', q: '기관코드 입력하는 법', kw: '기관코드 YS 코드 입력', a: '앱 설정 맨 위 🏢 기관코드 칸에 복지관에서 받은 코드를 넣습니다. "YS-" 뒤 부분(예: 0001)만 입력하면 됩니다. 코드가 맞아야 우리 기관 승인 대기에 정확히 뜹니다.' },
+  { cat: '앱 설치·등록', q: '어르신 정보 입력 후 등록 신청', kw: '등록 신청 이름 호칭 보호자 복지사 응급 119', a: '기관코드 아래로 내려가며 본인 전화번호·이름·호칭·보호자·복지사·응급(119) 정보를 채운 뒤, 맨 아래 초록색 "📝 등록 신청 (관리자 승인)" 버튼을 누릅니다.' },
+  { cat: '앱 설치·등록', q: '대시보드에서 승인하기', kw: '승인 대기 활성화 승인버튼', a: '복지사 대시보드 → 어르신 관리 → "승인 대기"에서 해당 어르신의 승인 버튼을 누르면 활성화됩니다. 앱은 약 7초 간격으로 승인을 확인해 자동으로 켜집니다.' },
+
+  // 대시보드 사용
+  { cat: '대시보드 사용', q: '어르신을 대시보드에서 직접 등록하려면?', kw: '신규 등록 주소검색 등록', a: '어르신 관리 → 우측 상단 "+ 신규 등록" → 주소 검색으로 주소 선택 후 정보 입력 → 등록 완료.' },
+  { cat: '대시보드 사용', q: '기관코드는 어디서 확인하나요?', kw: '기관코드 위치 확인 복사', a: '① 화면 좌측 하단(기관명 아래)에 항상 표시됩니다. ② 어르신 관리 화면 상단 "앱으로 어르신 등록하기" 안내에도 크게 표시되고, 클릭하면 복사됩니다.' },
+  { cat: '대시보드 사용', q: '여러 어르신에게 한 번에 전화하려면?', kw: '일괄 발신 전체 앱알림 배치', a: '전화 발신 관리 → 대상 선택 → "앱 알림 발신". 받음/부재중이 표시되고, 부재중인 분만 골라 다시 보낼 수 있습니다.' },
+
+  // 위험·건강
+  { cat: '위험·건강 알림', q: '위험 알림(긴급/주의) 대응', kw: '위험 긴급 주의 알림 키워드 119', a: '🔴 긴급("가슴이 아파·쓰러·119" 등): 즉시 어르신·보호자에게 연락하거나 방문. 🟡 주의("어지러워" 등): 통화 기록 확인 후 안부 전화. 위험 알림은 대시보드 홈 상단과 건강 상태 메뉴에서 확인합니다.' },
+  { cat: '위험·건강 알림', q: '건강 상태는 어떻게 확인하나요?', kw: '건강 상태 건강체크 좋아요 안좋아요', a: '어르신이 앱에서 체크한 건강 상태가 건강 상태 메뉴에 표시되고, "안 좋아요"는 알림으로 옵니다.' },
+
+  // 계정·기관
+  { cat: '계정·기관', q: '로그인하면 다른 복지관 어르신도 보이나요?', kw: '기관 격리 분리 다른기관 보안', a: '아니요. 본인 기관의 어르신만 보입니다. 기관별로 완전히 분리되어 있습니다.' },
+  { cat: '계정·기관', q: '회원가입은 어떻게 하나요?', kw: '회원가입 가입 이메일 인증 계정', a: '홈페이지 로그인 화면에서 회원가입 → 이메일 인증 후 바로 사용할 수 있습니다. 가입 즉시 본인 기관 대시보드가 생성됩니다(어르신 0명 상태).' },
+  { cat: '계정·기관', q: '이메일 인증을 아직 못했어요', kw: '이메일 인증 메일 재발송 인증필요', a: '가입 후에도 대시보드는 바로 사용 가능합니다. 상단 배너의 "인증 메일 재발송"으로 다시 받고, 메일(스팸함 포함)의 링크를 클릭한 뒤 "인증 완료 → 새로고침"을 누르면 배너가 사라집니다.' },
+
+  // 문제해결
+  { cat: '문제해결', q: '영실이 전화가 오지 않아요', kw: '전화 안옴 수신 안됨 권한 배터리', a: '대부분 권한 문제입니다. 폰 설정에서 ① 영실이 알림이 켜져 있는지, ② 배터리 최적화 제외(제한 없음)가 설정돼 있는지 확인하세요(삼성 등 절전 강한 기종 주의).' },
+  { cat: '문제해결', q: '승인 대기에 어르신이 안 떠요', kw: '승인대기 안뜸 기관코드 등록신청', a: '① 앱 기관코드가 우리 복지관 코드와 정확히 일치하는지, ② 정보 입력 후 "등록 신청" 버튼을 눌렀는지 확인하세요. 코드가 다르면 다른 기관으로 신청됩니다.' },
+  { cat: '문제해결', q: '화면이 이상하거나 안 보일 때', kw: '흰화면 새로고침 캐시 오류', a: '브라우저에서 Ctrl+Shift+R(새로고침)을 한 번 눌러 최신 화면을 받아주세요.' },
+];
+
+const CATS = ['시작하기', '앱 설치·등록', '대시보드 사용', '위험·건강 알림', '계정·기관', '문제해결'];
+
+const Card = ({ children, style }) => <div className="section" style={{ marginBottom: 16, ...style }}>{children}</div>;
+
+export default function HelpGuide() {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState({});
+  const q = query.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!q) return HELP_ITEMS;
+    return HELP_ITEMS.filter(it => (it.q + ' ' + it.kw + ' ' + it.a).toLowerCase().includes(q));
+  }, [q]);
+
+  const Item = ({ it, i }) => {
+    const key = it.cat + i + it.q;
+    const isOpen = !!open[key] || !!q;   // 검색 중엔 펼쳐서 보여줌
+    return (
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, marginBottom: 8, overflow: 'hidden', background: '#fff' }}>
+        <div onClick={() => setOpen(o => ({ ...o, [key]: !isOpen }))} style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#1e3a6e' }}>
+          <span style={{ fontSize: 13, color: '#94a3b8' }}>{it.cat}</span>
+          <span style={{ flex: 1 }}>{it.q}</span>
+          <span style={{ color: '#2563eb', fontSize: 18 }}>{isOpen ? '−' : '+'}</span>
+        </div>
+        {isOpen && <div style={{ padding: '0 14px 14px', color: '#475569', fontSize: 14, lineHeight: 1.6 }}>{it.a}</div>}
+      </div>
+    );
+  };
+
   return (
-    <div className="fade-in" style={{ maxWidth: 960, lineHeight: 1.6 }}>
+    <div className="fade-in" style={{ maxWidth: 900, lineHeight: 1.6 }}>
       {/* 표지 */}
       <Card style={{ background: 'linear-gradient(135deg,#1e3a6e,#2563eb)', color: '#fff' }}>
-        <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 4 }}>📖 영실이 사용 설명서</div>
-        <div style={{ fontSize: 14, opacity: 0.92 }}>복지사 선생님을 위한 안내서 · AI 영실이가 어르신께 매일 안부 전화를 드리고, 위험 신호를 선생님께 알려드립니다.</div>
+        <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 4 }}>📖 도움말 보기</div>
+        <div style={{ fontSize: 14, opacity: 0.92 }}>궁금한 내용을 검색하거나 아래 항목에서 찾아보세요. 계속 업데이트됩니다.</div>
       </Card>
 
-      {/* 업데이트 소식 */}
-      <Card style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
-        <H>📢 업데이트 소식</H>
-        {ANNOUNCEMENTS.map(a => (
-          <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid #dbeafe' }}>
-            <span style={{ background: a.tag === '신규' ? '#16a34a' : '#2563eb', color: '#fff', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{a.tag}</span>
-            <div><span style={{ color: '#64748b', fontSize: 12, marginRight: 8 }}>{a.date}</span>{a.text}</div>
+      {/* 검색 */}
+      <div style={{ position: 'relative', marginBottom: 16 }}>
+        <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 18, color: '#94a3b8' }}>🔍</span>
+        <input
+          className="form-input"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="도움말 검색 (예: 전화 안옴, 기관코드, 승인, 권한…)"
+          style={{ width: '100%', padding: '14px 16px 14px 44px', fontSize: 15, borderRadius: 12 }}
+        />
+        {query && <button onClick={() => setQuery('')} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 16 }}>✕</button>}
+      </div>
+
+      {/* 앱 설치 상세 매뉴얼 링크 */}
+      <a href={SETUP_GUIDE_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <span style={{ fontSize: 28 }}>📱</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, color: '#1e3a6e' }}>앱 설치·등록 상세 안내 (그림 매뉴얼)</div>
+            <div style={{ fontSize: 13, color: '#475569', marginTop: 2 }}>어르신 폰 앱 설치부터 기관코드·등록 신청·승인까지 그림으로 단계별 안내</div>
           </div>
-        ))}
-      </Card>
+          <span style={{ color: '#2563eb', fontWeight: 800 }}>열기 →</span>
+        </div>
+      </a>
 
-      {/* 빠른 시작 */}
-      <Card>
-        <H>🚀 빠른 시작 (3단계)</H>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {[
-            { n: 1, t: '로그인', d: '발급받은 기관 계정(이메일·비밀번호)으로 대시보드에 로그인합니다.' },
-            { n: 2, t: '어르신 등록', d: '담당 어르신을 등록합니다. (대시보드에서 직접 또는 어르신 폰 앱에서)' },
-            { n: 3, t: '매일 확인', d: '통화 기록·건강 상태·위험 알림을 확인하고, 필요하면 전화를 보냅니다.' },
-          ].map(s => (
-            <div key={s.n} style={{ flex: '1 1 240px', background: '#f8fafc', borderRadius: 12, padding: 16, border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}><Step n={s.n} /><b style={{ fontSize: 15 }}>{s.t}</b></div>
-              <div style={{ fontSize: 13, color: '#475569' }}>{s.d}</div>
+      {/* 업데이트 소식 (검색 중엔 숨김) */}
+      {!q && (
+        <Card style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div className="section-title" style={{ fontSize: 16 }}>📢 업데이트 소식</div>
+          {ANNOUNCEMENTS.map(a => (
+            <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid #eef2f7' }}>
+              <span style={{ background: a.tag === '신규' ? '#16a34a' : '#2563eb', color: '#fff', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{a.tag}</span>
+              <div><span style={{ color: '#94a3b8', fontSize: 12, marginRight: 8 }}>{a.date}</span>{a.text}</div>
             </div>
           ))}
-        </div>
-      </Card>
+        </Card>
+      )}
 
-      {/* 메뉴 안내 */}
-      <Card>
-        <H>🖥️ 대시보드 메뉴 안내</H>
-        <table className="table">
-          <tbody>
-            {[
-              ['⊞ 대시보드', '전체 현황 한눈에 — 담당 어르신 수, 오늘 통화, 위험 알림'],
-              ['👥 어르신 관리', '어르신 등록·수정, 상세 정보, 즉시 전화'],
-              ['📅 전화 발신 관리', '여러 어르신에게 한 번에 앱 알림 발신 (받음/부재중 확인)'],
-              ['✍️ 전화 멘트 관리', '영실이가 전화할 때 하는 말(인사·안부) 설정'],
-              ['📞 통화 기록', '실제 통화 내용·시간·위험도 기록'],
-              ['💊 건강 상태', '어르신이 앱에서 체크한 건강 상태·위험 알림'],
-              ['📊 리포트 / 통계', '기간별 통화·위험 키워드 통계'],
-              ['🗺️ 공공데이터 현황', '지역별 독거노인 현황'],
-            ].map(([m, d]) => (
-              <tr key={m}><td style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{m}</td><td style={{ color: '#475569', fontSize: 14 }}>{d}</td></tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-
-      {/* 어르신 등록 — 방법 A */}
-      <Card>
-        <H>👵 어르신 등록하기 — 방법 A. 대시보드에서 직접</H>
-        <div style={{ fontSize: 14, color: '#334155' }}>
-          <p style={{ margin: '6px 0', display: 'flex' }}><Step n={1} /> 좌측 <b>👥 어르신 관리</b> → 우측 상단 <b>+ 신규 등록</b> 클릭</p>
-          <p style={{ margin: '6px 0', display: 'flex' }}><Step n={2} /> <b>🔍 주소 검색</b>으로 주소를 고르고(관할 구역 자동 입력), 이름·나이·전화번호 등 입력</p>
-          <p style={{ margin: '6px 0', display: 'flex' }}><Step n={3} /> 보호자 정보·전화 시간 설정 후 <b>등록 완료</b> → <b>6자리 인증코드</b>가 발급됩니다</p>
-          <p style={{ margin: '6px 0', display: 'flex' }}><Step n={4} /> 어르신 폰 앱 설정에 <b>전화번호 + 인증코드</b>를 입력하면 연결됩니다</p>
-        </div>
-      </Card>
-
-      {/* 어르신 등록 — 방법 B (기관코드, 핵심 목업) */}
-      <Card style={{ border: '2px solid #16a34a' }}>
-        <H>📱 어르신 등록하기 — 방법 B. 어르신 폰 앱에서 (기관코드)</H>
-        <div style={{ fontSize: 14, color: '#334155', marginBottom: 14 }}>
-          현장에서 어르신 폰에 바로 등록 신청하는 방법입니다. 선생님 기관코드는 <b style={{ color: '#b45309', background: '#fffbeb', padding: '2px 8px', borderRadius: 6, letterSpacing: 1 }}>{code}</b> 입니다. (대시보드 <b>🏢 기관 관리</b>에서 확인)
-        </div>
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          {/* 1 */}
-          <div style={{ flex: '0 0 auto', textAlign: 'center' }}>
-            <div style={{ marginBottom: 8, fontWeight: 700 }}><Step n={1} />앱 설정에서 기관코드 입력</div>
-            <Phone title="⚙️ 설정">
-              <Field label="🏢 기관코드 (복지관에서 받은)" value={code} highlight />
-              <Field label="본인 전화번호" value="010-0000-0000" />
-            </Phone>
-          </div>
-          {/* 2 */}
-          <div style={{ flex: '0 0 auto', textAlign: 'center' }}>
-            <div style={{ marginBottom: 8, fontWeight: 700 }}><Step n={2} />어르신 정보 입력 → 등록 신청</div>
-            <Phone title="⚙️ 설정">
-              <Field label="이름" value="김영실" />
-              <Field label="보호자 연락처" value="010-1234-5678" />
-              <Btn color="#16a34a">📝 등록 신청 (관리자 승인)</Btn>
-            </Phone>
-          </div>
-          {/* 3 */}
-          <div style={{ flex: '0 0 auto', textAlign: 'center' }}>
-            <div style={{ marginBottom: 8, fontWeight: 700 }}><Step n={3} />대시보드에서 승인</div>
-            <div style={{ width: 240, border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff', padding: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#b45309', marginBottom: 8 }}>🔔 승인 대기 (1명)</div>
-              <div style={{ border: '1px solid #fde68a', background: '#fffbeb', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontWeight: 700 }}>김영실</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>방금 신청 · {code}</div>
-                <Btn color="#2563eb">✅ 승인 · 활성화</Btn>
-              </div>
-              <div style={{ fontSize: 12, color: '#16a34a', marginTop: 10, fontWeight: 700 }}>승인하면 어르신 앱이 자동으로 켜집니다 ✓</div>
-            </div>
-          </div>
-        </div>
-        <div style={{ marginTop: 14, fontSize: 13, color: '#475569', background: '#f0fdf4', borderRadius: 10, padding: '10px 14px' }}>
-          💡 <b>요약</b>: 앱에 <b>기관코드({code})</b> → 어르신 정보 → <b>등록 신청</b> → 대시보드 <b>어르신 관리</b>의 <b>승인 대기</b>에서 <b>승인</b> → 끝! 인증코드 없이 바로 연결됩니다.
-        </div>
-      </Card>
-
-      {/* 앱 설치 */}
-      <Card>
-        <H>📲 어르신 폰에 앱 설치하기</H>
-        <div style={{ fontSize: 14, color: '#334155' }}>
-          <p style={{ margin: '6px 0', display: 'flex' }}><Step n={1} /> 어르신 폰에서 <b>구글 플레이스토어</b>를 엽니다</p>
-          <p style={{ margin: '6px 0', display: 'flex' }}><Step n={2} /> <b>"AI 영실이"</b>를 검색해 설치합니다 (또는 받은 설치 링크)</p>
-          <p style={{ margin: '6px 0', display: 'flex' }}><Step n={3} /> 처음 실행 시 <b>마이크·알림 권한을 모두 허용</b>합니다 (전화를 받기 위해 꼭 필요)</p>
-          <p style={{ margin: '6px 0', display: 'flex' }}><Step n={4} /> 설정에서 위 <b>방법 B</b>(기관코드) 또는 <b>방법 A</b>(인증코드)로 등록합니다</p>
-        </div>
-      </Card>
-
-      {/* 위험 알림 */}
-      <Card>
-        <H>🚨 위험 알림 대응</H>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 280px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: 14 }}>
-            <div style={{ fontWeight: 800, color: '#dc2626', marginBottom: 4 }}>🔴 긴급</div>
-            <div style={{ fontSize: 13, color: '#475569' }}>"가슴이 아파·쓰러·119" 등 감지. <b>즉시 어르신·보호자에게 연락</b>하거나 방문하세요. (119 자동 발신 설정 가능)</div>
-          </div>
-          <div style={{ flex: '1 1 280px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: 14 }}>
-            <div style={{ fontWeight: 800, color: '#b45309', marginBottom: 4 }}>🟡 주의</div>
-            <div style={{ fontSize: 13, color: '#475569' }}>"어지러워·기운이 없어" 등 감지. 통화 기록을 확인하고 <b>안부 전화</b>로 상태를 살펴주세요.</div>
-          </div>
-        </div>
-        <div style={{ fontSize: 13, color: '#64748b', marginTop: 10 }}>※ 위험 알림은 <b>대시보드 홈</b> 상단과 <b>💊 건강 상태</b> 메뉴에서 확인할 수 있습니다.</div>
-      </Card>
-
-      {/* FAQ */}
-      <Card>
-        <H>❓ 자주 묻는 질문</H>
-        {[
-          ['어르신이 전화를 안 받으면요?', '받지 않으면 "부재중"으로 표시됩니다. 전화 발신 관리에서 부재중인 어르신만 골라 다시 보낼 수 있습니다.'],
-          ['로그인하면 다른 복지관 어르신도 보이나요?', '아니요. 본인 기관의 어르신만 보입니다. 기관별로 완전히 분리되어 있습니다.'],
-          ['기관코드는 어디서 확인하나요?', '운영자에게 받은 코드입니다. (운영자는 대시보드 🏢 기관 관리에서 발급·확인)'],
-          ['화면이 이상하거나 안 보일 때?', '브라우저에서 Ctrl+Shift+R(새로고침)을 한 번 눌러 최신 화면을 받아주세요.'],
-        ].map(([q, a]) => (
-          <div key={q} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ fontWeight: 700, color: '#1e3a6e' }}>Q. {q}</div>
-            <div style={{ fontSize: 14, color: '#475569', marginTop: 2 }}>A. {a}</div>
-          </div>
-        ))}
-      </Card>
+      {/* 검색 결과 / 항목 목록 */}
+      {q ? (
+        <Card>
+          <div className="section-title" style={{ fontSize: 15 }}>🔍 "{query}" 검색 결과 ({filtered.length})</div>
+          {filtered.length === 0
+            ? <div style={{ color: '#94a3b8', padding: '20px 0', textAlign: 'center' }}>검색 결과가 없습니다. 다른 키워드로 찾아보거나 위 "상세 안내"를 확인하세요.</div>
+            : filtered.map((it, i) => <Item key={i} it={it} i={i} />)}
+        </Card>
+      ) : (
+        CATS.map(cat => {
+          const items = HELP_ITEMS.filter(it => it.cat === cat);
+          if (!items.length) return null;
+          return (
+            <Card key={cat}>
+              <div className="section-title" style={{ fontSize: 16 }}>{cat}</div>
+              {items.map((it, i) => <Item key={i} it={it} i={i} />)}
+            </Card>
+          );
+        })
+      )}
 
       <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: '8px 0 24px' }}>
-        문의: 운영자 / AI 영실이 고객지원 · 이 설명서는 대시보드에서 항상 다시 볼 수 있습니다.
+        더 궁금한 점은 kraft@krafte.net · 1877-1979 로 문의해 주세요.
       </div>
     </div>
   );
