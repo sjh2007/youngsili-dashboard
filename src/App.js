@@ -520,6 +520,9 @@ export default function App() {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkDone, setBulkDone]     = useState([]);
   const [bulkCurrent, setBulkCurrent] = useState(null);
+  const [dispatchHist, setDispatchHist] = useState([]);   // 발신 이력(날짜별) — 서버 dispatches
+  const [histLoading, setHistLoading] = useState(false);
+  const [histDays, setHistDays]     = useState(7);
   const [batchSize, setBatchSize]   = useState(5);    // 배치당 발신 인원 (AI서버 동시통화 부하 분산)
   const [batchIntervalSec, setBatchIntervalSec] = useState(90);  // 배치 간 대기(초)
   const [batchWait, setBatchWait]   = useState(0);    // 다음 배치까지 남은 초(카운트다운 표시)
@@ -728,24 +731,18 @@ export default function App() {
     if (queue.length > 0) startBulkCall(queue);
   };
 
-  // 발신 내역 복원: 발신 페이지 진입/새로고침 시 서버에서 오늘 발신 상태를 불러와 패널 복원
-  const loadDispatches = async () => {
+  // 발신 이력: 발신 페이지에서 서버 dispatches를 최근 N일치 불러와 날짜별로 표시(복지사/관리자가 언제 발신했는지 확인)
+  const loadDispatchHistory = async (days = histDays) => {
+    setHistLoading(true);
     try {
-      const r = await authFetch(`${SERVER_URL}/call/dispatches`);
+      const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const r = await authFetch(`${SERVER_URL}/call/dispatches?from=${encodeURIComponent(from)}`);
       const d = await r.json();
-      if (!d.available || !(d.dispatches || []).length) return;
-      const np = s => String(s || '').replace(/\D/g, '');
-      const seen = new Set();
-      const rows = d.dispatches.map(x => {
-        const el = elders.find(e => np(e.phone) && np(e.phone) === np(x.phone)) || elders.find(e => e.name === x.name);
-        return el ? { elder: el, done: { id: el.id, callId: x.callId, status: x.status, durationSec: x.durationSec, success: x.status !== 'failed' } } : null;
-      }).filter(Boolean).filter(r => { if (seen.has(r.elder.id)) return false; seen.add(r.elder.id); return true; });
-      if (!rows.length) return;
-      setBulkQueue(rows.map(r => r.elder));
-      setBulkDone(rows.map(r => r.done));
-    } catch {}
+      setDispatchHist(Array.isArray(d.dispatches) ? d.dispatches : []);
+    } catch { setDispatchHist([]); }
+    setHistLoading(false);
   };
-  useEffect(() => { if (page === 'schedule' && !bulkRunning && bulkDone.length === 0 && elders.length > 0) loadDispatches(); }, [page, elders]); // eslint-disable-line
+  useEffect(() => { if (page === 'schedule') loadDispatchHistory(histDays); }, [page, histDays]); // eslint-disable-line
 
   // ── 단건 전화 (FCM 앱 푸시) ──
   const makeCall = async elder => {
@@ -1135,6 +1132,49 @@ export default function App() {
                   )}
                 </div>
               )}
+
+              {/* 발신 이력(날짜별) — 언제 발신했는지 복지사/관리자가 확인 */}
+              <div className="section">
+                <div className="section-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                  <span>📋 발신 이력</span>
+                  <span style={{display:'flex',gap:6}}>
+                    {[7,30].map(d=>(
+                      <button key={d} onClick={()=>setHistDays(d)} className={`smart-btn ${histDays===d?'smart-active':''}`} style={{fontSize:12,padding:'4px 10px'}}>최근 {d}일</button>
+                    ))}
+                    <button onClick={()=>loadDispatchHistory(histDays)} className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}>🔄 새로고침</button>
+                  </span>
+                </div>
+                {histLoading ? (
+                  <div style={{padding:24,textAlign:'center',color:'#94a3b8'}}>불러오는 중...</div>
+                ) : dispatchHist.length===0 ? (
+                  <div style={{padding:24,textAlign:'center',color:'#94a3b8'}}>최근 {histDays}일 발신 이력이 없습니다.</div>
+                ) : (()=>{
+                  const groups={};
+                  dispatchHist.forEach(x=>{ const dk=(x.sentAtIso||'').slice(0,10)||'미상'; (groups[dk]=groups[dk]||[]).push(x); });
+                  return Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,rows])=>(
+                    <div key={date} style={{marginBottom:16}}>
+                      <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {rows.length}건</span></div>
+                      {rows.slice().sort((a,b)=>String(b.sentAtIso).localeCompare(String(a.sentAtIso))).map((x,i)=>{
+                        const t=x.sentAtIso?new Date(x.sentAtIso).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+                        const st=x.status;
+                        const info=(st==='completed'||st==='answered')?{ic:'✅',tx:`받음${x.durationSec?` (${x.durationSec}초)`:''}`,c:'#16a34a'}
+                          :st==='ringing'?{ic:'📲',tx:'수신대기',c:'#f59e0b'}
+                          :st==='missed'?{ic:'📵',tx:'부재중',c:'#f59e0b'}
+                          :st==='failed'?{ic:'❌',tx:`실패${x.reason?` · ${x.reason}`:''}`,c:'#ef4444'}
+                          :{ic:'✅',tx:'전송됨',c:'#64748b'};
+                        return (
+                          <div key={x.callId||i} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 14px',borderRadius:10,background:st==='failed'?'#fef2f2':st==='missed'?'#fff7ed':'#f8fafc',marginBottom:6,flexWrap:'wrap'}}>
+                            <div style={{minWidth:46,color:'#64748b',fontSize:13,fontWeight:600}}>{t}</div>
+                            <div style={{minWidth:90,fontWeight:700,fontSize:14}}>{nameByPhone(x.phone,x.name)}</div>
+                            <div style={{minWidth:110,color:'#64748b',fontSize:13}}>{x.phone}</div>
+                            <div style={{flex:1,minWidth:120,fontWeight:700,fontSize:13,color:info.c}}>{info.ic} {info.tx}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
+              </div>
 
               <table className="table">
                 <thead><tr><th style={{width:40}}><input type="checkbox" checked={checked.length===smartElders.length&&smartElders.length>0} onChange={e=>e.target.checked?checkAll():uncheckAll()} className="cb"/></th><th>어르신</th><th>전화번호</th><th>담당 복지사</th><th>전화 주기</th><th>전화 시간</th><th>마지막 통화</th><th>상태</th><th>중단/재개</th></tr></thead>
