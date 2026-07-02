@@ -523,6 +523,7 @@ export default function App() {
   const [dispatchHist, setDispatchHist] = useState([]);   // 발신 이력(날짜별) — 서버 dispatches
   const [histLoading, setHistLoading] = useState(false);
   const [histDays, setHistDays]     = useState(7);
+  const [expandedHistDays, setExpandedHistDays] = useState(new Set());  // 발신 이력 날짜별 펼침
   const [batchSize, setBatchSize]   = useState(5);    // 배치당 발신 인원 (AI서버 동시통화 부하 분산)
   const [batchIntervalSec, setBatchIntervalSec] = useState(90);  // 배치 간 대기(초)
   const [batchWait, setBatchWait]   = useState(0);    // 다음 배치까지 남은 초(카운트다운 표시)
@@ -1154,10 +1155,14 @@ export default function App() {
                   return Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,rows])=>{
                     const recv=rows.filter(r=>r.status==='completed'||r.status==='answered').length;
                     const miss=rows.filter(r=>r.status==='missed').length;
+                    const sorted=rows.slice().sort((a,b)=>String(b.sentAtIso).localeCompare(String(a.sentAtIso)));
+                    const open=expandedHistDays.has(date);
+                    const shown=open?sorted:sorted.slice(0,3);
+                    const hiddenBad=sorted.slice(3).filter(r=>r.status==='missed'||r.status==='failed').length;
                     return (
                     <div key={date} style={{marginBottom:16}}>
                       <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0',display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {rows.length}건</span><span style={{color:'#16a34a',fontWeight:700,fontSize:13}}>✅ 받음 {recv}건</span><span style={{color:'#f59e0b',fontWeight:700,fontSize:13}}>📵 부재중 {miss}건</span></div>
-                      {rows.slice().sort((a,b)=>String(b.sentAtIso).localeCompare(String(a.sentAtIso))).map((x,i)=>{
+                      {shown.map((x,i)=>{
                         const t=x.sentAtIso?new Date(x.sentAtIso).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                         const st=x.status;
                         const info=(st==='completed'||st==='answered')?{ic:'✅',tx:`받음${x.durationSec?` (${x.durationSec}초)`:''}`,c:'#16a34a'}
@@ -1174,6 +1179,11 @@ export default function App() {
                           </div>
                         );
                       })}
+                      {sorted.length>3 && (
+                        <button onClick={()=>setExpandedHistDays(prev=>{const n=new Set(prev); n.has(date)?n.delete(date):n.add(date); return n;})} style={{marginTop:2,marginLeft:2,background:'none',border:'none',color:'#2563eb',fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'2px 0'}}>
+                          {open?'접기 ▴':`${sorted.length-3}건 더 보기${hiddenBad>0?` (부재중·실패 ${hiddenBad}건 포함)`:''} ▾`}
+                        </button>
+                      )}
                     </div>
                   );});
                 })()}
