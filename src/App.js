@@ -929,7 +929,7 @@ export default function App() {
                 // 2) 미응답 (어르신 데이터 기반)
                 elders.forEach(e => {
                   const days = getNoResponseDays(e.lastCall, e.lastCallAt);
-                  // 미통화(99 sentinel=신규/통화이력 없음)는 '미응답'이 아님 → 긴급 알림 제외. 실제 무응답(3~98일)만 알림.
+                  // 통화이력 없음(99 sentinel=신규)은 '미응답'이 아님 → 긴급 알림 제외. 실제 무응답(3~98일)만 알림.
                   if (days >= 3 && days < 99) alerts.push({ elder: e, type: 'noResponse', msg: `${days}일째 미응답 → 즉시 확인 필요`, color: '#ef4444', bg: '#fef2f2', icon: '📵' });
                 });
                 const heatwaveElders = elders.filter(e => weatherData[e.region]?.alert === 'heatwave');
@@ -1049,7 +1049,7 @@ export default function App() {
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
-                          <td>{days===0?<span style={{color:'#22c55e',fontWeight:700,fontSize:12}}>정상</span>:<span style={{color:days>=3?'#ef4444':'#f59e0b',fontWeight:700,fontSize:12}}>{days>=99?'미통화':`${days}일`}</span>}</td>
+                          <td>{days===0?<span style={{color:'#22c55e',fontWeight:700,fontSize:12}}>정상</span>:<span style={{color:days>=3?'#ef4444':'#f59e0b',fontWeight:700,fontSize:12}}>{days>=99?'통화이력 없음':`${days}일`}</span>}</td>
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
                           <td><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div></td>
                           <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'⏳':'📱 전화'}</button></td>
@@ -1068,7 +1068,7 @@ export default function App() {
                 <div className="bulk-left">
                   <div className="bulk-title">스마트 선택</div>
                   <div className="smart-filters">
-                    {[{id:'all',label:'전체',count:elders.length},{id:'danger',label:'⚠️ 위험/주의만',count:elders.filter(e=>e.status!=='normal').length},{id:'noCall',label:'📵 미통화',count:elders.filter(e=>e.lastCall==='아직 없음'||(e.lastCall||'').includes('어제')).length},{id:'active',label:'✅ 활성만',count:elders.filter(e=>e.callActive).length}].map(f=>(
+                    {[{id:'all',label:'전체',count:elders.length},{id:'danger',label:'⚠️ 위험/주의만',count:elders.filter(e=>e.status!=='normal').length},{id:'noCall',label:'📞 발신 대상',count:elders.filter(e=>e.lastCall==='아직 없음'||(e.lastCall||'').includes('어제')).length},{id:'active',label:'✅ 활성만',count:elders.filter(e=>e.callActive).length}].map(f=>(
                       <button key={f.id} className={`smart-btn ${smartFilter===f.id?'smart-active':''}`} onClick={()=>applySmartFilter(f.id)}>{f.label} <span className="filter-count">{f.count}</span></button>
                     ))}
                   </div>
@@ -1151,9 +1151,12 @@ export default function App() {
                 ) : (()=>{
                   const groups={};
                   dispatchHist.forEach(x=>{ const dk=(x.sentAtIso||'').slice(0,10)||'미상'; (groups[dk]=groups[dk]||[]).push(x); });
-                  return Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,rows])=>(
+                  return Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,rows])=>{
+                    const recv=rows.filter(r=>r.status==='completed'||r.status==='answered').length;
+                    const miss=rows.filter(r=>r.status==='missed').length;
+                    return (
                     <div key={date} style={{marginBottom:16}}>
-                      <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {rows.length}건</span></div>
+                      <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0',display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {rows.length}건</span><span style={{color:'#16a34a',fontWeight:700,fontSize:13}}>✅ 받음 {recv}건</span><span style={{color:'#f59e0b',fontWeight:700,fontSize:13}}>📵 부재중 {miss}건</span></div>
                       {rows.slice().sort((a,b)=>String(b.sentAtIso).localeCompare(String(a.sentAtIso))).map((x,i)=>{
                         const t=x.sentAtIso?new Date(x.sentAtIso).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                         const st=x.status;
@@ -1172,7 +1175,7 @@ export default function App() {
                         );
                       })}
                     </div>
-                  ));
+                  );});
                 })()}
               </div>
 
@@ -1260,7 +1263,7 @@ export default function App() {
                         <div className="elder-name">{elder.name}</div>
                         <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
                         {elder.caregiver && <div className="elder-info" style={{color:'#1d4ed8',fontWeight:600}}>👤 담당: {elder.caregiver}</div>}
-                        {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>📵 {noResponseDays >= 99 ? '미통화' : `${noResponseDays}일째 미응답`}</div>}
+                        {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>📵 {noResponseDays >= 99 ? '통화이력 없음' : `${noResponseDays}일째 미응답`}</div>}
                         <div className="elder-last">📞 마지막 통화: {renderLastCall(elder)}</div>
                         {elder.keyword && <div className="keyword-tag mt8">⚠️ "{elder.keyword}" 감지</div>}
                         {elder.visits > 0 && <div className="visit-tag mt8">🏠 방문 필요 {elder.visits}회</div>}
@@ -1287,7 +1290,7 @@ export default function App() {
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
-                          <td>{noResponseDays===0?<span style={{color:'#22c55e',fontWeight:700}}>정상</span>:<span style={{color:noResponseDays>=3?'#ef4444':'#f59e0b',fontWeight:700}}>{noResponseDays>=99?'미통화':`${noResponseDays}일`}</span>}</td>
+                          <td>{noResponseDays===0?<span style={{color:'#22c55e',fontWeight:700}}>정상</span>:<span style={{color:noResponseDays>=3?'#ef4444':'#f59e0b',fontWeight:700}}>{noResponseDays>=99?'통화이력 없음':`${noResponseDays}일`}</span>}</td>
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
                           <td><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div></td>
                           <td>{elder.keyword ? <span className="keyword-tag">"{elder.keyword}"</span> : <span style={{color:'#9ca3af',fontSize:12}}>없음</span>}</td>
