@@ -535,6 +535,7 @@ export default function App() {
   const [caseSearch, setCaseSearch] = useState('');          // 어르신 이름 검색
   const [caseFollowUpOnly, setCaseFollowUpOnly] = useState(false);
   const [expandedNoteDays, setExpandedNoteDays] = useState(new Set());
+  const [selectedNotes, setSelectedNotes] = useState(new Set());  // 일괄 선택
   const [noteModal, setNoteModal]   = useState(null);        // null | { note?, prefill? }
   const [noteForm, setNoteForm]     = useState(null);        // 작성/수정 폼 값
   const [noteSaving, setNoteSaving] = useState(false);
@@ -840,7 +841,21 @@ export default function App() {
   };
   const deleteNote = async (id) => {
     if (!window.confirm('이 일지를 삭제할까요?')) return;
-    try { await authFetch(`${SERVER_URL}/case-notes/${id}`, { method: 'DELETE' }); await loadCaseNotes(); } catch {}
+    setCaseNotes(prev => prev.filter(n => n.id !== id));   // 낙관적
+    setSelectedNotes(prev => { const s = new Set(prev); s.delete(id); return s; });
+    try { await authFetch(`${SERVER_URL}/case-notes/${id}`, { method: 'DELETE' }); } catch {}
+    loadCaseNotes();
+  };
+  // 일지 선택/일괄 삭제
+  const toggleNoteSel = (id) => setSelectedNotes(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const deleteSelectedNotes = async () => {
+    if (selectedNotes.size === 0) return;
+    const ids = [...selectedNotes];
+    if (!window.confirm(`선택한 ${ids.length}건의 일지를 삭제할까요?`)) return;
+    setCaseNotes(prev => prev.filter(n => !selectedNotes.has(n.id)));   // 낙관적
+    setSelectedNotes(new Set());
+    try { await Promise.all(ids.map(id => authFetch(`${SERVER_URL}/case-notes/${id}`, { method: 'DELETE' }))); } catch {}
+    loadCaseNotes();
   };
 
   // ── 단건 전화 (FCM 앱 푸시) ──
@@ -1841,7 +1856,20 @@ export default function App() {
                 if(filtered.length===0) return <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{caseNotes.length===0?'아직 작성된 상담·방문 일지가 없습니다. ＋ 새 일지로 첫 기록을 남겨보세요.':'조건에 맞는 일지가 없습니다.'}</div>;
                 const groups={};
                 filtered.forEach(n=>{ const dk=(n.visitedAt||'').slice(0,10)||'미상'; (groups[dk]=groups[dk]||[]).push(n); });
-                return Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,rows])=>{
+                const allSel=filtered.every(n=>selectedNotes.has(n.id));
+                const selectAll=()=>setSelectedNotes(prev=>{const s=new Set(prev); if(allSel) filtered.forEach(n=>s.delete(n.id)); else filtered.forEach(n=>s.add(n.id)); return s;});
+                return (<>
+                  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12,flexWrap:'wrap'}}>
+                    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,fontWeight:600,color:'#334155',cursor:'pointer'}}>
+                      <input type="checkbox" checked={allSel} onChange={selectAll}/> 전체 선택
+                    </label>
+                    {selectedNotes.size>0 && (<>
+                      <span style={{fontSize:13,color:'#2563eb',fontWeight:700}}>{selectedNotes.size}건 선택됨</span>
+                      <button onClick={deleteSelectedNotes} style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>🗑 선택 삭제</button>
+                      <button onClick={()=>setSelectedNotes(new Set())} style={{background:'#fff',color:'#64748b',border:'1px solid #d1d5db',borderRadius:8,padding:'6px 12px',fontSize:13,fontWeight:600,cursor:'pointer'}}>선택 해제</button>
+                    </>)}
+                  </div>
+                  {Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,rows])=>{
                   const open=expandedNoteDays.has(date);
                   const shown=open?rows:rows.slice(0,3);
                   return (
@@ -1851,9 +1879,11 @@ export default function App() {
                         const tmeta=CASE_TYPE_META[n.type]||CASE_TYPE_META.etc;
                         const time=n.visitedAt?new Date(n.visitedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                         const fu=n.followUp&&n.followUp.needed&&!n.followUp.done;
+                        const sel=selectedNotes.has(n.id);
                         return (
-                          <div key={n.id} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'12px 14px',marginBottom:8,background:'#fff'}}>
+                          <div key={n.id} style={{border:'1px solid '+(sel?'#93c5fd':'#e2e8f0'),borderRadius:10,padding:'12px 14px',marginBottom:8,background:sel?'#eff6ff':'#fff'}}>
                             <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                              <input type="checkbox" checked={sel} onChange={()=>toggleNoteSel(n.id)} style={{width:16,height:16,cursor:'pointer',flexShrink:0}}/>
                               <span style={{minWidth:44,color:'#64748b',fontSize:13,fontWeight:600}}>{time}</span>
                               <span style={{fontSize:12,fontWeight:700,color:tmeta.color,background:tmeta.bg,padding:'2px 8px',borderRadius:20}}>{tmeta.icon} {tmeta.label}</span>
                               <span style={{fontWeight:700,fontSize:14}}>{nameByPhone(n.elderPhone,n.elderName)}</span>
@@ -1877,7 +1907,8 @@ export default function App() {
                       )}
                     </div>
                   );
-                });
+                })}
+                </>);
               })()}
             </div>
           )}
