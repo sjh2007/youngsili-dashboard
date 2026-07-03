@@ -816,11 +816,25 @@ export default function App() {
       linkedAlertId: noteForm.linkedAlertId,
       followUp: { needed: noteForm.followUpNeeded, dueDate: noteForm.followUpNeeded ? (noteForm.followUpDue || null) : null, done: false },
     };
+    const localNote = {
+      id: noteForm.id || null,
+      elderPhone: noteForm.elderPhone, elderName: noteForm.elderName,
+      type: noteForm.type, category: noteForm.category,
+      content: noteForm.content, action: noteForm.action,
+      authorEmail: (authUser && authUser.email) || '',
+      linkedAlertId: noteForm.linkedAlertId, visitedAt: body.visitedAt, followUp: body.followUp,
+    };
     try {
-      if (noteForm.id) await authFetch(`${SERVER_URL}/case-notes/${noteForm.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      else await authFetch(`${SERVER_URL}/case-notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (noteForm.id) {
+        await authFetch(`${SERVER_URL}/case-notes/${noteForm.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        setCaseNotes(prev => prev.map(n => n.id === noteForm.id ? { ...n, ...localNote } : n));   // 낙관적 반영
+      } else {
+        const r = await authFetch(`${SERVER_URL}/case-notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        let newId = null; try { const d = await r.json(); newId = d && d.id; } catch {}
+        setCaseNotes(prev => [{ ...localNote, id: newId || `local_${Date.now()}` }, ...prev]);      // 낙관적 반영(저장 즉시 표시)
+      }
       setNoteModal(null); setNoteForm(null);
-      await loadCaseNotes();
+      loadCaseNotes();   // 백그라운드 재조회로 서버와 정합성 보정(낙관적 반영이 먼저 보임)
     } catch { alert('저장에 실패했습니다. 다시 시도해 주세요.'); }
     setNoteSaving(false);
   };
