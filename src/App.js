@@ -899,8 +899,13 @@ export default function App() {
   };
 
   const toggleCallActive = id => {
-    setElders(prev=>prev.map(e=>e.id===id?{...e,callActive:!e.callActive}:e));
-    if (selected?.id===id) setSelected(prev=>({...prev,callActive:!prev.callActive}));
+    const tgt = elders.find(e=>e.id===id);
+    if (!tgt) return;
+    const next = !tgt.callActive;
+    setElders(prev=>prev.map(e=>e.id===id?{...e,callActive:next}:e));
+    if (selected?.id===id) setSelected(prev=>({...prev,callActive:next}));
+    // 서버에 영구 저장(누락 시 새로고침마다 재개로 되돌아가던 버그). phone 키로 callActive만 merge, 승인상태 보존.
+    if (tgt.phone) authFetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ phone: tgt.phone, callActive: next, approved: tgt.approved }) }).catch(()=>{});
   };
 
   const validateStep = step => {
