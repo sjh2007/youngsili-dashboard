@@ -536,6 +536,7 @@ export default function App() {
   const [caseFollowUpOnly, setCaseFollowUpOnly] = useState(false);
   const [expandedNoteDays, setExpandedNoteDays] = useState(new Set());
   const [selectedNotes, setSelectedNotes] = useState(new Set());  // 일괄 선택
+  const [selectedElders, setSelectedElders] = useState(new Set());  // 어르신 일괄 선택
   const [noteModal, setNoteModal]   = useState(null);        // null | { note?, prefill? }
   const [noteForm, setNoteForm]     = useState(null);        // 작성/수정 폼 값
   const [noteSaving, setNoteSaving] = useState(false);
@@ -925,6 +926,18 @@ export default function App() {
     setTimeout(()=>{setSaveSuccess(false);setPage(editMode?'detail':'elders');},1800);
   };
   const deleteElder = id => { if(window.confirm('정말 삭제하시겠습니까?')){const tgt=elders.find(e=>e.id===id);setElders(prev=>prev.filter(e=>e.id!==id));if(tgt?.phone)authFetch(`${SERVER_URL}/elders/${tgt.phone.replace(/[^0-9]/g,'')}`,{method:'DELETE'}).catch(()=>{});setPage('elders');setSelected(null);} };
+  // 어르신 선택/일괄 삭제
+  const toggleElderSel = id => setSelectedElders(prev=>{const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s;});
+  const toggleAllElders = (list) => setSelectedElders(prev=>{const s=new Set(prev); const all=list.length>0&&list.every(e=>s.has(e.id)); list.forEach(e=> all?s.delete(e.id):s.add(e.id)); return s;});
+  const deleteSelectedElders = async () => {
+    if(selectedElders.size===0) return;
+    const targets=elders.filter(e=>selectedElders.has(e.id));
+    if(!window.confirm(`선택한 ${targets.length}명을 어르신 명단에서 삭제할까요?`)) return;
+    setElders(prev=>prev.filter(e=>!selectedElders.has(e.id)));   // 낙관적
+    setSelectedElders(new Set());
+    try { await Promise.all(targets.map(t=> t.phone ? authFetch(`${SERVER_URL}/elders/${String(t.phone).replace(/[^0-9]/g,'')}`,{method:'DELETE'}) : Promise.resolve())); } catch {}
+    fetchElders();
+  };
   const inp = field => ({ value:form[field]??'', onChange:e=>setForm(f=>({...f,[field]:e.target.value})), className:`form-input ${formErrors[field]?'input-error':''}` });
 
   // 다음(카카오) 우편번호 검색 → 주소 자동입력 + 관할구역(시/구) 자동추출
@@ -1433,6 +1446,19 @@ export default function App() {
                 </div>
               )}
 
+              {filteredElders.length > 0 && (
+                <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10,flexWrap:'wrap'}}>
+                  <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,fontWeight:600,color:'#334155',cursor:'pointer'}}>
+                    <input type="checkbox" checked={filteredElders.every(e=>selectedElders.has(e.id))} onChange={()=>toggleAllElders(filteredElders)}/> 전체 선택
+                  </label>
+                  {selectedElders.size>0 && (<>
+                    <span style={{fontSize:13,color:'#2563eb',fontWeight:700}}>{selectedElders.size}명 선택됨</span>
+                    <button onClick={deleteSelectedElders} style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>🗑 선택 삭제</button>
+                    <button onClick={()=>setSelectedElders(new Set())} style={{background:'#fff',color:'#64748b',border:'1px solid #d1d5db',borderRadius:8,padding:'6px 12px',fontSize:13,fontWeight:600,cursor:'pointer'}}>선택 해제</button>
+                  </>)}
+                </div>
+              )}
+
               {viewMode === 'card' && (
                 <div className="elder-grid">
                   {filteredElders.length === 0 && <div className="empty-result">검색 결과가 없습니다 🔍</div>}
@@ -1440,8 +1466,8 @@ export default function App() {
                     const risk = getSolitudeRisk(elder);
                     const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                     return (
-                      <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)}>
-                        <div className="elder-top"><div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
+                      <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)} style={selectedElders.has(elder.id)?{outline:'2px solid #2563eb',outlineOffset:2}:undefined}>
+                        <div className="elder-top"><div style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:16,height:16,cursor:'pointer'}}/><div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
                         <div className="elder-name">{elder.name}</div>
                         <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
                         {elder.caregiver && <div className="elder-info" style={{color:'#1d4ed8',fontWeight:600}}>👤 담당: {elder.caregiver}</div>}
@@ -1458,14 +1484,15 @@ export default function App() {
 
               {viewMode === 'table' && (
                 <table className="table">
-                  <thead><tr><th>어르신</th><th>성별/호칭</th><th>나이</th><th>지역</th><th>담당 복지사</th><th>마지막 통화</th><th>미응답</th><th>고독사 위험도</th><th>상태</th><th>키워드</th><th>즉시 전화</th></tr></thead>
+                  <thead><tr><th style={{width:40}}><input type="checkbox" checked={filteredElders.length>0&&filteredElders.every(e=>selectedElders.has(e.id))} onChange={()=>toggleAllElders(filteredElders)} className="cb"/></th><th>어르신</th><th>성별/호칭</th><th>나이</th><th>지역</th><th>담당 복지사</th><th>마지막 통화</th><th>미응답</th><th>고독사 위험도</th><th>상태</th><th>키워드</th><th>즉시 전화</th></tr></thead>
                   <tbody>
-                    {filteredElders.length === 0 && <tr><td colSpan={11} style={{textAlign:'center',color:'#94a3b8',padding:32}}>검색 결과가 없습니다 🔍</td></tr>}
+                    {filteredElders.length === 0 && <tr><td colSpan={12} style={{textAlign:'center',color:'#94a3b8',padding:32}}>검색 결과가 없습니다 🔍</td></tr>}
                     {filteredElders.map(elder => {
                       const risk = getSolitudeRisk(elder);
                       const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                       return (
-                        <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
+                        <tr key={elder.id} style={{cursor:'pointer',...(selectedElders.has(elder.id)?{background:'#eff6ff'}:{})}} onClick={()=>openDetail(elder)}>
+                          <td onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedElders.has(elder.id)} onChange={()=>toggleElderSel(elder.id)} className="cb"/></td>
                           <td><div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:20}}>{elder.gender==='female'?'👵':'👴'}</span><strong>{elder.name}</strong></div></td>
                           <td><span className="cycle-badge">{elder.title}</span></td>
                           <td>{elder.age}세</td>
