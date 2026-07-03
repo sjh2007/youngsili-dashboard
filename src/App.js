@@ -2188,7 +2188,7 @@ export default function App() {
                   <div style={{fontSize:13,color:'#64748b',marginBottom:10}}>해당 기관 담당 복지사의 대시보드 로그인 계정을 만듭니다. 이 계정으로 로그인하면 <b>그 기관의 어르신만</b> 보입니다.</div>
                   <div className="form-grid" style={{maxWidth:720}}>
                     <div className="form-field"><label className="form-label">이름</label><input className="form-input" value={newAcct.name} onChange={e=>setNewAcct(a=>({...a,name:e.target.value}))} placeholder="예) 김복지" autoComplete="off"/></div>
-                    <div className="form-field"><label className="form-label">전화번호 <span style={{color:'#94a3b8',fontWeight:400}}>(선택)</span></label><input className="form-input" value={newAcct.phone} onChange={e=>setNewAcct(a=>({...a,phone:e.target.value}))} placeholder="010-0000-0000" autoComplete="off"/></div>
+                    <div className="form-field"><label className="form-label">전화번호 <span style={{color:'#94a3b8',fontWeight:400}}>(번호만 입력)</span></label><input className="form-input" inputMode="numeric" value={newAcct.phone} onChange={e=>setNewAcct(a=>({...a,phone:e.target.value.replace(/[^0-9]/g,'')}))} placeholder="01012345678" autoComplete="off"/></div>
                     <div className="form-field"><label className="form-label">이메일(로그인 ID)</label><input className="form-input" value={newAcct.email} onChange={e=>setNewAcct(a=>({...a,email:e.target.value}))} placeholder="worker@example.com" autoComplete="off"/></div>
                     <div className="form-field"><label className="form-label">초기 비밀번호(6자 이상)</label><input className="form-input" type="password" value={newAcct.password} onChange={e=>setNewAcct(a=>({...a,password:e.target.value}))} placeholder="복지사에게 전달" autoComplete="new-password"/></div>
                     {isSuper ? (<>
