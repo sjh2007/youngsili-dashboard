@@ -1357,7 +1357,7 @@ export default function App() {
               </div>
 
               <table className="table">
-                <thead><tr><th style={{width:40}}><input type="checkbox" checked={checked.length===smartElders.length&&smartElders.length>0} onChange={e=>e.target.checked?checkAll():uncheckAll()} className="cb"/></th><th>어르신</th><th>전화번호</th><th>담당 복지사</th><th>전화 주기</th><th>전화 시간</th><th>마지막 통화</th><th>상태</th><th>중단/재개</th></tr></thead>
+                <thead><tr><th style={{width:40}}><input type="checkbox" checked={checked.length===smartElders.length&&smartElders.length>0} onChange={e=>e.target.checked?checkAll():uncheckAll()} className="cb"/></th><th>어르신</th><th>전화번호</th><th>담당 복지사</th><th>전화 주기</th><th>전화 시간</th><th>마지막 통화</th><th>상태</th><th>발신 상태</th></tr></thead>
                 <tbody>
                   {smartElders.map(elder=>{
                     const done = bulkDone.find(d=>d.id===elder.id);
@@ -1371,7 +1371,12 @@ export default function App() {
                         <td><span className="time-badge">{elder.callTime}</span></td>
                         <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
                         <td><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div></td>
-                        <td><button className={`toggle-btn ${elder.callActive?'toggle-active':'toggle-paused'}`} onClick={()=>toggleCallActive(elder.id)}>{elder.callActive?'⏸ 중단':'▶ 재개'}</button></td>
+                        <td>
+                          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                            <span style={{fontSize:12,fontWeight:700,padding:'3px 10px',borderRadius:20,whiteSpace:'nowrap',...(elder.callActive?{background:'#dcfce7',color:'#15803d'}:{background:'#fee2e2',color:'#dc2626'})}}>{elder.callActive?'🟢 발신 중':'🔴 발신 중단'}</span>
+                            <button onClick={()=>toggleCallActive(elder.id)} style={{fontSize:12,fontWeight:700,padding:'5px 11px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap',...(elder.callActive?{background:'#fff',color:'#64748b',border:'1px solid #d1d5db'}:{background:'#16a34a',color:'#fff',border:'none'})}}>{elder.callActive?'⏸ 중단하기':'▶ 발신 켜기'}</button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -2040,7 +2045,10 @@ export default function App() {
                   <div className={`status-badge badge-${selected.status} mt16`}>{(STATUS_CONFIG[selected.status]||STATUS_CONFIG.normal).label}</div>
                   <div className="call-action-box">
                     <button className={`btn-call-lg ${calling===selected.id?'btn-calling':''} ${!selected.callActive?'btn-disabled':''}`} onClick={()=>selected.callActive&&setCallModal(selected)} disabled={calling===selected.id||!selected.callActive}>{calling===selected.id?'⏳ 발신 중...':'📱 앱으로 전화하기'}</button>
-                    <button className={`toggle-btn-lg ${selected.callActive?'toggle-active':'toggle-paused'}`} onClick={()=>toggleCallActive(selected.id)}>{selected.callActive?'⏸ 자동전화 중단':'▶ 자동전화 재개'}</button>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,marginTop:8,flexWrap:'wrap'}}>
+                      <span style={{fontSize:13,fontWeight:700,padding:'5px 12px',borderRadius:20,...(selected.callActive?{background:'#dcfce7',color:'#15803d'}:{background:'#fee2e2',color:'#dc2626'})}}>{selected.callActive?'🟢 자동전화 발신 중':'🔴 자동전화 중단'}</span>
+                      <button onClick={()=>toggleCallActive(selected.id)} style={{fontSize:13,fontWeight:700,padding:'7px 14px',borderRadius:8,cursor:'pointer',...(selected.callActive?{background:'#fff',color:'#64748b',border:'1px solid #d1d5db'}:{background:'#16a34a',color:'#fff',border:'none'})}}>{selected.callActive?'⏸ 중단하기':'▶ 발신 켜기'}</button>
+                    </div>
                   </div>
                   {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',`${selected.address||''} ${selected.addressDetail||''}`.trim()],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle, selected.callDays)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
                 </div>
