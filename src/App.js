@@ -778,8 +778,17 @@ export default function App() {
   };
   useEffect(() => { if (page === 'casenotes' || page === 'detail') loadCaseNotes(); }, [page]); // eslint-disable-line
 
+  // 날짜/시간 헬퍼 (상담 일시를 날짜 입력 + 시간 드롭다운으로 분리)
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const dateStrOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const timeStrOf = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const roundHalf = (d) => { let h = d.getHours(), m = d.getMinutes(); if (m < 15) m = 0; else if (m < 45) m = 30; else { m = 0; h = (h + 1) % 24; } return `${pad2(h)}:${pad2(m)}`; };
+  const fmtTimeK = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return `${h < 12 ? '오전' : '오후'} ${h % 12 === 0 ? 12 : h % 12}:${pad2(m)}`; };
+  const TIME_OPTS = (() => { const a = []; for (let h = 0; h < 24; h++) for (const m of [0, 30]) a.push(`${pad2(h)}:${pad2(m)}`); return a; })();
+
   // 새 일지 작성 폼 열기 (prefill: 어르신/주제/연동알림)
   const openNewNote = (prefill = {}) => {
+    const now = new Date();
     setNoteForm({
       id: null,
       elderPhone: prefill.elderPhone || '',
@@ -787,19 +796,20 @@ export default function App() {
       type: prefill.type || 'visit',
       category: prefill.category || 'safety',
       content: '', action: '',
-      visitedAt: new Date().toISOString().slice(0, 16),  // datetime-local
+      visitedDate: dateStrOf(now), visitedTime: roundHalf(now),
       linkedAlertId: prefill.linkedAlertId || '',
       followUpNeeded: false, followUpDue: '',
     });
     setNoteModal({});
   };
   const openEditNote = (n) => {
+    const d = n.visitedAt ? new Date(n.visitedAt) : new Date();
     setNoteForm({
       id: n.id,
       elderPhone: n.elderPhone || '', elderName: n.elderName || '',
       type: n.type || 'visit', category: n.category || 'safety',
       content: n.content || '', action: n.action || '',
-      visitedAt: (n.visitedAt || '').slice(0, 16),
+      visitedDate: dateStrOf(d), visitedTime: timeStrOf(d),
       linkedAlertId: n.linkedAlertId || '',
       followUpNeeded: !!(n.followUp && n.followUp.needed), followUpDue: (n.followUp && n.followUp.dueDate) || '',
     });
@@ -813,7 +823,7 @@ export default function App() {
       elderPhone: noteForm.elderPhone, elderName: noteForm.elderName,
       type: noteForm.type, category: noteForm.category,
       content: noteForm.content, action: noteForm.action,
-      visitedAt: noteForm.visitedAt ? new Date(noteForm.visitedAt).toISOString() : new Date().toISOString(),
+      visitedAt: (noteForm.visitedDate && noteForm.visitedTime) ? new Date(`${noteForm.visitedDate}T${noteForm.visitedTime}`).toISOString() : new Date().toISOString(),
       linkedAlertId: noteForm.linkedAlertId,
       followUp: { needed: noteForm.followUpNeeded, dueDate: noteForm.followUpNeeded ? (noteForm.followUpDue || null) : null, done: false },
     };
@@ -986,16 +996,19 @@ export default function App() {
                   ))}
                 </div>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-                <div>
-                  <label style={L}>주제</label>
-                  <select className="form-input" style={I} value={noteForm.category} onChange={e=>setNoteForm(f=>({...f,category:e.target.value}))}>
-                    {Object.entries(CASE_CAT_META).map(([k,l])=>(<option key={k} value={k}>{l}</option>))}
+              <div>
+                <label style={L}>주제</label>
+                <select className="form-input" style={I} value={noteForm.category} onChange={e=>setNoteForm(f=>({...f,category:e.target.value}))}>
+                  {Object.entries(CASE_CAT_META).map(([k,l])=>(<option key={k} value={k}>{l}</option>))}
+                </select>
+              </div>
+              <div>
+                <label style={L}>상담 일시</label>
+                <div style={{display:'flex',gap:8}}>
+                  <input type="date" className="form-input" style={{...I,flex:'3 1 0'}} value={noteForm.visitedDate} onChange={e=>setNoteForm(f=>({...f,visitedDate:e.target.value}))}/>
+                  <select className="form-input" style={{...I,flex:'2 1 0'}} value={noteForm.visitedTime} onChange={e=>setNoteForm(f=>({...f,visitedTime:e.target.value}))}>
+                    {(TIME_OPTS.includes(noteForm.visitedTime)?TIME_OPTS:[...TIME_OPTS,noteForm.visitedTime].sort()).map(t=>(<option key={t} value={t}>{fmtTimeK(t)}</option>))}
                   </select>
-                </div>
-                <div>
-                  <label style={L}>상담 일시</label>
-                  <input type="datetime-local" className="form-input" style={I} value={noteForm.visitedAt} onChange={e=>setNoteForm(f=>({...f,visitedAt:e.target.value}))}/>
                 </div>
               </div>
               <div>
