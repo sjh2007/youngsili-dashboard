@@ -962,60 +962,65 @@ export default function App() {
         </div>
       )}
 
-      {noteModal && noteForm && (
-        <div className="modal-overlay" onClick={()=>{setNoteModal(null);setNoteForm(null);}}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:560,width:'92%',textAlign:'left'}}>
-            <div className="modal-title" style={{textAlign:'left',marginBottom:14}}>{noteForm.id?'✏️ 상담·방문 일지 수정':'📝 새 상담·방문 일지'}</div>
-            <div style={{display:'flex',flexDirection:'column',gap:12,maxHeight:'70vh',overflowY:'auto'}}>
+      {noteModal && noteForm && (()=>{
+        const L={display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5,textAlign:'left'};
+        const I={width:'100%',display:'block',boxSizing:'border-box',margin:0};
+        const close=()=>{setNoteModal(null);setNoteForm(null);};
+        return (
+        <div className="modal-overlay" onClick={close}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600,width:'94%',textAlign:'left'}}>
+            <div className="modal-title" style={{textAlign:'left',marginBottom:18}}>{noteForm.id?'✏️ 상담·방문 일지 수정':'📝 새 상담·방문 일지'}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:15,maxHeight:'66vh',overflowY:'auto',paddingRight:4}}>
               <div>
-                <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>어르신</label>
-                <select className="form-input" value={noteForm.elderPhone} onChange={e=>{const el=elders.find(x=>String(x.phone)===e.target.value); setNoteForm(f=>({...f,elderPhone:e.target.value,elderName:el?el.name:''}));}}>
+                <label style={L}>어르신</label>
+                <select className="form-input" style={I} value={noteForm.elderPhone} onChange={e=>{const el=elders.find(x=>String(x.phone)===e.target.value); setNoteForm(f=>({...f,elderPhone:e.target.value,elderName:el?el.name:''}));}}>
                   <option value="">— 어르신 선택 —</option>
                   {elders.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(e=>(<option key={e.id||e.phone} value={e.phone}>{e.name} ({e.phone})</option>))}
                 </select>
               </div>
               <div>
-                <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>상담 유형</label>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
+                <label style={L}>상담 유형</label>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                   {Object.entries(CASE_TYPE_META).map(([k,m])=>(
-                    <button key={k} type="button" onClick={()=>setNoteForm(f=>({...f,type:k}))} style={{fontSize:13,padding:'6px 12px',borderRadius:20,cursor:'pointer',fontWeight:600,border:'1px solid '+(noteForm.type===k?m.color:'#d1d5db'),background:noteForm.type===k?m.bg:'#fff',color:noteForm.type===k?m.color:'#374151'}}>{m.icon} {m.label}</button>
+                    <button key={k} type="button" onClick={()=>setNoteForm(f=>({...f,type:k}))} style={{fontSize:13,padding:'7px 13px',borderRadius:20,cursor:'pointer',fontWeight:600,border:'1px solid '+(noteForm.type===k?m.color:'#d1d5db'),background:noteForm.type===k?m.bg:'#fff',color:noteForm.type===k?m.color:'#374151'}}>{m.icon} {m.label}</button>
                   ))}
                 </div>
               </div>
-              <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-                <div style={{flex:'1 1 160px'}}>
-                  <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>주제</label>
-                  <select className="form-input" value={noteForm.category} onChange={e=>setNoteForm(f=>({...f,category:e.target.value}))}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                <div>
+                  <label style={L}>주제</label>
+                  <select className="form-input" style={I} value={noteForm.category} onChange={e=>setNoteForm(f=>({...f,category:e.target.value}))}>
                     {Object.entries(CASE_CAT_META).map(([k,l])=>(<option key={k} value={k}>{l}</option>))}
                   </select>
                 </div>
-                <div style={{flex:'1 1 160px'}}>
-                  <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>상담 일시</label>
-                  <input type="datetime-local" className="form-input" value={noteForm.visitedAt} onChange={e=>setNoteForm(f=>({...f,visitedAt:e.target.value}))}/>
+                <div>
+                  <label style={L}>상담 일시</label>
+                  <input type="datetime-local" className="form-input" style={I} value={noteForm.visitedAt} onChange={e=>setNoteForm(f=>({...f,visitedAt:e.target.value}))}/>
                 </div>
               </div>
               <div>
-                <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>상담·방문 내용</label>
-                <textarea className="form-input" rows={4} placeholder="예: 가정방문. 혈압약 잘 복용 중. 무릎 통증 호소하여..." value={noteForm.content} onChange={e=>setNoteForm(f=>({...f,content:e.target.value}))} style={{resize:'vertical'}}/>
+                <label style={L}>상담·방문 내용</label>
+                <textarea className="form-input" style={{...I,resize:'vertical'}} rows={4} placeholder="예: 가정방문. 혈압약 잘 복용 중. 무릎 통증 호소하여..." value={noteForm.content} onChange={e=>setNoteForm(f=>({...f,content:e.target.value}))}/>
               </div>
               <div>
-                <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>조치사항 <span style={{color:'#94a3b8',fontWeight:400}}>(선택)</span></label>
-                <textarea className="form-input" rows={2} placeholder="예: 보건소 방문 안내, 밑반찬 지원 연계" value={noteForm.action} onChange={e=>setNoteForm(f=>({...f,action:e.target.value}))} style={{resize:'vertical'}}/>
+                <label style={L}>조치사항 <span style={{color:'#94a3b8',fontWeight:400}}>(선택)</span></label>
+                <textarea className="form-input" style={{...I,resize:'vertical'}} rows={2} placeholder="예: 보건소 방문 안내, 밑반찬 지원 연계" value={noteForm.action} onChange={e=>setNoteForm(f=>({...f,action:e.target.value}))}/>
               </div>
-              <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-                <label style={{fontSize:13,fontWeight:700,color:'#334155',display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
-                  <input type="checkbox" checked={noteForm.followUpNeeded} onChange={e=>setNoteForm(f=>({...f,followUpNeeded:e.target.checked}))}/> 🔔 후속조치 필요
+              <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',paddingTop:2}}>
+                <label style={{fontSize:13,fontWeight:700,color:'#334155',display:'flex',alignItems:'center',gap:7,cursor:'pointer',margin:0}}>
+                  <input type="checkbox" checked={noteForm.followUpNeeded} onChange={e=>setNoteForm(f=>({...f,followUpNeeded:e.target.checked}))} style={{width:16,height:16}}/> 🔔 후속조치 필요
                 </label>
-                {noteForm.followUpNeeded && <input type="date" className="form-input" style={{width:170}} value={noteForm.followUpDue} onChange={e=>setNoteForm(f=>({...f,followUpDue:e.target.value}))}/>}
+                {noteForm.followUpNeeded && <input type="date" className="form-input" style={{width:180,margin:0}} value={noteForm.followUpDue} onChange={e=>setNoteForm(f=>({...f,followUpDue:e.target.value}))}/>}
               </div>
             </div>
-            <div className="modal-btns" style={{marginTop:16}}>
-              <button className="btn-secondary" onClick={()=>{setNoteModal(null);setNoteForm(null);}}>취소</button>
+            <div className="modal-btns" style={{marginTop:20,justifyContent:'flex-end'}}>
+              <button className="btn-secondary" onClick={close}>취소</button>
               <button className="btn-primary" onClick={saveNote} disabled={noteSaving}>{noteSaving?'저장 중...':(noteForm.id?'수정 저장':'일지 저장')}</button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       <aside className="sidebar">
         <div className="logo" onClick={()=>goPage('dashboard')} style={{cursor:'pointer'}} title="대시보드 홈으로">
