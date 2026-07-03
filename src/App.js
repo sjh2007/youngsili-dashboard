@@ -1821,7 +1821,8 @@ export default function App() {
                   {[['all','전체'],['visit','🏠 방문'],['phone','📞 전화'],['office','🏢 내소'],['guardian','👪 보호자'],['etc','기타']].map(([v,l])=>(
                     <button key={v} className={`smart-btn ${caseType===v?'smart-active':''}`} style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setCaseType(v)}>{l}</button>
                   ))}
-                  <button className={`smart-btn ${caseFollowUpOnly?'smart-active':''}`} style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>🔔 후속 필요</button>
+                  <span style={{width:1,height:20,background:'#e2e8f0',margin:'0 2px'}}/>
+                  <button className="smart-btn" style={{fontSize:12,padding:'5px 10px',...(caseFollowUpOnly?{background:'#f59e0b',borderColor:'#f59e0b',color:'#fff'}:{})}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>🔔 후속 필요{caseFollowUpOnly?' ✕':''}</button>
                   <button className="btn-primary" onClick={()=>openNewNote()}>＋ 새 일지</button>
                 </div>
               </div>
@@ -1853,7 +1854,18 @@ export default function App() {
                   (!caseSearch||(nameByPhone(n.elderPhone,n.elderName)||'').includes(caseSearch)) &&
                   (!caseFollowUpOnly||(n.followUp&&n.followUp.needed&&!n.followUp.done))
                 );
-                if(filtered.length===0) return <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{caseNotes.length===0?'아직 작성된 상담·방문 일지가 없습니다. ＋ 새 일지로 첫 기록을 남겨보세요.':'조건에 맞는 일지가 없습니다.'}</div>;
+                if(filtered.length===0) {
+                  if(caseNotes.length===0) return <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>아직 작성된 상담·방문 일지가 없습니다. ＋ 새 일지로 첫 기록을 남겨보세요.</div>;
+                  const active=[caseFollowUpOnly&&'🔔 후속 필요', caseType!=='all'&&`유형: ${(CASE_TYPE_META[caseType]||{}).label||caseType}`, caseSearch&&`검색: "${caseSearch}"`].filter(Boolean);
+                  return (
+                    <div style={{padding:'30px',textAlign:'center',color:'#64748b'}}>
+                      <div style={{fontSize:15,fontWeight:600}}>선택한 필터에 맞는 일지가 없습니다.</div>
+                      {active.length>0 && <div style={{fontSize:13,color:'#94a3b8',marginTop:6}}>적용 중인 필터 — {active.join(' · ')}</div>}
+                      <div style={{fontSize:13,color:'#94a3b8',marginTop:2}}>전체 {caseNotes.length}건이 있어요. 필터를 끄면 모두 표시됩니다.</div>
+                      <button onClick={()=>{setCaseType('all');setCaseSearch('');setCaseFollowUpOnly(false);}} style={{marginTop:14,background:'#2563eb',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',fontSize:14,fontWeight:700,cursor:'pointer'}}>↺ 필터 초기화</button>
+                    </div>
+                  );
+                }
                 const groups={};
                 filtered.forEach(n=>{ const dk=(n.visitedAt||'').slice(0,10)||'미상'; (groups[dk]=groups[dk]||[]).push(n); });
                 const allSel=filtered.every(n=>selectedNotes.has(n.id));
