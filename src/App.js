@@ -174,6 +174,7 @@ export default function App() {
   const [newAcct, setNewAcct]     = useState({ email:'', password:'', orgId:'', role:'admin' });
   const [adminMsg, setAdminMsg]   = useState('');
   const isSuper = me?.role === 'superadmin';
+  const isAdmin = me?.role === 'admin' || me?.role === 'superadmin';   // 기관 관리자(자기 기관 계정 관리 가능)
   // 도움말 '업데이트 소식' 읽음 추적 → 새 소식 있으면 메뉴에 🔴
   const [helpSeen, setHelpSeen] = useState(() => { try { return Number(localStorage.getItem('youngsili_help_seen') || 0); } catch { return 0; } });
   const hasNewNotice = LATEST_NOTICE > helpSeen;
@@ -322,7 +323,7 @@ export default function App() {
   };
   const createAccount = async () => {
     const { email, password, orgId, role } = newAcct;
-    if (!email || !password || !orgId) { setAdminMsg('이메일·비밀번호·기관을 모두 입력하세요'); return; }
+    if (!email || !password || (isSuper && !orgId)) { setAdminMsg(isSuper?'이메일·비밀번호·기관을 모두 입력하세요':'이메일·비밀번호를 입력하세요'); return; }
     setAdminMsg('생성 중…');
     try {
       const r = await authFetch(`${SERVER_URL}/admin/users`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, password, orgId, role }) });
@@ -366,7 +367,7 @@ export default function App() {
   // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
   useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); }, [authUser]); // eslint-disable-line
-  useEffect(() => { if (page === 'admin' && isSuper) { fetchOrgs(); fetchAccounts(); setAdminMsg(''); } }, [page, isSuper]); // eslint-disable-line
+  useEffect(() => { if (page === 'admin' && isAdmin) { if (isSuper) fetchOrgs(); fetchAccounts(); setAdminMsg(''); } }, [page, isAdmin, isSuper]); // eslint-disable-line
   useEffect(() => { if (page === 'help' && hasNewNotice) { try { localStorage.setItem('youngsili_help_seen', String(LATEST_NOTICE)); } catch {} setHelpSeen(LATEST_NOTICE); } }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'elders' || page === 'dashboard' || page === 'calls') fetchElders(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
@@ -1069,7 +1070,7 @@ export default function App() {
             {id:'casenotes', icon:'📝', label:'상담·방문 일지'},
             {id:'report',    icon:'📊', label:'리포트 / 통계'},
             {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
-            ...(isSuper ? [{id:'admin', icon:'🏢', label:'기관 관리'}] : []),
+            ...(isAdmin ? [{id:'admin', icon: isSuper?'🏢':'👥', label: isSuper?'기관 관리':'계정 관리'}] : []),
             {id:'help',      icon:'📖', label: hasNewNotice ? '도움말 보기 🔴' : '도움말 보기'},
           ].map(item=>(
             <button key={item.id}
@@ -1109,7 +1110,7 @@ export default function App() {
         <header className="header">
           <div className="header-title">
             {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}
-            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='admin'&&'🏢 기관 관리 (운영자)'}{page==='help'&&'📖 도움말 보기'}
+            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='admin'&&(isSuper?'🏢 기관 관리 (운영자)':'👥 계정 관리')}{page==='help'&&'📖 도움말 보기'}
             {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
           </div>
           <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
@@ -2143,12 +2144,13 @@ export default function App() {
 
           {page==='admin' && (
             <div className="fade-in">
-              {!isSuper ? (
-                <div className="section" style={{textAlign:'center',color:'#94a3b8',padding:40}}>운영자 전용 화면입니다.</div>
+              {!isAdmin ? (
+                <div className="section" style={{textAlign:'center',color:'#94a3b8',padding:40}}>접근 권한이 없습니다.</div>
               ) : (
               <>
                 {adminMsg && <div className="success-banner" style={{marginBottom:16}}>{adminMsg}</div>}
 
+                {isSuper && (<>
                 {/* 새 기관 만들기 */}
                 <div className="section" style={{marginBottom:16}}>
                   <div className="section-title">🏢 새 기관(복지관) 만들기</div>
@@ -2177,6 +2179,7 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+                </>)}
 
                 {/* 새 복지사 계정 */}
                 <div className="section" style={{marginBottom:16}}>
@@ -2185,8 +2188,12 @@ export default function App() {
                   <div className="form-grid" style={{maxWidth:720}}>
                     <div className="form-field"><label className="form-label">이메일(로그인 ID)</label><input className="form-input" value={newAcct.email} onChange={e=>setNewAcct(a=>({...a,email:e.target.value}))} placeholder="worker@example.com" autoComplete="off"/></div>
                     <div className="form-field"><label className="form-label">초기 비밀번호(6자 이상)</label><input className="form-input" type="password" value={newAcct.password} onChange={e=>setNewAcct(a=>({...a,password:e.target.value}))} placeholder="복지사에게 전달" autoComplete="new-password"/></div>
-                    <div className="form-field"><label className="form-label">소속 기관</label><select className="form-input" value={newAcct.orgId} onChange={e=>setNewAcct(a=>({...a,orgId:e.target.value}))}><option value="">기관 선택</option>{orgs.map(o=><option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>)}</select></div>
-                    <div className="form-field"><label className="form-label">역할</label><select className="form-input" value={newAcct.role} onChange={e=>setNewAcct(a=>({...a,role:e.target.value}))}><option value="admin">복지사/관리자 (자기 기관만)</option><option value="superadmin">운영자 (전체 + 기관관리)</option></select></div>
+                    {isSuper ? (<>
+                      <div className="form-field"><label className="form-label">소속 기관</label><select className="form-input" value={newAcct.orgId} onChange={e=>setNewAcct(a=>({...a,orgId:e.target.value}))}><option value="">기관 선택</option>{orgs.map(o=><option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>)}</select></div>
+                      <div className="form-field"><label className="form-label">역할</label><select className="form-input" value={newAcct.role} onChange={e=>setNewAcct(a=>({...a,role:e.target.value}))}><option value="admin">복지사/관리자 (자기 기관만)</option><option value="superadmin">운영자 (전체 + 기관관리)</option></select></div>
+                    </>) : (
+                      <div className="form-field" style={{gridColumn:'1 / -1'}}><label className="form-label">소속 기관</label><div style={{fontSize:14,fontWeight:700,color:'#1e3a6e',padding:'8px 0'}}>🏢 {me?.orgName||'우리 기관'}{me?.orgCode?` (${me.orgCode})`:''} — 이 기관 소속 복지사로 생성됩니다</div></div>
+                    )}
                   </div>
                   <button className="btn-primary" style={{marginTop:12,padding:'10px 20px'}} onClick={createAccount}>+ 계정 생성</button>
                 </div>
@@ -2203,7 +2210,7 @@ export default function App() {
                         return (
                           <tr key={u.uid}>
                             <td><strong>{u.email}</strong>{u.uid===me?.uid&&<span style={{fontSize:11,color:'#16a34a',marginLeft:6}}>(나)</span>}</td>
-                            <td style={{fontSize:13,color:'#64748b'}}>{org?org.name:u.orgId}</td>
+                            <td style={{fontSize:13,color:'#64748b'}}>{org?org.name:(me?.orgName||u.orgId)}</td>
                             <td>{u.role==='superadmin'?<span className="status-badge badge-warning">운영자</span>:<span className="status-badge badge-normal">복지사</span>}</td>
                             <td>{(u.role!=='superadmin'&&u.uid!==me?.uid)?<button className="btn-danger-outline" style={{fontSize:12,padding:'4px 10px'}} onClick={()=>deleteAccount(u.uid,u.email)}>🗑️ 삭제</button>:<span style={{color:'#cbd5e1',fontSize:12}}>—</span>}</td>
                           </tr>
