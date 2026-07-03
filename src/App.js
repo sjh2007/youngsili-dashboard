@@ -69,7 +69,7 @@ const RISK_CONFIG = {
   normal:   { label: '정상', color: '#22c55e' },
 };
 // SPA 페이지 목록 (URL 해시 라우팅 — F5 시 현재 페이지 유지)
-const PAGES = ['dashboard','elders','schedule','script','calls','health','report','data','admin','help'];
+const PAGES = ['dashboard','elders','schedule','script','calls','health','casenotes','report','data','admin','help'];
 
 // 페이지 렌더 오류가 앱 전체를 흰 화면으로 만들지 않게 방어. 오류 시 메시지 표시 + 메뉴 이동(resetKey) 시 복구.
 class PageErrorBoundary extends Component {
@@ -528,6 +528,16 @@ export default function App() {
   const [batchIntervalSec, setBatchIntervalSec] = useState(90);  // 배치 간 대기(초)
   const [batchWait, setBatchWait]   = useState(0);    // 다음 배치까지 남은 초(카운트다운 표시)
   const bulkRef = useRef(false);
+  // 상담·방문 일지(caseNotes)
+  const [caseNotes, setCaseNotes]   = useState([]);
+  const [caseLoading, setCaseLoading] = useState(false);
+  const [caseType, setCaseType]     = useState('all');       // 유형 필터
+  const [caseSearch, setCaseSearch] = useState('');          // 어르신 이름 검색
+  const [caseFollowUpOnly, setCaseFollowUpOnly] = useState(false);
+  const [expandedNoteDays, setExpandedNoteDays] = useState(new Set());
+  const [noteModal, setNoteModal]   = useState(null);        // null | { note?, prefill? }
+  const [noteForm, setNoteForm]     = useState(null);        // 작성/수정 폼 값
+  const [noteSaving, setNoteSaving] = useState(false);
 
   const danger  = elders.filter(e => e.status==='danger').length;
   const warning = elders.filter(e => e.status==='warning').length;
@@ -745,6 +755,80 @@ export default function App() {
   };
   useEffect(() => { if (page === 'schedule') loadDispatchHistory(histDays); }, [page, histDays]); // eslint-disable-line
 
+  // ── 상담·방문 일지(caseNotes) ──
+  const CASE_TYPE_META = {
+    visit:    { label: '가정방문', icon: '🏠', color: '#2563eb', bg: '#dbeafe' },
+    phone:    { label: '전화상담', icon: '📞', color: '#16a34a', bg: '#dcfce7' },
+    office:   { label: '내소상담', icon: '🏢', color: '#7c3aed', bg: '#ede9fe' },
+    guardian: { label: '보호자상담', icon: '👪', color: '#c2410c', bg: '#ffedd5' },
+    etc:      { label: '기타', icon: '📄', color: '#64748b', bg: '#f1f5f9' },
+  };
+  const CASE_CAT_META = { safety:'안전', health:'건강', meal:'식사', emotional:'정서', welfare:'복지연계', etc:'기타' };
+
+  const loadCaseNotes = async () => {
+    setCaseLoading(true);
+    try {
+      const from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const r = await authFetch(`${SERVER_URL}/case-notes?from=${encodeURIComponent(from)}`);
+      const d = await r.json();
+      setCaseNotes(Array.isArray(d.notes) ? d.notes : []);
+    } catch { setCaseNotes([]); }
+    setCaseLoading(false);
+  };
+  useEffect(() => { if (page === 'casenotes' || page === 'detail') loadCaseNotes(); }, [page]); // eslint-disable-line
+
+  // 새 일지 작성 폼 열기 (prefill: 어르신/주제/연동알림)
+  const openNewNote = (prefill = {}) => {
+    setNoteForm({
+      id: null,
+      elderPhone: prefill.elderPhone || '',
+      elderName: prefill.elderName || '',
+      type: prefill.type || 'visit',
+      category: prefill.category || 'safety',
+      content: '', action: '',
+      visitedAt: new Date().toISOString().slice(0, 16),  // datetime-local
+      linkedAlertId: prefill.linkedAlertId || '',
+      followUpNeeded: false, followUpDue: '',
+    });
+    setNoteModal({});
+  };
+  const openEditNote = (n) => {
+    setNoteForm({
+      id: n.id,
+      elderPhone: n.elderPhone || '', elderName: n.elderName || '',
+      type: n.type || 'visit', category: n.category || 'safety',
+      content: n.content || '', action: n.action || '',
+      visitedAt: (n.visitedAt || '').slice(0, 16),
+      linkedAlertId: n.linkedAlertId || '',
+      followUpNeeded: !!(n.followUp && n.followUp.needed), followUpDue: (n.followUp && n.followUp.dueDate) || '',
+    });
+    setNoteModal({ note: n });
+  };
+  const saveNote = async () => {
+    if (!noteForm) return;
+    if (!noteForm.content.trim() && !noteForm.action.trim()) { alert('상담·방문 내용을 입력해 주세요.'); return; }
+    setNoteSaving(true);
+    const body = {
+      elderPhone: noteForm.elderPhone, elderName: noteForm.elderName,
+      type: noteForm.type, category: noteForm.category,
+      content: noteForm.content, action: noteForm.action,
+      visitedAt: noteForm.visitedAt ? new Date(noteForm.visitedAt).toISOString() : new Date().toISOString(),
+      linkedAlertId: noteForm.linkedAlertId,
+      followUp: { needed: noteForm.followUpNeeded, dueDate: noteForm.followUpNeeded ? (noteForm.followUpDue || null) : null, done: false },
+    };
+    try {
+      if (noteForm.id) await authFetch(`${SERVER_URL}/case-notes/${noteForm.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      else await authFetch(`${SERVER_URL}/case-notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      setNoteModal(null); setNoteForm(null);
+      await loadCaseNotes();
+    } catch { alert('저장에 실패했습니다. 다시 시도해 주세요.'); }
+    setNoteSaving(false);
+  };
+  const deleteNote = async (id) => {
+    if (!window.confirm('이 일지를 삭제할까요?')) return;
+    try { await authFetch(`${SERVER_URL}/case-notes/${id}`, { method: 'DELETE' }); await loadCaseNotes(); } catch {}
+  };
+
   // ── 단건 전화 (FCM 앱 푸시) ──
   const makeCall = async elder => {
     setCallModal(null); setCalling(elder.id); setCallResult(null);
@@ -849,6 +933,61 @@ export default function App() {
         </div>
       )}
 
+      {noteModal && noteForm && (
+        <div className="modal-overlay" onClick={()=>{setNoteModal(null);setNoteForm(null);}}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:560,width:'92%',textAlign:'left'}}>
+            <div className="modal-title" style={{textAlign:'left',marginBottom:14}}>{noteForm.id?'✏️ 상담·방문 일지 수정':'📝 새 상담·방문 일지'}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:12,maxHeight:'70vh',overflowY:'auto'}}>
+              <div>
+                <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>어르신</label>
+                <select className="form-input" value={noteForm.elderPhone} onChange={e=>{const el=elders.find(x=>String(x.phone)===e.target.value); setNoteForm(f=>({...f,elderPhone:e.target.value,elderName:el?el.name:''}));}}>
+                  <option value="">— 어르신 선택 —</option>
+                  {elders.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(e=>(<option key={e.id||e.phone} value={e.phone}>{e.name} ({e.phone})</option>))}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>상담 유형</label>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
+                  {Object.entries(CASE_TYPE_META).map(([k,m])=>(
+                    <button key={k} type="button" onClick={()=>setNoteForm(f=>({...f,type:k}))} style={{fontSize:13,padding:'6px 12px',borderRadius:20,cursor:'pointer',fontWeight:600,border:'1px solid '+(noteForm.type===k?m.color:'#d1d5db'),background:noteForm.type===k?m.bg:'#fff',color:noteForm.type===k?m.color:'#374151'}}>{m.icon} {m.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+                <div style={{flex:'1 1 160px'}}>
+                  <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>주제</label>
+                  <select className="form-input" value={noteForm.category} onChange={e=>setNoteForm(f=>({...f,category:e.target.value}))}>
+                    {Object.entries(CASE_CAT_META).map(([k,l])=>(<option key={k} value={k}>{l}</option>))}
+                  </select>
+                </div>
+                <div style={{flex:'1 1 160px'}}>
+                  <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>상담 일시</label>
+                  <input type="datetime-local" className="form-input" value={noteForm.visitedAt} onChange={e=>setNoteForm(f=>({...f,visitedAt:e.target.value}))}/>
+                </div>
+              </div>
+              <div>
+                <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>상담·방문 내용</label>
+                <textarea className="form-input" rows={4} placeholder="예: 가정방문. 혈압약 잘 복용 중. 무릎 통증 호소하여..." value={noteForm.content} onChange={e=>setNoteForm(f=>({...f,content:e.target.value}))} style={{resize:'vertical'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:13,fontWeight:700,color:'#334155'}}>조치사항 <span style={{color:'#94a3b8',fontWeight:400}}>(선택)</span></label>
+                <textarea className="form-input" rows={2} placeholder="예: 보건소 방문 안내, 밑반찬 지원 연계" value={noteForm.action} onChange={e=>setNoteForm(f=>({...f,action:e.target.value}))} style={{resize:'vertical'}}/>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                <label style={{fontSize:13,fontWeight:700,color:'#334155',display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
+                  <input type="checkbox" checked={noteForm.followUpNeeded} onChange={e=>setNoteForm(f=>({...f,followUpNeeded:e.target.checked}))}/> 🔔 후속조치 필요
+                </label>
+                {noteForm.followUpNeeded && <input type="date" className="form-input" style={{width:170}} value={noteForm.followUpDue} onChange={e=>setNoteForm(f=>({...f,followUpDue:e.target.value}))}/>}
+              </div>
+            </div>
+            <div className="modal-btns" style={{marginTop:16}}>
+              <button className="btn-secondary" onClick={()=>{setNoteModal(null);setNoteForm(null);}}>취소</button>
+              <button className="btn-primary" onClick={saveNote} disabled={noteSaving}>{noteSaving?'저장 중...':(noteForm.id?'수정 저장':'일지 저장')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <aside className="sidebar">
         <div className="logo" onClick={()=>goPage('dashboard')} style={{cursor:'pointer'}} title="대시보드 홈으로">
           <img src="/youngsili.png" alt="영실이" className="logo-icon" style={{width:42,height:42,borderRadius:12,objectFit:'cover',padding:0}} />
@@ -862,6 +1001,7 @@ export default function App() {
             {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
             {id:'calls',     icon:'📞', label:'통화 기록'},
             {id:'health', icon:'💊', label: alertCount > 0 ? `건강 상태 🔴${alertCount}` : '건강 상태'},
+            {id:'casenotes', icon:'📝', label:'상담·방문 일지'},
             {id:'report',    icon:'📊', label:'리포트 / 통계'},
             {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
             ...(isSuper ? [{id:'admin', icon:'🏢', label:'기관 관리'}] : []),
@@ -904,7 +1044,7 @@ export default function App() {
         <header className="header">
           <div className="header-title">
             {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}
-            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='admin'&&'🏢 기관 관리 (운영자)'}{page==='help'&&'📖 도움말 보기'}
+            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='admin'&&'🏢 기관 관리 (운영자)'}{page==='help'&&'📖 도움말 보기'}
             {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
           </div>
           <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
@@ -986,31 +1126,6 @@ export default function App() {
                 </div>
 
                 <div className="dash-col-right">
-                  <div className="section">
-                    <div className="section-title">🗺️ 지역별 현황</div>
-                    <div className="region-map">
-                      {['대구 북구','대구 달서구','대구 수성구','대구 중구','대구 동구','대구 서구'].map(region => {
-                        const regionElders = elders.filter(e => e.region === region);
-                        const regionDanger = regionElders.filter(e => e.status==='danger').length;
-                        const regionWarning = regionElders.filter(e => e.status==='warning').length;
-                        const weather = weatherData[region];
-                        const riskLevel = regionDanger > 0 ? 'danger' : regionWarning > 0 ? 'warning' : 'normal';
-                        return (
-                          <div key={region} className={`region-card region-${riskLevel}`} onClick={()=>{setRegionFilter(region);goPage('elders');}}>
-                            <div className="region-name">{region.replace('대구 ','')}</div>
-                            <div className="region-count">{regionElders.length}명</div>
-                            <div className="region-status">
-                              {regionDanger > 0 && <span className="region-dot-danger">{regionDanger}위험</span>}
-                              {regionWarning > 0 && <span className="region-dot-warning">{regionWarning}주의</span>}
-                              {regionDanger===0 && regionWarning===0 && <span className="region-dot-normal">정상</span>}
-                            </div>
-                            {weather?.alertText && <div className="region-alert">{weather.alertText}</div>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
                   <div className="section">
                     <div className="section-title">📝 메모 / 공지</div>
                     <div className="memo-input-wrap">
@@ -1585,6 +1700,7 @@ export default function App() {
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 18px',marginBottom:10}}>
                       <span style={{fontSize:24}}>⚠️</span>
                       <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'#dc2626'}}>{nameByPhone(alert.phone, alert.name)} · 🚨 "{alert.keyword || (alert.message ? alert.message.split('감지:').pop().trim() : alert.message)}"</div><div style={{fontSize:12,color:'#ef4444',marginTop:2}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
+                      <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} onClick={()=>openNewNote({elderPhone:alert.phone,elderName:nameByPhone(alert.phone,alert.name),category:'safety',linkedAlertId:alert.id})}>📝 일지 작성</button>
                       <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/read`,{method:'POST'});fetchHealth();}}>확인</button>
                     </div>
                   ))}
@@ -1665,6 +1781,90 @@ export default function App() {
                   ));
                 })()}
               </div>
+            </div>
+          )}
+
+          {page==='casenotes' && (
+            <div className="fade-in">
+              <div className="elder-toolbar" style={{marginBottom:12,flexWrap:'wrap',gap:10}}>
+                <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="어르신 이름 검색..." value={caseSearch} onChange={e=>setCaseSearch(e.target.value)}/>{caseSearch&&<button className="search-clear" onClick={()=>setCaseSearch('')}>✕</button>}</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                  {[['all','전체'],['visit','🏠 방문'],['phone','📞 전화'],['office','🏢 내소'],['guardian','👪 보호자'],['etc','기타']].map(([v,l])=>(
+                    <button key={v} className={`smart-btn ${caseType===v?'smart-active':''}`} style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setCaseType(v)}>{l}</button>
+                  ))}
+                  <button className={`smart-btn ${caseFollowUpOnly?'smart-active':''}`} style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>🔔 후속 필요</button>
+                  <button className="btn-primary" onClick={()=>openNewNote()}>＋ 새 일지</button>
+                </div>
+              </div>
+              {(()=>{
+                const ym=new Date().toISOString().slice(0,7);
+                const tm=caseNotes.filter(n=>(n.visitedAt||'').slice(0,7)===ym);
+                const stat=[
+                  {label:'이번달 가정방문',value:tm.filter(n=>n.type==='visit').length,color:'#2563eb'},
+                  {label:'이번달 전화상담',value:tm.filter(n=>n.type==='phone').length,color:'#16a34a'},
+                  {label:'이번달 전체 상담',value:tm.length,color:'#7c3aed'},
+                  {label:'미처리 후속',value:caseNotes.filter(n=>n.followUp&&n.followUp.needed&&!n.followUp.done).length,color:'#f59e0b'},
+                ];
+                return (
+                  <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:16}}>
+                    {stat.map((s,i)=>(
+                      <div key={i} style={{flex:'1 1 140px',background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
+                        <div style={{fontSize:24,fontWeight:800,color:s.color}}>{s.value}</div>
+                        <div style={{fontSize:13,color:'#64748b',marginTop:2}}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {caseLoading ? (
+                <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>불러오는 중...</div>
+              ) : (()=>{
+                const filtered=caseNotes.filter(n=>
+                  (caseType==='all'||n.type===caseType) &&
+                  (!caseSearch||(nameByPhone(n.elderPhone,n.elderName)||'').includes(caseSearch)) &&
+                  (!caseFollowUpOnly||(n.followUp&&n.followUp.needed&&!n.followUp.done))
+                );
+                if(filtered.length===0) return <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{caseNotes.length===0?'아직 작성된 상담·방문 일지가 없습니다. ＋ 새 일지로 첫 기록을 남겨보세요.':'조건에 맞는 일지가 없습니다.'}</div>;
+                const groups={};
+                filtered.forEach(n=>{ const dk=(n.visitedAt||'').slice(0,10)||'미상'; (groups[dk]=groups[dk]||[]).push(n); });
+                return Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,rows])=>{
+                  const open=expandedNoteDays.has(date);
+                  const shown=open?rows:rows.slice(0,3);
+                  return (
+                    <div key={date} style={{marginBottom:16}}>
+                      <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {rows.length}건</span></div>
+                      {shown.map(n=>{
+                        const tmeta=CASE_TYPE_META[n.type]||CASE_TYPE_META.etc;
+                        const time=n.visitedAt?new Date(n.visitedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+                        const fu=n.followUp&&n.followUp.needed&&!n.followUp.done;
+                        return (
+                          <div key={n.id} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'12px 14px',marginBottom:8,background:'#fff'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                              <span style={{minWidth:44,color:'#64748b',fontSize:13,fontWeight:600}}>{time}</span>
+                              <span style={{fontSize:12,fontWeight:700,color:tmeta.color,background:tmeta.bg,padding:'2px 8px',borderRadius:20}}>{tmeta.icon} {tmeta.label}</span>
+                              <span style={{fontWeight:700,fontSize:14}}>{nameByPhone(n.elderPhone,n.elderName)}</span>
+                              <span style={{fontSize:12,color:'#64748b'}}>· {CASE_CAT_META[n.category]||'기타'}</span>
+                              {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>🔗 알림 대응</span>}
+                              {fu&&<span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>🔔 후속{n.followUp.dueDate?` ~${n.followUp.dueDate}`:''}</span>}
+                              <span style={{flex:1}}/>
+                              <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
+                              <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
+                            </div>
+                            {n.content&&<div style={{fontSize:13.5,color:'#1f2937',marginTop:6,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
+                            {n.action&&<div style={{fontSize:13,color:'#475569',marginTop:5,lineHeight:1.5}}><b style={{color:'#0f766e'}}>조치</b> {n.action}</div>}
+                            {n.authorEmail&&<div style={{fontSize:11,color:'#94a3b8',marginTop:6}}>작성: {n.authorEmail}</div>}
+                          </div>
+                        );
+                      })}
+                      {rows.length>3 && (
+                        <button onClick={()=>setExpandedNoteDays(prev=>{const s=new Set(prev); s.has(date)?s.delete(date):s.add(date); return s;})} style={{background:'none',border:'none',color:'#2563eb',fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'2px 0'}}>
+                          {open?'접기 ▴':`${rows.length-3}건 더 보기 ▾`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           )}
 
@@ -1784,6 +1984,36 @@ export default function App() {
                             <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                             <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
                             <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                  <div className="section">
+                    <div className="script-editor-header" style={{marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <div className="section-title" style={{marginBottom:0}}>📝 상담·방문 일지</div>
+                      <button className="btn-primary" style={{fontSize:13,padding:'6px 12px'}} onClick={()=>openNewNote({elderPhone:selected.phone,elderName:selected.name})}>＋ 일지 작성</button>
+                    </div>
+                    {(()=>{
+                      const mineNotes=caseNotes.filter(n=>String(n.elderPhone||'').replace(/\D/g,'')===String(selected.phone||'').replace(/\D/g,''));
+                      if(mineNotes.length===0) return <div style={{color:'#9ca3af',fontSize:14,padding:'8px 0'}}>상담·방문 일지 없음</div>;
+                      return mineNotes.map(n=>{
+                        const tmeta=CASE_TYPE_META[n.type]||CASE_TYPE_META.etc;
+                        const d=n.visitedAt?new Date(n.visitedAt):null;
+                        const when=d?`${d.getMonth()+1}/${d.getDate()} ${d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false})}`:'';
+                        return (
+                          <div key={n.id} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',marginBottom:8,background:'#fff'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                              <span style={{color:'#64748b',fontSize:12,fontWeight:600}}>{when}</span>
+                              <span style={{fontSize:11,fontWeight:700,color:tmeta.color,background:tmeta.bg,padding:'2px 8px',borderRadius:20}}>{tmeta.icon} {tmeta.label}</span>
+                              <span style={{fontSize:12,color:'#64748b'}}>{CASE_CAT_META[n.category]||'기타'}</span>
+                              {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>🔗 알림 대응</span>}
+                              <span style={{flex:1}}/>
+                              <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
+                              <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
+                            </div>
+                            {n.content&&<div style={{fontSize:13,color:'#1f2937',marginTop:5,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
+                            {n.action&&<div style={{fontSize:12.5,color:'#475569',marginTop:4}}><b style={{color:'#0f766e'}}>조치</b> {n.action}</div>}
                           </div>
                         );
                       });
