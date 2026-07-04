@@ -760,7 +760,7 @@ export default function App() {
   };
   // 발신 관리 탭에 있는 동안 15초마다 자동 갱신 → 발신 90초 뒤 부재중 등이 새로고침 없이 반영
   useEffect(() => {
-    if (page !== 'schedule') return;
+    if (page !== 'schedule' && page !== 'dashboard') return;   // 홈 '오늘 통화 현황'도 발신 집계 필요
     loadDispatchHistory(histDays);
     const t = setInterval(() => loadDispatchHistory(histDays, true), 15000);
     return () => clearInterval(t);
@@ -974,6 +974,11 @@ export default function App() {
   const criticalCount = todayCalls.filter(c=>c.riskLevel==='critical').length;
   const urgentCount   = todayCalls.filter(c=>c.riskLevel==='urgent'||c.riskLevel==='warning').length;
   const normalCount   = todayCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length;
+  // 오늘 발신(dispatches) 집계 — 발신 이력과 일치하게: 발신 = 받음 + 부재중(+실패)
+  const todayDispatches = dispatchHist.filter(d => (d.sentAtIso||'').slice(0,10) === _todayStr);
+  const dispatchTotal = todayDispatches.length;
+  const answeredCount = todayDispatches.filter(d => d.status==='completed'||d.status==='answered').length;
+  const missedCount   = todayDispatches.filter(d => d.status==='missed').length;
 
   // ── 로그인/회원가입 가드 ──
   // 1) 미로그인 → 로그인/회원가입  2) 로그인했지만 이메일 미인증 → 인증대기  3) 기관 미설정 → 기관설정
@@ -1180,11 +1185,14 @@ export default function App() {
                   <div className="section">
                     <div className="section-title">📞 오늘 통화 현황</div>
                     <div className="call-summary">
-                      <div className="call-stat"><div className="call-num">{totalCalls}건</div><div className="call-label">총 통화</div></div>
-                      <div className="call-stat"><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
+                      <div className="call-stat"><div className="call-num" style={{color:'#1d4ed8'}}>{dispatchTotal}건</div><div className="call-label">발신</div></div>
+                      <div className="call-stat"><div className="call-num" style={{color:'#16a34a'}}>{answeredCount}건</div><div className="call-label">받음</div></div>
+                      <div className="call-stat"><div className="call-num" style={{color:'#ea580c'}}>{missedCount}건</div><div className="call-label">부재중</div></div>
+                      <div className="call-stat" style={{borderLeft:'1px solid #e2e8f0'}}><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
                       <div className="call-stat"><div className="call-num" style={{color:'#f59e0b'}}>{urgentCount}건</div><div className="call-label">주의 키워드</div></div>
                       <div className="call-stat"><div className="call-num" style={{color:'#22c55e'}}>{normalCount}건</div><div className="call-label">정상 통화</div></div>
                     </div>
+                    <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 발신 = 받음 + 부재중(+실패). 긴급·주의·정상은 받은 통화의 위험 분류입니다.</div>
                   </div>
 
                   <div className="section">
