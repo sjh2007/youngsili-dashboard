@@ -1602,8 +1602,7 @@ export default function App() {
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
                   {[
-                    {t:'인사',   q:'{호칭}, 안녕하세요. 저 영실이에요. 오늘 하루 어떻게 보내고 계세요?', c:'#64748b'},
-                    {t:'건강',   q:'오늘 몸은 좀 어떠세요? 어디 불편한 데는 없으세요?', c:'#dc2626'},
+                    {t:'인사·건강', q:'{호칭}, 안녕하세요. 저 영실이에요. 오늘 몸은 좀 어떠세요? 어디 불편한 데는 없으세요?', c:'#dc2626'},
                     {t:'약',     q:'약은 잘 챙겨 드셨어요?', c:'#7c3aed', badge:'격일'},
                     {t:'식사',   q:'오늘 식사는 잘 하셨어요?', c:'#16a34a'},
                     {t:'물',     q:'물도 자주 드시고 계세요?', c:'#0891b2', badge:'격일'},
@@ -1612,7 +1611,7 @@ export default function App() {
                     {t:'마무리', q:'오늘도 이렇게 얘기 나눠서 좋았어요. 건강 잘 챙기시고, 또 연락드릴게요.', c:'#64748b'},
                   ].map((s,i)=>(
                     <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 14px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10}}>
-                      <span style={{minWidth:48,fontSize:12,fontWeight:800,color:'#fff',background:s.c,padding:'4px 8px',borderRadius:20,textAlign:'center'}}>{s.t}</span>
+                      <span style={{minWidth:48,fontSize:12,fontWeight:800,color:'#fff',background:s.c,padding:'4px 10px',borderRadius:20,textAlign:'center',whiteSpace:'nowrap'}}>{s.t}</span>
                       <span style={{flex:1,fontSize:14,color:'#1f2937'}}>{s.q}</span>
                       {s.badge && <span style={{fontSize:11,fontWeight:700,color:'#f59e0b',background:'#fffbeb',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:20,whiteSpace:'nowrap'}}>{s.badge}</span>}
                     </div>
