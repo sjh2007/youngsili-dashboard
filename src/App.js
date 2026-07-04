@@ -541,6 +541,10 @@ export default function App() {
   const [expandedNoteDays, setExpandedNoteDays] = useState(new Set());
   const [selectedNotes, setSelectedNotes] = useState(new Set());  // 일괄 선택
   const [selectedElders, setSelectedElders] = useState(new Set());  // 어르신 일괄 선택
+  const [csvImport, setCsvImport]   = useState(null);   // CSV 일괄 등록 미리보기 { rows }
+  const [csvOverwrite, setCsvOverwrite] = useState(false);
+  const [csvSaving, setCsvSaving]   = useState(false);
+  const csvInputRef = useRef(null);
   const [noteModal, setNoteModal]   = useState(null);        // null | { note?, prefill? }
   const [noteForm, setNoteForm]     = useState(null);        // 작성/수정 폼 값
   const [noteSaving, setNoteSaving] = useState(false);
@@ -949,6 +953,66 @@ export default function App() {
     try { await Promise.all(targets.map(t=> t.phone ? authFetch(`${SERVER_URL}/elders/${String(t.phone).replace(/[^0-9]/g,'')}`,{method:'DELETE'}) : Promise.resolve())); } catch {}
     fetchElders();
   };
+
+  // ── CSV 일괄 등록 ──
+  const CSV_HEADERS = ['이름','전화번호','나이','성별(남/여)','호칭(할머니/할아버지)','지역','담당복지사','전화시간(예 09:00)','보호자','보호자연락처','질환','복약'];
+  const downloadCsvTemplate = () => {
+    const example = ['홍복순','010-1234-5678','82','여','할머니','대구 북구','김복지','09:00','홍길동','010-8765-4321','고혈압','혈압약 아침'].join(',');
+    const csv = '﻿' + CSV_HEADERS.join(',') + '\n' + example + '\n';   // BOM: 엑셀에서 한글 안 깨짐
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8;' }));
+    a.download = '영실이_어르신_등록양식.csv'; a.click();
+  };
+  const parseCsv = (text) => {
+    const rows=[]; let row=[], cur='', q=false;
+    for (let i=0;i<text.length;i++){ const ch=text[i];
+      if(q){ if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+      else if(ch==='"'){ q=true; }
+      else if(ch===','){ row.push(cur); cur=''; }
+      else if(ch==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+      else if(ch!=='\r'){ cur+=ch; }
+    }
+    if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+    return rows.filter(r=>r.some(c=>String(c).trim()));
+  };
+  const handleCsvFile = async (file) => {
+    if(!file) return;
+    const buf = await file.arrayBuffer();
+    let text = new TextDecoder('utf-8').decode(buf);
+    if(/�/.test(text)){ try{ text = new TextDecoder('euc-kr').decode(buf); }catch{} }   // 한글 깨지면 cp949로 재디코딩
+    const rows = parseCsv(text);
+    if(rows.length<2){ alert('데이터가 없습니다. 양식에 어르신 정보를 채워 주세요.'); return; }
+    const alias = {'이름':'name','성함':'name','성명':'name','전화번호':'phone','연락처':'phone','휴대폰':'phone','전화':'phone','나이':'age','연세':'age','성별':'gender','호칭':'title','지역':'region','주소':'region','담당복지사':'caregiver','담당':'caregiver','복지사':'caregiver','전화시간':'callTime','시간':'callTime','보호자':'guardian','보호자연락처':'guardianPhone','보호자전화':'guardianPhone','질환':'disease','병력':'disease','복약':'medicine','약':'medicine'};
+    const colIdx={};
+    rows[0].forEach((h,i)=>{ const base=String(h).replace(/^﻿/,'').replace(/\(.*?\)/g,'').replace(/\s/g,'').trim(); const k=alias[base]; if(k&&colIdx[k]===undefined)colIdx[k]=i; });
+    if(colIdx.name===undefined||colIdx.phone===undefined){ alert('양식에 "이름"과 "전화번호" 열이 있어야 합니다. CSV 양식을 받아 사용해 주세요.'); return; }
+    const existPhones = new Set(elders.map(e=>String(e.phone||'').replace(/\D/g,'')));
+    const seen = new Set();
+    const parsed = rows.slice(1).map((r,ri)=>{
+      const get=k=>colIdx[k]!==undefined?String(r[colIdx[k]]||'').trim():'';
+      const name=get('name'); const phone=get('phone').replace(/\D/g,''); const gender=/남/.test(get('gender'))?'male':'female';
+      const rec={ name, phone, age:get('age').replace(/\D/g,''), gender, title:get('title')||(gender==='male'?'할아버지':'할머니'), region:get('region'), caregiver:get('caregiver'), callTime:/^\d{1,2}:\d{2}$/.test(get('callTime'))?get('callTime'):'09:00', guardian:get('guardian'), guardianPhone:get('guardianPhone').replace(/\D/g,''), disease:get('disease'), medicine:get('medicine') };
+      let st='ok', why='';
+      if(!name){st='error';why='이름 없음';}
+      else if(!phone||phone.length<9){st='error';why='전화번호 오류';}
+      else if(seen.has(phone)){st='error';why='파일 내 중복';}
+      else if(existPhones.has(phone)){st='dup';why='이미 등록됨';}
+      seen.add(phone);
+      return {...rec,_row:ri+2,_status:st,_reason:why};
+    });
+    setCsvOverwrite(false); setCsvImport({ rows: parsed });
+  };
+  const confirmCsvImport = async () => {
+    const rows = csvImport.rows.filter(r=>r._status==='ok'||(r._status==='dup'&&csvOverwrite));
+    if(rows.length===0){ alert('등록할 유효한 행이 없습니다.'); return; }
+    setCsvSaving(true); let ok=0, fail=0;
+    for(const r of rows){
+      const saved={...EMPTY_FORM, name:r.name, phone:r.phone, age:r.age, gender:r.gender, title:r.title, region:r.region, caregiver:r.caregiver, callTime:r.callTime, guardian:r.guardian, guardianPhone:r.guardianPhone, disease:r.disease, medicine:r.medicine, id:Date.now()+Math.floor(Math.random()*100000), status:'normal', lastCall:'아직 없음', callActive:true };
+      try{ const res=await authFetch(`${SERVER_URL}/elders/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(saved)}); const d=await res.json(); (d&&d.success)?ok++:fail++; }catch{ fail++; }
+    }
+    setCsvSaving(false); setCsvImport(null); await fetchElders();
+    alert(`등록 완료: 성공 ${ok}명${fail?` · 실패 ${fail}명`:''}`);
+  };
   const inp = field => ({ value:form[field]??'', onChange:e=>setForm(f=>({...f,[field]:e.target.value})), className:`form-input ${formErrors[field]?'input-error':''}` });
 
   // 다음(카카오) 우편번호 검색 → 주소 자동입력 + 관할구역(시/구) 자동추출
@@ -1007,6 +1071,58 @@ export default function App() {
               <button className="btn-secondary" onClick={()=>setCallModal(null)}>취소</button>
               <button className="btn-call" onClick={()=>makeCall(callModal)}>📱 앱으로 알림 보내기</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {csvImport && (
+        <div className="modal-overlay" onClick={()=>!csvSaving&&setCsvImport(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:860,width:'95%',textAlign:'left'}}>
+            <div className="modal-title" style={{textAlign:'left',marginBottom:8}}>📥 CSV 일괄 등록 미리보기</div>
+            {(()=>{
+              const ok=csvImport.rows.filter(r=>r._status==='ok').length;
+              const dup=csvImport.rows.filter(r=>r._status==='dup').length;
+              const err=csvImport.rows.filter(r=>r._status==='error').length;
+              const willRegister=ok+(csvOverwrite?dup:0);
+              return (<>
+                <div style={{fontSize:13,marginBottom:12,display:'flex',gap:14,flexWrap:'wrap'}}>
+                  <span style={{color:'#16a34a',fontWeight:700}}>✅ 등록 {ok}</span>
+                  <span style={{color:'#f59e0b',fontWeight:700}}>⚠️ 중복 {dup}</span>
+                  <span style={{color:'#dc2626',fontWeight:700}}>❌ 오류 {err}</span>
+                  <span style={{color:'#64748b'}}>· 총 {csvImport.rows.length}행</span>
+                </div>
+                <div style={{maxHeight:'50vh',overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:10}}>
+                  <table className="table" style={{margin:0}}>
+                    <thead><tr><th>행</th><th>상태</th><th>이름</th><th>전화번호</th><th>나이</th><th>지역</th><th>담당</th></tr></thead>
+                    <tbody>
+                      {csvImport.rows.map((r,i)=>{
+                        const c=r._status==='ok'?{t:'등록',bg:'#f0fdf4',col:'#16a34a'}:r._status==='dup'?{t:'중복',bg:'#fffbeb',col:'#f59e0b'}:{t:'오류',bg:'#fef2f2',col:'#dc2626'};
+                        return (<tr key={i} style={{background:c.bg}}>
+                          <td style={{color:'#94a3b8',fontSize:12}}>{r._row}</td>
+                          <td><span style={{fontSize:12,fontWeight:700,color:c.col}}>{c.t}{r._reason?` · ${r._reason}`:''}</span></td>
+                          <td><strong>{r.name||'—'}</strong></td>
+                          <td style={{fontSize:13}}>{r.phone||'—'}</td>
+                          <td style={{fontSize:13}}>{r.age||'—'}</td>
+                          <td style={{fontSize:13,color:'#64748b'}}>{r.region||'—'}</td>
+                          <td style={{fontSize:13,color:'#64748b'}}>{r.caregiver||'—'}</td>
+                        </tr>);
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {dup>0 && (
+                  <label style={{display:'flex',alignItems:'center',gap:8,marginTop:12,fontSize:13,color:'#334155',cursor:'pointer'}}>
+                    <input type="checkbox" checked={csvOverwrite} onChange={e=>setCsvOverwrite(e.target.checked)}/>
+                    이미 등록된 어르신(중복 {dup}명)도 <b>덮어쓰기</b>로 갱신
+                  </label>
+                )}
+                <div style={{fontSize:12,color:'#94a3b8',marginTop:10}}>· 오류 행은 등록에서 제외됩니다. 한글이 깨지면 엑셀에서 "CSV UTF-8"로 저장해 주세요.</div>
+                <div className="modal-btns" style={{marginTop:16,justifyContent:'flex-end'}}>
+                  <button className="btn-secondary" disabled={csvSaving} onClick={()=>setCsvImport(null)}>취소</button>
+                  <button className="btn-primary" disabled={csvSaving||willRegister===0} onClick={confirmCsvImport}>{csvSaving?'등록 중...':`${willRegister}명 등록`}</button>
+                </div>
+              </>);
+            })()}
           </div>
         </div>
       )}
@@ -1454,6 +1570,9 @@ export default function App() {
                 </div>
                 <div style={{display:'flex',gap:8}}>
                   <div className="view-toggle"><button className={`view-btn ${viewMode==='card'?'view-active':''}`} onClick={()=>setViewMode('card')}>⊞ 카드</button><button className={`view-btn ${viewMode==='table'?'view-active':''}`} onClick={()=>setViewMode('table')}>☰ 목록</button></div>
+                  <button className="btn-secondary" onClick={downloadCsvTemplate} title="엑셀에 채워 넣을 CSV 양식 다운로드">📄 CSV 양식</button>
+                  <button className="btn-secondary" onClick={()=>csvInputRef.current&&csvInputRef.current.click()} title="CSV 파일로 어르신 일괄 등록">📥 CSV 일괄 등록</button>
+                  <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={e=>{const f=e.target.files&&e.target.files[0]; handleCsvFile(f); e.target.value='';}}/>
                   <button className="btn-primary" onClick={openRegister}>+ 신규 등록</button>
                 </div>
               </div>
