@@ -747,17 +747,24 @@ export default function App() {
   };
 
   // 발신 이력: 발신 페이지에서 서버 dispatches를 최근 N일치 불러와 날짜별로 표시(복지사/관리자가 언제 발신했는지 확인)
-  const loadDispatchHistory = async (days = histDays) => {
-    setHistLoading(true);
+  // silent=true면 로딩 표시 없이 조용히 갱신(자동 폴링용 — 목록 깜빡임 방지)
+  const loadDispatchHistory = async (days = histDays, silent = false) => {
+    if (!silent) setHistLoading(true);
     try {
       const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
       const r = await authFetch(`${SERVER_URL}/call/dispatches?from=${encodeURIComponent(from)}`);
       const d = await r.json();
       setDispatchHist(Array.isArray(d.dispatches) ? d.dispatches : []);
-    } catch { setDispatchHist([]); }
-    setHistLoading(false);
+    } catch { if (!silent) setDispatchHist([]); }   // 조용한 갱신 실패 시 기존 목록 유지
+    if (!silent) setHistLoading(false);
   };
-  useEffect(() => { if (page === 'schedule') loadDispatchHistory(histDays); }, [page, histDays]); // eslint-disable-line
+  // 발신 관리 탭에 있는 동안 15초마다 자동 갱신 → 발신 90초 뒤 부재중 등이 새로고침 없이 반영
+  useEffect(() => {
+    if (page !== 'schedule') return;
+    loadDispatchHistory(histDays);
+    const t = setInterval(() => loadDispatchHistory(histDays, true), 15000);
+    return () => clearInterval(t);
+  }, [page, histDays]); // eslint-disable-line
 
   // ── 상담·방문 일지(caseNotes) ──
   const CASE_TYPE_META = {
@@ -1325,6 +1332,7 @@ export default function App() {
                       <button key={d} onClick={()=>setHistDays(d)} className={`smart-btn ${histDays===d?'smart-active':''}`} style={{fontSize:12,padding:'4px 10px'}}>최근 {d}일</button>
                     ))}
                     <button onClick={()=>loadDispatchHistory(histDays)} className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}>🔄 새로고침</button>
+                    <span style={{fontSize:11,color:'#94a3b8',alignSelf:'center'}}>· 15초마다 자동 갱신</span>
                   </span>
                 </div>
                 {histLoading ? (
