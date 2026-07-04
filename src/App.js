@@ -1786,14 +1786,15 @@ export default function App() {
                   fall:    { label:'낙상', icon:'🦴', c:'#dc2626', bg:'#fef2f2', bd:'#fecaca' },
                   emotion: { label:'정서', icon:'💙', c:'#2563eb', bg:'#eff6ff', bd:'#bfdbfe' },
                   living:  { label:'생활', icon:'🧺', c:'#16a34a', bg:'#f0fdf4', bd:'#bbf7d0' },
+                  meal:    { label:'식사', icon:'🍚', c:'#ea580c', bg:'#fff7ed', bd:'#fed7aa' },
                 };
-                const NOTE_CAT = { health:'health', fall:'safety', emotion:'emotional', living:'welfare' };
+                const NOTE_CAT = { health:'health', fall:'safety', emotion:'emotional', living:'welfare', meal:'meal' };
                 const cnt = c => un.filter(a=>(a.category||'health')===c).length;
                 return (
                 <div className="section" style={{marginBottom:20}}>
                   <div className="section-title">🚨 미확인 알림 ({un.length}건)</div>
                   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
-                    {['health','fall','emotion','living'].map(c=> cnt(c)>0 && (
+                    {['health','fall','emotion','living','meal'].map(c=> cnt(c)>0 && (
                       <span key={c} style={{fontSize:12.5,fontWeight:700,color:CAT[c].c,background:CAT[c].bg,border:'1px solid '+CAT[c].bd,padding:'3px 10px',borderRadius:20}}>{CAT[c].icon} {CAT[c].label} {cnt(c)}건</span>
                     ))}
                   </div>
