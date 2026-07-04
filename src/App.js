@@ -1596,31 +1596,30 @@ export default function App() {
               </div>
 
               <div className="section">
-                <div className="script-editor-header">
-                  <div className="section-title">✍️ 기본 전화 멘트 편집</div>
-                  <div style={{display:'flex',gap:8}}><button className="btn-secondary" onClick={resetScript}>↩ 초기화</button><button className="btn-success" onClick={saveScript}>💾 저장</button></div>
+                <div className="section-title">📋 영실이 실제 안부 질문 (앱 고정)</div>
+                <div style={{fontSize:13,color:'#64748b',marginBottom:14,lineHeight:1.6}}>
+                  영실이 앱이 통화에서 <b>실제로 하는 질문</b>이에요. 자연스러운 대화와 정확한 순서를 위해 <b>앱에 고정</b>돼 있어 이 내용은 대시보드에서 편집하지 않습니다. (위 <b>경보 멘트</b>만 편집 가능 — 날씨 경보 발신 시 인사말에 삽입됩니다.)
                 </div>
-                {scriptSaved && <div className="success-banner">✅ 멘트가 저장되었습니다!</div>}
-                <div className="var-hint" style={{marginBottom:12}}>사용 가능 변수: <code>{'{{호칭}}'}</code> 할머니/할아버지 &nbsp;<code>{'{{이름}}'}</code> 어르신 이름 &nbsp;<code>{'{{지역}}'}</code> 담당 지역 &nbsp;<code>{'{{경보멘트}}'}</code> 날씨 경보</div>
-                <textarea className="script-textarea script-textarea-lg" value={editScript} onChange={e => setEditScript(e.target.value)} rows={10}/>
-              </div>
-
-              <div className="section">
-                <div className="script-editor-header">
-                  <div className="section-title">👁️ 멘트 미리보기</div>
-                  <select className="form-input" style={{width:'auto',padding:'8px 16px'}} value={previewElder?.id || ''} onChange={e => setPreviewElder(elders.find(el => el.id === parseInt(e.target.value)) || null)}>
-                    <option value="">어르신 선택...</option>
-                    {elders.map(el => <option key={el.id} value={el.id}>{el.name} ({el.region})</option>)}
-                  </select>
-                </div>
-                <div className="script-preview">
-                  {previewElder ? (
-                    <div>
-                      <div className="preview-header"><div className="preview-avatar">{(previewElder.name||'?')[0]}</div><div><div className="preview-name">{previewElder.name} 어르신</div><div className="preview-region">{previewElder.region} · {previewElder.phone}</div></div>{weatherData[previewElder.region]?.alertText && <div className="weather-badge">{weatherData[previewElder.region].alertText}</div>}</div>
-                      <div className="preview-divider"/>
-                      <div className="preview-script">{buildPreview(previewElder).split('\n').map((line, i) => (<div key={i} className="preview-line"><span className="preview-dot">🔊</span><span>{line}</span></div>))}</div>
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {[
+                    {t:'인사',   q:'{호칭}, 안녕하세요. 저 영실이에요. 오늘 하루 어떻게 보내고 계세요?', c:'#64748b'},
+                    {t:'건강',   q:'오늘 몸은 좀 어떠세요? 어디 불편한 데는 없으세요?', c:'#dc2626'},
+                    {t:'약',     q:'약은 잘 챙겨 드셨어요?', c:'#7c3aed', badge:'격일'},
+                    {t:'식사',   q:'오늘 식사는 잘 하셨어요?', c:'#16a34a'},
+                    {t:'물',     q:'물도 자주 드시고 계세요?', c:'#0891b2', badge:'격일'},
+                    {t:'정서',   q:'요즘 외롭거나 힘든 일은 없으세요?', c:'#2563eb'},
+                    {t:'생활',   q:'요즘 장보기나 집안일 하시는 데 불편한 점은 없으세요?', c:'#16a34a'},
+                    {t:'마무리', q:'오늘도 이렇게 얘기 나눠서 좋았어요. 건강 잘 챙기시고, 또 연락드릴게요.', c:'#64748b'},
+                  ].map((s,i)=>(
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 14px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10}}>
+                      <span style={{minWidth:48,fontSize:12,fontWeight:800,color:'#fff',background:s.c,padding:'4px 8px',borderRadius:20,textAlign:'center'}}>{s.t}</span>
+                      <span style={{flex:1,fontSize:14,color:'#1f2937'}}>{s.q}</span>
+                      {s.badge && <span style={{fontSize:11,fontWeight:700,color:'#f59e0b',background:'#fffbeb',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:20,whiteSpace:'nowrap'}}>{s.badge}</span>}
                     </div>
-                  ) : <div className="preview-empty">어르신을 선택하면 실제 전화 멘트를 미리볼 수 있습니다</div>}
+                  ))}
+                </div>
+                <div style={{fontSize:13,color:'#334155',marginTop:14,lineHeight:1.6,background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:10,padding:'12px 14px'}}>
+                  💡 <b>약·물</b>은 격일(이틀에 한 번)로 여쭤 통화가 길어지지 않게 합니다. 통화 중 <b>위험·정서·생활 신호</b>를 감지하면 자동으로 보호자·복지사·119 연락을 안내하고, <b>건강 상태</b> 메뉴에 알림이 뜹니다.
                 </div>
               </div>
             </div>
