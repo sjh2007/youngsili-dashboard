@@ -193,6 +193,7 @@ export default function App() {
   const [callsTo, setCallsTo]             = useState('');
   const [callsPhone, setCallsPhone]       = useState('');     // 어르신 필터 ('' = 전체)
   const [callsSearch, setCallsSearch]     = useState('');     // 이름 검색
+  const [callsRisk, setCallsRisk]         = useState('all');  // 위험도 필터 all|critical|urgent|normal (KPI 드릴다운)
   const [healthHistory, setHealthHistory] = useState([]);     // 건강 이력 (healthEvents)
   const [healthRange, setHealthRange]     = useState('month');
   const [healthHistFrom, setHealthHistFrom] = useState('');
@@ -525,6 +526,7 @@ export default function App() {
   const [dispatchHist, setDispatchHist] = useState([]);   // 발신 이력(날짜별) — 서버 dispatches
   const [histLoading, setHistLoading] = useState(false);
   const [histDays, setHistDays]     = useState(7);
+  const [histStatus, setHistStatus] = useState('all');   // 발신 이력 상태 필터 all|received|missed (KPI 드릴다운)
   const [expandedHistDays, setExpandedHistDays] = useState(new Set());  // 발신 이력 날짜별 펼침
   const [batchSize, setBatchSize]   = useState(5);    // 배치당 발신 인원 (AI서버 동시통화 부하 분산)
   const [batchIntervalSec, setBatchIntervalSec] = useState(90);  // 배치 간 대기(초)
@@ -979,6 +981,11 @@ export default function App() {
   const dispatchTotal = todayDispatches.length;
   const answeredCount = todayDispatches.filter(d => d.status==='completed'||d.status==='answered').length;
   const missedCount   = todayDispatches.filter(d => d.status==='missed').length;
+  // 통화기록 위험도 필터 매칭 (KPI 드릴다운)
+  const callsRiskMatch = (c) => callsRisk==='all' ? true : callsRisk==='critical' ? c.riskLevel==='critical' : callsRisk==='urgent' ? (c.riskLevel==='urgent'||c.riskLevel==='warning') : (!c.riskLevel||c.riskLevel==='normal');
+  // KPI 클릭 → 상세로 이동(+필터). 위험도는 오늘 범위로 좁혀 KPI 숫자와 일치.
+  const drillCalls = (risk) => { setCallsRisk(risk); setCallsRange('custom'); setCallsFrom(_todayStr); setCallsTo(_todayStr); goPage('calls'); };
+  const drillDispatch = (status) => { setHistStatus(status); setHistDays(7); goPage('schedule'); };
 
   // ── 로그인/회원가입 가드 ──
   // 1) 미로그인 → 로그인/회원가입  2) 로그인했지만 이메일 미인증 → 인증대기  3) 기관 미설정 → 기관설정
@@ -1185,14 +1192,14 @@ export default function App() {
                   <div className="section">
                     <div className="section-title">📞 오늘 통화 현황</div>
                     <div className="call-summary">
-                      <div className="call-stat"><div className="call-num" style={{color:'#1d4ed8'}}>{dispatchTotal}건</div><div className="call-label">발신</div></div>
-                      <div className="call-stat"><div className="call-num" style={{color:'#16a34a'}}>{answeredCount}건</div><div className="call-label">받음</div></div>
-                      <div className="call-stat"><div className="call-num" style={{color:'#ea580c'}}>{missedCount}건</div><div className="call-label">부재중</div></div>
-                      <div className="call-stat" style={{borderLeft:'1px solid #e2e8f0'}}><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
-                      <div className="call-stat"><div className="call-num" style={{color:'#f59e0b'}}>{urgentCount}건</div><div className="call-label">주의 키워드</div></div>
-                      <div className="call-stat"><div className="call-num" style={{color:'#22c55e'}}>{normalCount}건</div><div className="call-label">정상 통화</div></div>
+                      <div className="call-stat" style={{cursor:'pointer'}} title="발신 이력 보기" onClick={()=>drillDispatch('all')}><div className="call-num" style={{color:'#1d4ed8'}}>{dispatchTotal}건</div><div className="call-label">발신</div></div>
+                      <div className="call-stat" style={{cursor:'pointer'}} title="받은 통화 보기" onClick={()=>drillDispatch('received')}><div className="call-num" style={{color:'#16a34a'}}>{answeredCount}건</div><div className="call-label">받음</div></div>
+                      <div className="call-stat" style={{cursor:'pointer'}} title="부재중만 보기 → 재발신" onClick={()=>drillDispatch('missed')}><div className="call-num" style={{color:'#ea580c'}}>{missedCount}건</div><div className="call-label">부재중</div></div>
+                      <div className="call-stat" style={{borderLeft:'1px solid #e2e8f0',cursor:'pointer'}} title="긴급 통화 보기" onClick={()=>drillCalls('critical')}><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
+                      <div className="call-stat" style={{cursor:'pointer'}} title="주의 통화 보기" onClick={()=>drillCalls('urgent')}><div className="call-num" style={{color:'#f59e0b'}}>{urgentCount}건</div><div className="call-label">주의 키워드</div></div>
+                      <div className="call-stat" style={{cursor:'pointer'}} title="정상 통화 보기" onClick={()=>drillCalls('normal')}><div className="call-num" style={{color:'#22c55e'}}>{normalCount}건</div><div className="call-label">정상 통화</div></div>
                     </div>
-                    <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 발신 = 받음 + 부재중(+실패). 긴급·주의·정상은 받은 통화의 위험 분류입니다.</div>
+                    <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 숫자를 클릭하면 해당 통화·발신 목록으로 이동합니다. (발신 = 받음 + 부재중, 긴급·주의·정상은 받은 통화의 위험 분류)</div>
                   </div>
 
                   <div className="section">
@@ -1341,6 +1348,7 @@ export default function App() {
                     ))}
                     <button onClick={()=>loadDispatchHistory(histDays)} className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}>🔄 새로고침</button>
                     <span style={{fontSize:11,color:'#94a3b8',alignSelf:'center'}}>· 15초마다 자동 갱신</span>
+                    {histStatus!=='all' && <button onClick={()=>setHistStatus('all')} style={{fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:20,border:'1px solid #fdba74',background:'#fff7ed',color:'#ea580c',cursor:'pointer'}}>{histStatus==='missed'?'📵 부재중만':'✅ 받음만'} ✕</button>}
                   </span>
                 </div>
                 {histLoading ? (
@@ -1348,8 +1356,11 @@ export default function App() {
                 ) : dispatchHist.length===0 ? (
                   <div style={{padding:24,textAlign:'center',color:'#94a3b8'}}>최근 {histDays}일 발신 이력이 없습니다.</div>
                 ) : (()=>{
+                  const statusMatch = (x) => histStatus==='all' ? true : histStatus==='received' ? (x.status==='completed'||x.status==='answered') : x.status==='missed';
+                  const filtered = dispatchHist.filter(statusMatch);
+                  if (filtered.length===0) return <div style={{padding:24,textAlign:'center',color:'#94a3b8'}}>{histStatus==='missed'?'부재중':'받은'} 발신이 없습니다.</div>;
                   const groups={};
-                  dispatchHist.forEach(x=>{ const dk=(x.sentAtIso||'').slice(0,10)||'미상'; (groups[dk]=groups[dk]||[]).push(x); });
+                  filtered.forEach(x=>{ const dk=(x.sentAtIso||'').slice(0,10)||'미상'; (groups[dk]=groups[dk]||[]).push(x); });
                   return Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,rows])=>{
                     const recv=rows.filter(r=>r.status==='completed'||r.status==='answered').length;
                     const miss=rows.filter(r=>r.status==='missed').length;
@@ -1658,12 +1669,19 @@ export default function App() {
                   <option value="">전체 어르신</option>
                   {elders.map(e=>{const k=String(e.phone||'').replace(/\D/g,'');return <option key={k} value={k}>{e.name}</option>;})}
                 </select>
-                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch))).length}건</span>
+                <span style={{marginLeft:'auto',color:'#64748b',fontSize:13,fontWeight:700}}>총 {callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch))&&callsRiskMatch(c)).length}건</span>
+              </div>
+              <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
+                <span style={{fontSize:13,color:'#64748b',fontWeight:600}}>위험도:</span>
+                {[['all','전체','#334155'],['critical','🔴 긴급','#dc2626'],['urgent','🟠 주의','#f59e0b'],['normal','🟢 정상','#16a34a']].map(([k,label,col])=>(
+                  <button key={k} onClick={()=>setCallsRisk(k)} style={{padding:'5px 12px',borderRadius:20,border:'1px solid '+(callsRisk===k?col:'#e2e8f0'),background:callsRisk===k?col:'#fff',color:callsRisk===k?'#fff':'#64748b',fontWeight:700,fontSize:12.5,cursor:'pointer'}}>{label}</button>
+                ))}
+                {callsRisk!=='all' && <span style={{fontSize:12,color:'#94a3b8'}}>· 대시보드에서 이동됨</span>}
               </div>
               {callsHistory.length===0 ? (
                 <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
               ) : (()=>{
-                const src = callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch)));
+                const src = callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch))&&callsRiskMatch(c));
                 const grouped = {};
                 src.forEach(c=>{ const dk=c.date||(c.at?c.at.slice(0,10):'미상'); (grouped[dk]=grouped[dk]||[]).push(c); });
                 return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,logs])=>(
