@@ -112,6 +112,27 @@ const ALERT_TEMPLATES = {
   none:     ``,
 };
 
+// 산불 3단계 대본 (발생 초기 → 긴급 대피 → 안전 확인). 각 단계는 응답 분기(괜찮아/도와줘)로 마무리.
+const WILDFIRE_STAGES = [
+  { id: 'prepare',  label: '① 발생 초기(대피 준비)', color: '#f59e0b',
+    text: `{{이름}} 어르신, 저 영실이예요. 지금 {{지역}} 가까운 곳에 산불이 났어요. 놀라지 마시고 제 말 잘 들어주세요. 지금 바로 나갈 준비를 해두세요. 신발이랑 겉옷, 그리고 이 전화기 꼭 챙기세요. 마을 방송이나 안내가 나오면 그대로 따라주세요. 혼자 나가기 힘드시면 지금 저한테 "도와줘" 라고 말씀해 주세요. 제가 바로 복지사님과 {{보호자}}께 알려드릴게요.` },
+  { id: 'evacuate', label: '② 긴급 대피(불길 접근)', color: '#dc2626',
+    text: `{{이름}} 어르신, 지금 바로 밖으로 나가셔야 해요. {{지역}} 산불이 가까워졌어요. 가스 밸브 잠그시고, 젖은 수건으로 코와 입을 막고 낮은 자세로 나가세요. 나가시면 {{대피소}} 쪽으로 가시거나 이웃과 함께 움직이세요. 위급하면 꼭 119에 전화하세요. 혼자 못 움직이시면 지금 "도와줘" 라고 말씀해 주세요. 바로 도움을 보내드릴게요.` },
+  { id: 'safety',   label: '③ 안전 확인(상황 종료)', color: '#16a34a',
+    text: `{{이름}} 어르신, 저 영실이예요. 지금 안전한 곳에 계신가요? 몸은 괜찮으세요? 괜찮으시면 "괜찮아", 도움이 필요하면 "도와줘" 라고 말씀해 주세요.` },
+];
+
+// 경보 멘트 변수 치환 (실제 발송·미리보기 공통). 값이 없으면 자연스럽게 생략.
+function fillAlertVars(text, elder, shelter) {
+  return String(text || '')
+    .replace(/\{\{이름\}\}/g, (elder && elder.name) || '어르신')
+    .replace(/\{\{호칭\}\}/g, (elder && elder.title) || '어르신')
+    .replace(/\{\{지역\}\}/g, (elder && elder.region) || '')
+    .replace(/\{\{보호자\}\}/g, (elder && elder.guardian) ? `${elder.guardian}님` : '보호자님')
+    .replace(/\{\{대피소\}\}/g, (shelter || '가까운 대피소'))
+    .replace(/\s{2,}/g, ' ').trim();
+}
+
 const getWeatherIcon = (c = '') => {
   if (c.includes('소나기')) return '🌦️';
   if (c.includes('비'))     return '🌧️';
@@ -506,6 +527,8 @@ export default function App() {
   const [editScript, setEditScript]     = useState(DEFAULT_SCRIPT);
   const [activeAlert, setActiveAlert]   = useState('none');
   const [alertScript, setAlertScript]   = useState(ALERT_TEMPLATES.none);
+  const [wildfireStage, setWildfireStage] = useState('prepare');   // 산불 3단계 선택
+  const [shelterName, setShelterName]     = useState('');          // {{대피소}} 담당자 입력
   const [previewElder, setPreviewElder] = useState(null);
   const [scriptSaved, setScriptSaved]   = useState(false);
   const [fetchingWeather, setFetchingWeather] = useState(false);
@@ -614,8 +637,14 @@ export default function App() {
     } catch (e) { console.error('승인 실패:', e); }
   };
 
+  // 어르신별 최종 경보 멘트(모든 변수 치환). 산불도 alertScript에 현재 단계 텍스트가 들어있음.
+  const alertMsgFor = (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterName);
+  const alertStageFor = () => activeAlert === 'wildfire' ? wildfireStage : '';
+
   const buildPreview = (elder) => {
-    const alertMsg = activeAlert !== 'none' ? alertScript.replace(/{{지역}}/g, elder?.region || '') : '';
+    // 산불(대피)은 안부 대본을 얹지 않고 경보 멘트만 발화 → 미리보기도 경보 멘트 그대로
+    if (activeAlert === 'wildfire') return `${elder?.name || '어르신'} 어르신, ${alertMsgFor(elder)}`.slice(0, 500);
+    const alertMsg = alertMsgFor(elder);
     return mainScript
       .replace(/{{호칭}}/g, elder?.title || '어르신')
       .replace(/{{이름}}/g, elder?.name || '어르신')
@@ -701,8 +730,9 @@ export default function App() {
             elderTitle:   elder.title || '어르신',
             region:       elder.region,
             script:       mainScript,
-            alertMessage: activeAlert !== 'none' ? alertScript.replace(/{{지역}}/g, elder.region) : '',
+            alertMessage: alertMsgFor(elder),
             alertType: activeAlert,
+            alertStage: alertStageFor(),
           }),
         });
         const data = await res.json();
@@ -898,7 +928,9 @@ export default function App() {
           elderTitle:   elder.title || '어르신',
           region:       elder.region,
           script:       mainScript,
-          alertMessage: activeAlert !== 'none' ? alertScript.replace(/{{지역}}/g, elder.region) : '',
+          alertMessage: alertMsgFor(elder),
+          alertType: activeAlert,
+          alertStage: alertStageFor(),
         }),
       });
       const data = await res.json();
@@ -1692,12 +1724,30 @@ export default function App() {
                 <div className="section-title">⚠️ 경보 멘트 설정</div>
                 <div className="alert-template-grid">
                   {[{id:'none',icon:'✅',label:'경보 없음',color:'#22c55e'},{id:'heatwave',icon:'🌡️',label:'폭염경보',color:'#ef4444'},{id:'cold',icon:'❄️',label:'한파경보',color:'#3b82f6'},{id:'dust',icon:'😷',label:'미세먼지 나쁨',color:'#f59e0b'},{id:'rain',icon:'🌧️',label:'호우주의보',color:'#6366f1'},{id:'typhoon',icon:'🌀',label:'태풍경보',color:'#7c3aed'},{id:'wildfire',icon:'🔥',label:'산불발생',color:'#ea580c'}].map(t => (
-                    <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} style={activeAlert===t.id?{borderColor:t.color,background:`${t.color}15`}:{}} onClick={() => { setActiveAlert(t.id); setAlertScript(ALERT_TEMPLATES[t.id]); }}>
+                    <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} style={activeAlert===t.id?{borderColor:t.color,background:`${t.color}15`}:{}} onClick={() => { setActiveAlert(t.id); if (t.id==='wildfire') { setWildfireStage('prepare'); setAlertScript(WILDFIRE_STAGES[0].text); } else { setAlertScript(ALERT_TEMPLATES[t.id]); } }}>
                       <span style={{fontSize:20}}>{t.icon}</span><span style={{fontWeight:700,color:activeAlert===t.id?t.color:'#374151'}}>{t.label}</span>
                     </button>
                   ))}
                 </div>
-                {activeAlert !== 'none' && (<div className="alert-script-edit"><label className="form-label">경보 멘트 수정</label><textarea className="script-textarea" value={alertScript} onChange={e => setAlertScript(e.target.value)} rows={3}/><div className="var-hint">사용 가능 변수: <code>{'{{지역}}'}</code></div></div>)}
+                {activeAlert === 'wildfire' && (
+                  <div style={{marginTop:14}}>
+                    <div className="var-hint" style={{marginBottom:8,color:'#ea580c',fontWeight:700}}>🔥 산불 대피 3단계 — 상황에 맞는 단계를 골라 발신하세요. 어르신이 "괜찮아/도와줘"로 응답하면 자동 처리됩니다.</div>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                      {WILDFIRE_STAGES.map(s => (
+                        <button key={s.id} className={`alert-template-btn ${wildfireStage===s.id?'alert-template-active':''}`}
+                          style={{flex:'1 1 30%',minWidth:150,justifyContent:'center',...(wildfireStage===s.id?{borderColor:s.color,background:`${s.color}15`}:{})}}
+                          onClick={() => { setWildfireStage(s.id); setAlertScript(s.text); }}>
+                          <span style={{fontWeight:700,fontSize:13,color:wildfireStage===s.id?s.color:'#374151'}}>{s.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <label className="form-label">🏠 대피소명 (담당자 입력 · {'{{대피소}}'}에 들어감)</label>
+                    <input className="form-input" type="text" value={shelterName} placeholder="예) 북구민운동장, ○○초등학교 체육관"
+                      onChange={e => setShelterName(e.target.value)} style={{marginBottom:4}}/>
+                    {!shelterName.trim() && <div className="var-hint" style={{color:'#94a3b8'}}>비워두면 "가까운 대피소"로 안내됩니다.</div>}
+                  </div>
+                )}
+                {activeAlert !== 'none' && (<div className="alert-script-edit"><label className="form-label">경보 멘트 수정{activeAlert==='wildfire'?' (선택한 단계)':''}</label><textarea className="script-textarea" value={alertScript} onChange={e => setAlertScript(e.target.value)} rows={activeAlert==='wildfire'?5:3}/><div className="var-hint">사용 가능 변수: <code>{'{{이름}}'}</code> <code>{'{{지역}}'}</code> <code>{'{{보호자}}'}</code>{activeAlert==='wildfire'&&<> <code>{'{{대피소}}'}</code></>}</div></div>)}
                 {activeAlert !== 'none' && (
                   <div style={{marginTop:18,borderTop:'1px solid #e5e7eb',paddingTop:16}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
