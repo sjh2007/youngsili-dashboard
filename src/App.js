@@ -532,8 +532,6 @@ export default function App() {
   const [shelterName, setShelterName]     = useState('');          // {{대피소}} 담당자 입력
   const [alertResponses, setAlertResponses] = useState([]);        // 경보 응답 현황(safe/help/missed)
   const [alertRespLoading, setAlertRespLoading] = useState(false);
-  const [shelterMap, setShelterMap]       = useState({});          // 지역 → 대피소명 (자동 채움)
-  const [shelterSaving, setShelterSaving]  = useState(false);
   const [savedAlertTpl, setSavedAlertTpl]  = useState({});         // 서버 저장된 경보 멘트(기관 공유) — 키별
   const [alertTplSaving, setAlertTplSaving] = useState(false);
   const [alertTplSaved, setAlertTplSaved]  = useState(false);
@@ -646,9 +644,8 @@ export default function App() {
   };
 
   // 어르신별 최종 경보 멘트(모든 변수 치환). 산불도 alertScript에 현재 단계 텍스트가 들어있음.
-  // {{대피소}}: 지역별 매핑(shelterMap) 우선 → 없으면 담당자 수동 입력(shelterName).
-  const shelterFor = (elder) => (elder && shelterMap[elder.region]) || shelterName;
-  const alertMsgFor = (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterFor(elder));
+  // {{대피소}}: 담당자가 입력한 대피소명(한 칸)을 그대로 사용. 비우면 fillAlertVars가 '가까운 대피소'로.
+  const alertMsgFor = (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterName);
   const alertStageFor = () => activeAlert === 'wildfire' ? wildfireStage : '';
 
   const buildPreview = (elder) => {
@@ -830,24 +827,6 @@ export default function App() {
     return () => clearInterval(t);
   }, [page]); // eslint-disable-line
 
-  // ── 지역별 대피소 매핑 로드/저장 (산불 {{대피소}} 자동 채움) ──
-  useEffect(() => {
-    if (page !== 'schedule') return;
-    authFetch(`${SERVER_URL}/settings/shelters`).then(r => r.json())
-      .then(d => setShelterMap((d && d.map) || {})).catch(() => {});
-  }, [page]); // eslint-disable-line
-  const saveShelterMap = async (nextMap) => {
-    setShelterSaving(true);
-    try {
-      const r = await authFetch(`${SERVER_URL}/settings/shelters`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ map: nextMap }),
-      });
-      const d = await r.json();
-      if (d && d.map) setShelterMap(d.map);
-    } catch { /* noop */ }
-    setShelterSaving(false);
-  };
 
   // ── 경보 멘트: 서버 저장분 로드(기관 공유) → 담당자 수정이 모든 계정에 즉시 적용 ──
   useEffect(() => {
@@ -1888,30 +1867,9 @@ export default function App() {
                       ))}
                     </div>
                     <label className="form-label">🏠 대피소명 (담당자 입력 · {'{{대피소}}'}에 들어감)</label>
-                    <input className="form-input" type="text" value={shelterName} placeholder="예) 북구민운동장, ○○초등학교 체육관"
+                    <input className="form-input" type="text" value={shelterName} placeholder="예) 봉화초등학교 운동장, 북구민운동장"
                       onChange={e => setShelterName(e.target.value)} style={{marginBottom:4}}/>
-                    <div className="var-hint" style={{color:'#94a3b8'}}>지역별로 아래에 등록해두면 지역에 맞는 대피소가 자동으로 들어갑니다. 지역 매핑이 없으면 이 입력값을, 그것도 없으면 "가까운 대피소"로 안내됩니다.</div>
-                    {(() => {
-                      const regions = [...new Set(elders.map(e => e.region).filter(Boolean))].sort();
-                      if (regions.length === 0) return null;
-                      return (
-                        <div style={{marginTop:12,background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:10,padding:'12px 14px'}}>
-                          <div style={{fontWeight:700,fontSize:13,color:'#ea580c',marginBottom:8}}>🗺️ 지역별 대피소 등록 (한 번 저장하면 다음 발신에도 자동 적용)</div>
-                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                            {regions.map(rg => (
-                              <div key={rg} style={{display:'flex',alignItems:'center',gap:8}}>
-                                <span style={{minWidth:96,fontSize:13,color:'#374151',fontWeight:600}}>{rg}</span>
-                                <input className="form-input" type="text" value={shelterMap[rg] || ''} placeholder="대피소명"
-                                  onChange={e => setShelterMap({ ...shelterMap, [rg]: e.target.value })} style={{flex:1,marginBottom:0}}/>
-                              </div>
-                            ))}
-                          </div>
-                          <button className="btn-secondary" disabled={shelterSaving} onClick={() => saveShelterMap(shelterMap)} style={{marginTop:10,fontSize:12}}>
-                            {shelterSaving ? '저장 중…' : '💾 지역별 대피소 저장'}
-                          </button>
-                        </div>
-                      );
-                    })()}
+                    <div className="var-hint" style={{color:'#94a3b8'}}>여기에 입력한 대피소명이 경보 멘트의 {'{{대피소}}'} 자리에 들어갑니다. 비워두면 "가까운 대피소"로 안내됩니다.</div>
                   </div>
                 )}
                 {activeAlert !== 'none' && (
