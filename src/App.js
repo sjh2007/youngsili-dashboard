@@ -531,6 +531,8 @@ export default function App() {
   const [shelterName, setShelterName]     = useState('');          // {{대피소}} 담당자 입력
   const [alertResponses, setAlertResponses] = useState([]);        // 경보 응답 현황(safe/help/missed)
   const [alertRespLoading, setAlertRespLoading] = useState(false);
+  const [shelterMap, setShelterMap]       = useState({});          // 지역 → 대피소명 (자동 채움)
+  const [shelterSaving, setShelterSaving]  = useState(false);
   const [previewElder, setPreviewElder] = useState(null);
   const [scriptSaved, setScriptSaved]   = useState(false);
   const [fetchingWeather, setFetchingWeather] = useState(false);
@@ -640,7 +642,9 @@ export default function App() {
   };
 
   // 어르신별 최종 경보 멘트(모든 변수 치환). 산불도 alertScript에 현재 단계 텍스트가 들어있음.
-  const alertMsgFor = (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterName);
+  // {{대피소}}: 지역별 매핑(shelterMap) 우선 → 없으면 담당자 수동 입력(shelterName).
+  const shelterFor = (elder) => (elder && shelterMap[elder.region]) || shelterName;
+  const alertMsgFor = (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterFor(elder));
   const alertStageFor = () => activeAlert === 'wildfire' ? wildfireStage : '';
 
   const buildPreview = (elder) => {
@@ -822,6 +826,25 @@ export default function App() {
     return () => clearInterval(t);
   }, [page]); // eslint-disable-line
 
+  // ── 지역별 대피소 매핑 로드/저장 (산불 {{대피소}} 자동 채움) ──
+  useEffect(() => {
+    if (page !== 'schedule') return;
+    authFetch(`${SERVER_URL}/settings/shelters`).then(r => r.json())
+      .then(d => setShelterMap((d && d.map) || {})).catch(() => {});
+  }, [page]); // eslint-disable-line
+  const saveShelterMap = async (nextMap) => {
+    setShelterSaving(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/settings/shelters`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ map: nextMap }),
+      });
+      const d = await r.json();
+      if (d && d.map) setShelterMap(d.map);
+    } catch { /* noop */ }
+    setShelterSaving(false);
+  };
+
   // ── 상담·방문 일지(caseNotes) ──
   const CASE_TYPE_META = {
     visit:    { label: '가정방문', icon: '🏠', color: '#2563eb', bg: '#dbeafe' },
@@ -861,7 +884,7 @@ export default function App() {
       elderName: prefill.elderName || '',
       type: prefill.type || 'visit',
       category: prefill.category || 'safety',
-      content: '', action: '',
+      content: prefill.content || '', action: prefill.action || '',
       visitedDate: dateStrOf(now), visitedTime: roundHalf(now),
       linkedAlertId: prefill.linkedAlertId || '',
       followUpNeeded: false, followUpDue: '',
@@ -1479,6 +1502,12 @@ export default function App() {
                             <span style={{fontWeight:800,color:c.color,fontSize:14,minWidth:74}}>{c.label}</span>
                             <span style={{fontSize:12.5,color:'#64748b',flex:1}}>{c.desc}{r.response==='missed'&&r.retryCount?` (재발신 ${r.retryCount}회)`:''}</span>
                             <span style={{fontSize:11.5,color:'#94a3b8'}}>{stageLabel[r.alertStage]||''} · {fmtTime(r.at)}</span>
+                            {(r.response==='help'||r.response==='missed') && (
+                              <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}
+                                onClick={()=>openNewNote({ elderPhone:r.phone, elderName:r.elderName, type:'phone', category:'safety',
+                                  content:`[산불 경보 ${stageLabel[r.alertStage]||''}] ${r.response==='help'?'어르신이 "도와줘" — 도움 요청':`미응답(자동 재발신 ${r.retryCount||0}회 후)`}. 조치 확인 필요.`,
+                                  linkedAlertId:`alertresp_${r.id}` })}>📝 일지</button>
+                            )}
                           </div>
                         );
                       })}
@@ -1814,7 +1843,28 @@ export default function App() {
                     <label className="form-label">🏠 대피소명 (담당자 입력 · {'{{대피소}}'}에 들어감)</label>
                     <input className="form-input" type="text" value={shelterName} placeholder="예) 북구민운동장, ○○초등학교 체육관"
                       onChange={e => setShelterName(e.target.value)} style={{marginBottom:4}}/>
-                    {!shelterName.trim() && <div className="var-hint" style={{color:'#94a3b8'}}>비워두면 "가까운 대피소"로 안내됩니다.</div>}
+                    <div className="var-hint" style={{color:'#94a3b8'}}>지역별로 아래에 등록해두면 지역에 맞는 대피소가 자동으로 들어갑니다. 지역 매핑이 없으면 이 입력값을, 그것도 없으면 "가까운 대피소"로 안내됩니다.</div>
+                    {(() => {
+                      const regions = [...new Set(elders.map(e => e.region).filter(Boolean))].sort();
+                      if (regions.length === 0) return null;
+                      return (
+                        <div style={{marginTop:12,background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:10,padding:'12px 14px'}}>
+                          <div style={{fontWeight:700,fontSize:13,color:'#ea580c',marginBottom:8}}>🗺️ 지역별 대피소 등록 (한 번 저장하면 다음 발신에도 자동 적용)</div>
+                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                            {regions.map(rg => (
+                              <div key={rg} style={{display:'flex',alignItems:'center',gap:8}}>
+                                <span style={{minWidth:96,fontSize:13,color:'#374151',fontWeight:600}}>{rg}</span>
+                                <input className="form-input" type="text" value={shelterMap[rg] || ''} placeholder="대피소명"
+                                  onChange={e => setShelterMap({ ...shelterMap, [rg]: e.target.value })} style={{flex:1,marginBottom:0}}/>
+                              </div>
+                            ))}
+                          </div>
+                          <button className="btn-secondary" disabled={shelterSaving} onClick={() => saveShelterMap(shelterMap)} style={{marginTop:10,fontSize:12}}>
+                            {shelterSaving ? '저장 중…' : '💾 지역별 대피소 저장'}
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
                 {activeAlert !== 'none' && (<div className="alert-script-edit"><label className="form-label">경보 멘트 수정{activeAlert==='wildfire'?' (선택한 단계)':''}</label><textarea className="script-textarea" value={alertScript} onChange={e => setAlertScript(e.target.value)} rows={activeAlert==='wildfire'?5:3}/><div className="var-hint">사용 가능 변수: <code>{'{{이름}}'}</code> <code>{'{{지역}}'}</code> <code>{'{{보호자}}'}</code>{activeAlert==='wildfire'&&<> <code>{'{{대피소}}'}</code></>}</div></div>)}
