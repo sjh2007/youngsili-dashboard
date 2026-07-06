@@ -115,14 +115,15 @@ const ALERT_TEMPLATES = {
 // 산불 3단계 대본 (발생 초기 → 긴급 대피 → 안전 확인). 각 단계는 응답 분기(괜찮아/도와줘)로 마무리.
 const WILDFIRE_STAGES = [
   { id: 'prepare',  label: '① 발생 초기(대피 준비)', color: '#f59e0b',
-    text: `{{이름}} 어르신, 저 영실이예요. 지금 {{지역}} 가까운 곳에 산불이 났어요. 놀라지 마시고 제 말 잘 들어주세요. 지금 바로 나갈 준비를 해두세요. 신발이랑 겉옷, 그리고 이 전화기 꼭 챙기세요. 마을 방송이나 안내가 나오면 그대로 따라주세요. 혼자 나가기 힘드시면 지금 저한테 "도와줘" 라고 말씀해 주세요. 제가 바로 복지사님과 {{보호자}}께 알려드릴게요.` },
+    text: `어르신, 저 영실이예요. 지금 {{지역}} 가까운 곳에 산불이 났어요. 놀라지 마시고 제 말 잘 들어주세요. 지금 바로 나갈 준비를 해두세요. 신발이랑 겉옷, 그리고 이 전화기 꼭 챙기세요. 대피 안내가 나오면 {{대피소}} 쪽으로 가시면 돼요. 혼자 나가기 힘드시면 지금 저한테 "도와줘" 라고 말씀해 주세요. 제가 바로 복지사님과 {{보호자}}께 알려드릴게요.` },
   { id: 'evacuate', label: '② 긴급 대피(불길 접근)', color: '#dc2626',
-    text: `{{이름}} 어르신, 지금 바로 밖으로 나가셔야 해요. {{지역}} 산불이 가까워졌어요. 가스 밸브 잠그시고, 젖은 수건으로 코와 입을 막고 낮은 자세로 나가세요. 나가시면 {{대피소}} 쪽으로 가시거나 이웃과 함께 움직이세요. 위급하면 꼭 119에 전화하세요. 혼자 못 움직이시면 지금 "도와줘" 라고 말씀해 주세요. 바로 도움을 보내드릴게요.` },
+    text: `어르신, 지금 바로 밖으로 나가셔야 해요. {{지역}} 산불이 가까워졌어요. 가스 밸브 잠그시고, 젖은 수건으로 코와 입을 막고 낮은 자세로 나가세요. 나가시면 {{대피소}} 쪽으로 가시거나 이웃과 함께 움직이세요. 위급하면 꼭 119에 전화하세요. 혼자 못 움직이시면 지금 "도와줘" 라고 말씀해 주세요. 바로 도움을 보내드릴게요.` },
   { id: 'safety',   label: '③ 안전 확인(상황 종료)', color: '#16a34a',
-    text: `{{이름}} 어르신, 저 영실이예요. 지금 안전한 곳에 계신가요? 몸은 괜찮으세요? 괜찮으시면 "괜찮아", 도움이 필요하면 "도와줘" 라고 말씀해 주세요.` },
+    text: `어르신, 저 영실이예요. 지금 안전한 곳에 계신가요? 몸은 괜찮으세요? 괜찮으시면 "괜찮아", 도움이 필요하면 "도와줘" 라고 말씀해 주세요.` },
 ];
 
 // 경보 멘트 변수 치환 (실제 발송·미리보기 공통). 값이 없으면 자연스럽게 생략.
+// {{이름}}은 UI에서 제거했으나, 과거 저장분 호환을 위해 치환은 유지(있으면 '어르신'으로).
 function fillAlertVars(text, elder, shelter) {
   return String(text || '')
     .replace(/\{\{이름\}\}/g, (elder && elder.name) || '어르신')
@@ -533,6 +534,9 @@ export default function App() {
   const [alertRespLoading, setAlertRespLoading] = useState(false);
   const [shelterMap, setShelterMap]       = useState({});          // 지역 → 대피소명 (자동 채움)
   const [shelterSaving, setShelterSaving]  = useState(false);
+  const [savedAlertTpl, setSavedAlertTpl]  = useState({});         // 서버 저장된 경보 멘트(기관 공유) — 키별
+  const [alertTplSaving, setAlertTplSaving] = useState(false);
+  const [alertTplSaved, setAlertTplSaved]  = useState(false);
   const [previewElder, setPreviewElder] = useState(null);
   const [scriptSaved, setScriptSaved]   = useState(false);
   const [fetchingWeather, setFetchingWeather] = useState(false);
@@ -843,6 +847,49 @@ export default function App() {
       if (d && d.map) setShelterMap(d.map);
     } catch { /* noop */ }
     setShelterSaving(false);
+  };
+
+  // ── 경보 멘트: 서버 저장분 로드(기관 공유) → 담당자 수정이 모든 계정에 즉시 적용 ──
+  useEffect(() => {
+    if (page !== 'schedule') return;
+    authFetch(`${SERVER_URL}/settings/alerts`).then(r => r.json())
+      .then(d => setSavedAlertTpl((d && d.templates) || {})).catch(() => {});
+  }, [page]); // eslint-disable-line
+  // 편집 중인 멘트의 키 (산불은 단계별, 그 외는 경보 종류)
+  const curAlertKey = () => activeAlert === 'wildfire' ? `wildfire_${wildfireStage}` : activeAlert;
+  // 저장분 우선, 없으면 기본 텍스트
+  const tplText = (key, def) => (savedAlertTpl[key] && savedAlertTpl[key].trim()) ? savedAlertTpl[key] : def;
+  // 현재 편집 멘트를 서버에 저장(기관 공유)
+  const saveAlertTemplate = async () => {
+    const key = curAlertKey();
+    if (!key || key === 'none') return;
+    setAlertTplSaving(true); setAlertTplSaved(false);
+    try {
+      const r = await authFetch(`${SERVER_URL}/settings/alerts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates: { [key]: alertScript } }),
+      });
+      const d = await r.json();
+      if (d && d.templates) { setSavedAlertTpl(d.templates); setAlertTplSaved(true); setTimeout(() => setAlertTplSaved(false), 2500); }
+    } catch { /* noop */ }
+    setAlertTplSaving(false);
+  };
+  // 저장분을 기본값으로 되돌리기(빈 값 저장 → 서버가 해당 키 삭제)
+  const resetAlertTemplate = async () => {
+    const key = curAlertKey();
+    if (!key || key === 'none') return;
+    const def = activeAlert === 'wildfire' ? (WILDFIRE_STAGES.find(s => s.id === wildfireStage) || WILDFIRE_STAGES[0]).text : ALERT_TEMPLATES[activeAlert];
+    setAlertTplSaving(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/settings/alerts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates: { [key]: '' } }),
+      });
+      const d = await r.json();
+      if (d && d.templates) setSavedAlertTpl(d.templates);
+      setAlertScript(def);
+    } catch { /* noop */ }
+    setAlertTplSaving(false);
   };
 
   // ── 상담·방문 일지(caseNotes) ──
@@ -1823,7 +1870,7 @@ export default function App() {
                 <div className="section-title">⚠️ 경보 멘트 설정</div>
                 <div className="alert-template-grid">
                   {[{id:'none',icon:'✅',label:'경보 없음',color:'#22c55e'},{id:'heatwave',icon:'🌡️',label:'폭염경보',color:'#ef4444'},{id:'cold',icon:'❄️',label:'한파경보',color:'#3b82f6'},{id:'dust',icon:'😷',label:'미세먼지 나쁨',color:'#f59e0b'},{id:'rain',icon:'🌧️',label:'호우주의보',color:'#6366f1'},{id:'typhoon',icon:'🌀',label:'태풍경보',color:'#7c3aed'},{id:'wildfire',icon:'🔥',label:'산불발생',color:'#ea580c'}].map(t => (
-                    <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} style={activeAlert===t.id?{borderColor:t.color,background:`${t.color}15`}:{}} onClick={() => { setActiveAlert(t.id); if (t.id==='wildfire') { setWildfireStage('prepare'); setAlertScript(WILDFIRE_STAGES[0].text); } else { setAlertScript(ALERT_TEMPLATES[t.id]); } }}>
+                    <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} style={activeAlert===t.id?{borderColor:t.color,background:`${t.color}15`}:{}} onClick={() => { setActiveAlert(t.id); if (t.id==='wildfire') { setWildfireStage('prepare'); setAlertScript(tplText('wildfire_prepare', WILDFIRE_STAGES[0].text)); } else { setAlertScript(tplText(t.id, ALERT_TEMPLATES[t.id])); } }}>
                       <span style={{fontSize:20}}>{t.icon}</span><span style={{fontWeight:700,color:activeAlert===t.id?t.color:'#374151'}}>{t.label}</span>
                     </button>
                   ))}
@@ -1835,7 +1882,7 @@ export default function App() {
                       {WILDFIRE_STAGES.map(s => (
                         <button key={s.id} className={`alert-template-btn ${wildfireStage===s.id?'alert-template-active':''}`}
                           style={{flex:'1 1 30%',minWidth:150,justifyContent:'center',...(wildfireStage===s.id?{borderColor:s.color,background:`${s.color}15`}:{})}}
-                          onClick={() => { setWildfireStage(s.id); setAlertScript(s.text); }}>
+                          onClick={() => { setWildfireStage(s.id); setAlertScript(tplText('wildfire_'+s.id, s.text)); }}>
                           <span style={{fontWeight:700,fontSize:13,color:wildfireStage===s.id?s.color:'#374151'}}>{s.label}</span>
                         </button>
                       ))}
@@ -1867,7 +1914,21 @@ export default function App() {
                     })()}
                   </div>
                 )}
-                {activeAlert !== 'none' && (<div className="alert-script-edit"><label className="form-label">경보 멘트 수정{activeAlert==='wildfire'?' (선택한 단계)':''}</label><textarea className="script-textarea" value={alertScript} onChange={e => setAlertScript(e.target.value)} rows={activeAlert==='wildfire'?5:3}/><div className="var-hint">사용 가능 변수: <code>{'{{이름}}'}</code> <code>{'{{지역}}'}</code> <code>{'{{보호자}}'}</code>{activeAlert==='wildfire'&&<> <code>{'{{대피소}}'}</code></>}</div></div>)}
+                {activeAlert !== 'none' && (
+                  <div className="alert-script-edit">
+                    <label className="form-label">경보 멘트 수정{activeAlert==='wildfire'?' (선택한 단계)':''}</label>
+                    <textarea className="script-textarea" value={alertScript} onChange={e => { setAlertScript(e.target.value); setAlertTplSaved(false); }} rows={activeAlert==='wildfire'?5:3}/>
+                    <div className="var-hint">사용 가능 변수: <code>{'{{지역}}'}</code> <code>{'{{보호자}}'}</code>{activeAlert==='wildfire'&&<> <code>{'{{대피소}}'}</code></>}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8,flexWrap:'wrap'}}>
+                      <button className="btn-primary" style={{fontSize:13,padding:'6px 14px'}} disabled={alertTplSaving} onClick={saveAlertTemplate}>
+                        {alertTplSaving ? '저장 중…' : '💾 이 멘트 저장'}
+                      </button>
+                      <button className="btn-secondary" style={{fontSize:12,padding:'6px 10px'}} disabled={alertTplSaving} onClick={resetAlertTemplate}>기본값으로 되돌리기</button>
+                      {alertTplSaved && <span style={{fontSize:12.5,color:'#16a34a',fontWeight:700}}>✅ 저장됨 — 같은 기관 모든 담당자에게 즉시 적용됩니다</span>}
+                      {savedAlertTpl[curAlertKey()] && !alertTplSaved && <span style={{fontSize:12,color:'#2563eb'}}>· 저장된 맞춤 멘트 사용 중</span>}
+                    </div>
+                  </div>
+                )}
                 {activeAlert !== 'none' && (
                   <div style={{marginTop:18,borderTop:'1px solid #e5e7eb',paddingTop:16}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
