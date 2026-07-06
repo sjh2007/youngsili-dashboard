@@ -529,6 +529,8 @@ export default function App() {
   const [alertScript, setAlertScript]   = useState(ALERT_TEMPLATES.none);
   const [wildfireStage, setWildfireStage] = useState('prepare');   // 산불 3단계 선택
   const [shelterName, setShelterName]     = useState('');          // {{대피소}} 담당자 입력
+  const [alertResponses, setAlertResponses] = useState([]);        // 경보 응답 현황(safe/help/missed)
+  const [alertRespLoading, setAlertRespLoading] = useState(false);
   const [previewElder, setPreviewElder] = useState(null);
   const [scriptSaved, setScriptSaved]   = useState(false);
   const [fetchingWeather, setFetchingWeather] = useState(false);
@@ -801,6 +803,24 @@ export default function App() {
     const t = setInterval(() => loadDispatchHistory(histDays, true), 15000);
     return () => clearInterval(t);
   }, [page, histDays]); // eslint-disable-line
+
+  // ── 경보 응답 현황 (산불 대피: 안전확인/도움요청/미응답) ── 15초 자동 갱신
+  const loadAlertResponses = async (silent = false) => {
+    if (!silent) setAlertRespLoading(true);
+    try {
+      const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const r = await authFetch(`${SERVER_URL}/alert/responses?from=${encodeURIComponent(from)}`);
+      const d = await r.json();
+      setAlertResponses(Array.isArray(d.responses) ? d.responses : []);
+    } catch { if (!silent) setAlertResponses([]); }
+    if (!silent) setAlertRespLoading(false);
+  };
+  useEffect(() => {
+    if (page !== 'schedule') return;
+    loadAlertResponses();
+    const t = setInterval(() => loadAlertResponses(true), 15000);
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
 
   // ── 상담·방문 일지(caseNotes) ──
   const CASE_TYPE_META = {
@@ -1417,6 +1437,56 @@ export default function App() {
 
           {page==='schedule' && (
             <div className="fade-in">
+              {(() => {
+                // 어르신별 최신 응답만(safe/help/missed) → help·missed를 상단으로(우선대응)
+                const latest = {};
+                for (const r of alertResponses) { const k = r.phone || r.elderName; if (!latest[k]) latest[k] = r; }
+                const list = Object.values(latest);
+                if (list.length === 0) return null;
+                const rank = { help: 0, missed: 1, safe: 2 };
+                list.sort((a, b) => (rank[a.response] ?? 3) - (rank[b.response] ?? 3) || (b.at || '').localeCompare(a.at || ''));
+                const cfg = {
+                  help:   { icon: '🚨', label: '도움 요청', color: '#dc2626', bg: '#fef2f2', desc: '즉시 복지사·보호자 대응 필요' },
+                  missed: { icon: '⚠️', label: '미응답',   color: '#ea580c', bg: '#fff7ed', desc: '자동 재발신 후에도 무응답 — 직접 확인 필요' },
+                  safe:   { icon: '✅', label: '안전 확인', color: '#16a34a', bg: '#f0fdf4', desc: '' },
+                };
+                const stageLabel = { prepare: '발생 초기', evacuate: '긴급 대피', safety: '안전 확인' };
+                const nHelp = list.filter(r => r.response === 'help').length;
+                const nMissed = list.filter(r => r.response === 'missed').length;
+                const nSafe = list.filter(r => r.response === 'safe').length;
+                const fmtTime = (iso) => { try { const d = new Date(iso); return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
+                return (
+                  <div className="section" style={{borderLeft:'4px solid #ea580c'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+                      <div className="section-title" style={{margin:0}}>🔥 경보 응답 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(최근 24시간 · 15초 자동 갱신)</span></div>
+                      <div style={{display:'flex',gap:10,fontSize:13,fontWeight:700}}>
+                        <span style={{color:'#dc2626'}}>🚨 {nHelp}</span>
+                        <span style={{color:'#ea580c'}}>⚠️ {nMissed}</span>
+                        <span style={{color:'#16a34a'}}>✅ {nSafe}</span>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'2px 8px'}} onClick={()=>loadAlertResponses()}>🔄</button>
+                      </div>
+                    </div>
+                    <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:8}}>
+                      {list.map((r, i) => {
+                        const c = cfg[r.response] || cfg.safe;
+                        return (
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:12,background:c.bg,border:`1px solid ${c.color}30`,borderRadius:10,padding:'10px 14px',flexWrap:'wrap'}}>
+                            <span style={{fontSize:20}}>{c.icon}</span>
+                            <div style={{minWidth:90}}>
+                              <div style={{fontWeight:800,color:'#1f2937'}}>{r.elderName || '어르신'}</div>
+                              <div style={{fontSize:12,color:'#94a3b8'}}>{r.phone}</div>
+                            </div>
+                            <span style={{fontWeight:800,color:c.color,fontSize:14,minWidth:74}}>{c.label}</span>
+                            <span style={{fontSize:12.5,color:'#64748b',flex:1}}>{c.desc}{r.response==='missed'&&r.retryCount?` (재발신 ${r.retryCount}회)`:''}</span>
+                            <span style={{fontSize:11.5,color:'#94a3b8'}}>{stageLabel[r.alertStage]||''} · {fmtTime(r.at)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {(nHelp>0||nMissed>0) && <div style={{marginTop:10,fontSize:12.5,color:'#ea580c',fontWeight:600}}>🚨 도움 요청·미응답 어르신을 먼저 확인하세요. 목록 상단에 자동 정렬됩니다.</div>}
+                  </div>
+                );
+              })()}
               <div className="bulk-toolbar">
                 <div className="bulk-left">
                   <div className="bulk-title">스마트 선택</div>
