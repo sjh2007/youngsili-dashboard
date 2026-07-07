@@ -366,8 +366,9 @@ export default function App() {
     } catch { setAdminMsg('❌ 네트워크 오류'); }
   };
 
-  const fetchHealth = async () => {
-    setHealthLoading(true);
+  // silent=true면 로딩 표시 없이 조용히 갱신(자동 폴링용)
+  const fetchHealth = async (silent = false) => {
+    if (!silent) setHealthLoading(true);
     try {
       const [hRes, aRes] = await Promise.all([
         authFetch(`${SERVER_URL}/health/all`),
@@ -384,7 +385,7 @@ export default function App() {
     } catch (err) {
       console.error('건강 데이터 오류:', err);
     } finally {
-      setHealthLoading(false);
+      if (!silent) setHealthLoading(false);
     }
   };
 
@@ -393,19 +394,38 @@ export default function App() {
   useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'admin' && isAdmin) { if (isSuper) fetchOrgs(); fetchAccounts(); setAdminMsg(''); } }, [page, isAdmin, isSuper]); // eslint-disable-line
   useEffect(() => { if (page === 'help' && hasNewNotice) { try { localStorage.setItem('youngsili_help_seen', String(LATEST_NOTICE)); } catch {} setHelpSeen(LATEST_NOTICE); } }, [page]); // eslint-disable-line
-  useEffect(() => { if (page === 'elders' || page === 'dashboard' || page === 'calls') fetchElders(); }, [page]); // eslint-disable-line
-  useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'elders' && page !== 'dashboard' && page !== 'calls') return;
+    fetchElders();
+    // 어르신 관리에 있는 동안 15초 자동 갱신 → 다른 담당자의 등록/삭제·앱 등록 승인도 반영
+    // (pollRecent/pollAlerts는 기존 목록의 통화·상태만 patch — 목록 추가/삭제는 여기서)
+    if (page !== 'elders') return;
+    const t = setInterval(() => fetchElders(), 15000);
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'health') return;
+    fetchHealth();
+    const t = setInterval(() => fetchHealth(true), 15000);   // 건강 리포트도 15초 자동 갱신(알림과 동일)
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
   useEffect(() => {
     if (page !== 'calls' && page !== 'elders' && page !== 'dashboard') return;
     fetchCalls();
-    // 통화기록 탭에 있는 동안 15초 자동 갱신 → 방금 끝난 통화가 새로고침 없이 표시
+    // 통화기록 탭·홈에 있는 동안 15초 자동 갱신 → 방금 끝난 통화가 새로고침 없이 표시
+    // (홈 '오늘 통화 현황'의 긴급/주의/정상 KPI도 callsHistory 기반이라 홈도 포함 — 발신 KPI만 갱신되던 반쪽 불일치 해소)
     // (5초는 /calls가 매번 30일치 문서를 읽어 Firestore 비용 과다 → 다른 실시간 요소와 동일한 15초로 통일)
-    if (page !== 'calls') return;
+    if (page !== 'calls' && page !== 'dashboard') return;
     const t = setInterval(() => fetchCalls(true), 15000);
     return () => clearInterval(t);
   }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
-  useEffect(() => { if (page === 'health') fetchHealthHistory(); }, [page, healthRange, healthHistFrom, healthHistTo]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'health') return;
+    fetchHealthHistory();
+    const t = setInterval(() => fetchHealthHistory(true), 15000);   // 건강 이력도 15초 자동 갱신
+    return () => clearInterval(t);
+  }, [page, healthRange, healthHistFrom, healthHistTo]); // eslint-disable-line
   // 통화 시각 ISO → "오늘 14:23" / "어제 09:10" / "6/14 15:30"
   const formatCallTime = (iso) => {
     if (!iso) return '통화 없음';
@@ -467,7 +487,7 @@ export default function App() {
     } catch { if (!silent) setCallsHistory([]); }
     if (!silent) setCallsLoading(false);
   };
-  const fetchHealthHistory = async () => {
+  const fetchHealthHistory = async (silent = false) => {
     try {
       const now = new Date();
       let from = new Date(now.getTime() - 30 * 86400000), to = now;
@@ -476,7 +496,7 @@ export default function App() {
       const r = await authFetch(`${SERVER_URL}/health/history?from=${from.toISOString()}&to=${to.toISOString()}`);
       const j = await r.json();
       setHealthHistory(j.events || []);
-    } catch { setHealthHistory([]); }
+    } catch { if (!silent) setHealthHistory([]); }   // 폴링 순간 실패로 목록이 비워지지 않게
   };
 
   // 실시간 폴링 — 위험 알림(사이드바 🔴 배지)은 항상, 마지막통화는 필요한 페이지에서만.
@@ -891,17 +911,24 @@ export default function App() {
   };
   const CASE_CAT_META = { safety:'안전', health:'건강', meal:'식사', emotional:'정서', welfare:'복지연계', etc:'기타' };
 
-  const loadCaseNotes = async () => {
-    setCaseLoading(true);
+  const loadCaseNotes = async (silent = false) => {
+    if (!silent) setCaseLoading(true);
     try {
       const from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const r = await authFetch(`${SERVER_URL}/case-notes?from=${encodeURIComponent(from)}`);
       const d = await r.json();
       setCaseNotes(Array.isArray(d.notes) ? d.notes : []);
-    } catch { setCaseNotes([]); }
-    setCaseLoading(false);
+    } catch { if (!silent) setCaseNotes([]); }
+    if (!silent) setCaseLoading(false);
   };
-  useEffect(() => { if (page === 'casenotes' || page === 'detail') loadCaseNotes(); }, [page]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'casenotes' && page !== 'detail') return;
+    loadCaseNotes();
+    // 일지는 기관 공유 데이터 — 다른 담당자가 쓴 일지도 15초 안에 보이게 자동 갱신
+    if (page !== 'casenotes') return;
+    const t = setInterval(() => loadCaseNotes(true), 15000);
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
 
   // 날짜/시간 헬퍼 (상담 일시를 날짜 입력 + 시간 드롭다운으로 분리)
   const pad2 = (n) => String(n).padStart(2, '0');
@@ -2133,8 +2160,8 @@ export default function App() {
           {page==='health' && (
             <div className="fade-in">
               <div className="data-banner" style={{marginBottom:20}}>
-                <div><div className="data-banner-title">💊 어르신 건강 상태 현황</div><div className="data-banner-sub">영실이 앱에서 어르신이 직접 체크한 건강 상태</div></div>
-                <button className={`btn-download ${healthLoading?'btn-calling':''}`} onClick={fetchHealth} disabled={healthLoading}>{healthLoading ? '⏳ 불러오는 중...' : '🔄 갱신'}</button>
+                <div><div className="data-banner-title">💊 어르신 건강 상태 현황</div><div className="data-banner-sub">영실이 앱에서 어르신이 직접 체크한 건강 상태 · 🔄 15초마다 자동 갱신됩니다</div></div>
+                <button className={`btn-download ${healthLoading?'btn-calling':''}`} onClick={()=>fetchHealth()} disabled={healthLoading}>{healthLoading ? '⏳ 불러오는 중...' : '🔄 갱신'}</button>
               </div>
               <div className="report-stat-grid" style={{marginBottom:20}}>
                 <div className="report-stat-card"><div className="report-stat-icon">😊</div><div className="report-stat-value" style={{color:'#16a34a'}}>{healthData.filter(h=>h.status==='good').length}명</div><div className="report-stat-label">좋아요</div></div>
@@ -2265,6 +2292,7 @@ export default function App() {
                   <span style={{width:1,height:20,background:'#e2e8f0',margin:'0 2px'}}/>
                   <button className="smart-btn" style={{fontSize:12,padding:'5px 10px',...(caseFollowUpOnly?{background:'#f59e0b',borderColor:'#f59e0b',color:'#fff'}:{})}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>🔔 후속 필요{caseFollowUpOnly?' ✕':''}</button>
                   <button className="btn-primary" onClick={()=>openNewNote()}>＋ 새 일지</button>
+                  <span style={{fontSize:12,color:'#94a3b8'}}>🔄 15초마다 자동 갱신됩니다</span>
                 </div>
               </div>
               {(()=>{
