@@ -1483,6 +1483,46 @@ export default function App() {
                     <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 숫자를 클릭하면 해당 통화·발신 목록으로 이동합니다. (발신 = 받음 + 부재중, 긴급·주의·정상은 받은 통화의 위험 분류)</div>
                   </div>
 
+                  {(() => {
+                    // ⚠️ 오늘 안전확인 미완료 보드 — 부재중(자동 재발신 소진)·발신실패로 끝나고 오늘 성공 통화가 없는 어르신
+                    // (안전확인의 핵심 = 응답 없는 어르신을 놓치지 않기 → 담당자 재발신/방문으로 폐루프)
+                    const _norm = (p) => String(p || '').replace(/\D/g, '');
+                    const okPhones = new Set(todayCalls.map(c => _norm(c.phone)).filter(Boolean));
+                    todayDispatches.forEach(d => { if (d.status === 'completed' || d.status === 'answered') okPhones.add(_norm(d.phone)); });
+                    const lastDisp = {};
+                    todayDispatches.forEach(d => { const p = _norm(d.phone); if (!p) return; const prev = lastDisp[p]; if (!prev || (d.sentAtIso || '') > (prev.sentAtIso || '')) lastDisp[p] = d; });
+                    const unchecked = elders
+                      .filter(e => e.callActive !== false && _norm(e.phone) && !okPhones.has(_norm(e.phone)))
+                      .map(e => ({ e, d: lastDisp[_norm(e.phone)] }))
+                      .filter(x => x.d && (x.d.status === 'missed' || x.d.status === 'failed'));
+                    const undialed = elders.filter(e => e.callActive !== false && _norm(e.phone) && !okPhones.has(_norm(e.phone)) && !lastDisp[_norm(e.phone)]).length;
+                    if (!unchecked.length && !undialed) return null;
+                    return (
+                      <div className="section" style={unchecked.length ? { borderLeft: '4px solid #dc2626' } : {}}>
+                        <div className="section-title">⚠️ 오늘 안전확인 미완료 {unchecked.length > 0 && <span style={{ color: '#dc2626' }}>{unchecked.length}명</span>}</div>
+                        {unchecked.length === 0 ? (
+                          <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>✅ 발신한 어르신은 모두 안전확인 완료됐습니다.</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {unchecked.map(({ e, d }) => (
+                              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: d.status === 'missed' ? '#fff7ed' : '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', flexWrap: 'wrap' }}>
+                                <div style={{ minWidth: 90, fontWeight: 800 }}>{e.name}</div>
+                                <div style={{ minWidth: 80, fontSize: 13, color: '#64748b' }}>{e.region}</div>
+                                <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: d.status === 'missed' ? '#ea580c' : '#dc2626' }}>
+                                  {d.status === 'missed' ? `📵 부재중 — 자동 재발신 ${d.retryCount || 0}회에도 무응답` : `❌ 발신 실패${d.reason ? ` (${d.reason})` : ''}`}
+                                </div>
+                                <div style={{ fontSize: 12, color: '#94a3b8' }}>{d.sentAtIso ? new Date(d.sentAtIso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+                                <button className="btn-call" style={{ fontSize: 12, padding: '5px 12px' }} disabled={calling === e.id} onClick={() => makeCall(e)}>{calling === e.id ? '📱 발신 중…' : '📞 재발신'}</button>
+                              </div>
+                            ))}
+                            <div style={{ fontSize: 12.5, color: '#dc2626', fontWeight: 600 }}>🚨 재발신에도 무응답이면 직접 전화 또는 방문 확인이 필요합니다.</div>
+                          </div>
+                        )}
+                        {undialed > 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>· 오늘 아직 발신하지 않은 어르신 {undialed}명 (전화 발신 관리에서 발신)</div>}
+                      </div>
+                    );
+                  })()}
+
                   <div className="section">
                     <div className="section-title">⚡ 빠른 실행</div>
                     <div className="quick-actions">
