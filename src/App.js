@@ -1952,7 +1952,16 @@ export default function App() {
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
                       <label className="form-label" style={{margin:0}}>📋 이 경보 멘트로 발신할 어르신 (체크 후 일괄 발신)</label>
                       <div style={{display:'flex',gap:6}}>
-                        <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked(elders.filter(e=>weatherData[e.region]?.alert===activeAlert).map(e=>e.id))}>🎯 경보지역 자동선택</button>
+                        {(() => {
+                          // 자동선택 = "지금 선택한 경보 종류"가 발효 중인 지역만 (예: 폭염 선택 시 비 오는 달서구는 제외 — 호우 멘트를 따로 보내는 설계)
+                          const AL = { heatwave:'폭염', cold:'한파', dust:'미세먼지', rain:'호우', typhoon:'태풍', wildfire:'산불' };
+                          const label = AL[activeAlert] || '경보';
+                          return (
+                            <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}}
+                              title={`지금 선택한 '${label}' 경보가 발효 중인 지역의 어르신만 선택합니다. 다른 경보(예: 호우) 지역은 그 경보를 선택한 뒤 눌러 주세요.`}
+                              onClick={()=>setChecked(elders.filter(e=>weatherData[e.region]?.alert===activeAlert).map(e=>e.id))}>🎯 {label} 지역 자동선택</button>
+                          );
+                        })()}
                         <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked(elders.map(e=>e.id))}>전체</button>
                         <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked([])}>해제</button>
                       </div>
