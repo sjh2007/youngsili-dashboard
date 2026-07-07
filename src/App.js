@@ -396,7 +396,15 @@ export default function App() {
   useEffect(() => { if (page === 'elders' || page === 'dashboard' || page === 'calls') fetchElders(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
-  useEffect(() => { if (page === 'calls' || page === 'elders' || page === 'dashboard') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'calls' && page !== 'elders' && page !== 'dashboard') return;
+    fetchCalls();
+    // 통화기록 탭에 있는 동안 15초 자동 갱신 → 방금 끝난 통화가 새로고침 없이 표시
+    // (5초는 /calls가 매번 30일치 문서를 읽어 Firestore 비용 과다 → 다른 실시간 요소와 동일한 15초로 통일)
+    if (page !== 'calls') return;
+    const t = setInterval(() => fetchCalls(true), 15000);
+    return () => clearInterval(t);
+  }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
   useEffect(() => { if (page === 'health') fetchHealthHistory(); }, [page, healthRange, healthHistFrom, healthHistTo]); // eslint-disable-line
   // 통화 시각 ISO → "오늘 14:23" / "어제 09:10" / "6/14 15:30"
   const formatCallTime = (iso) => {
@@ -445,8 +453,9 @@ export default function App() {
     if (days === 1) return `${md} · 어제`;
     return md;
   };
-  const fetchCalls = async () => {
-    setCallsLoading(true);
+  // silent=true면 로딩 표시 없이 조용히 갱신(자동 폴링용 — 목록 깜빡임 방지). 실패 시 기존 목록 유지.
+  const fetchCalls = async (silent = false) => {
+    if (!silent) setCallsLoading(true);
     try {
       const now = new Date();
       let from = new Date(now.getTime() - 30 * 86400000), to = now;
@@ -455,8 +464,8 @@ export default function App() {
       const r = await authFetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`);
       const j = await r.json();
       setCallsHistory(j.calls || []);
-    } catch { setCallsHistory([]); }
-    setCallsLoading(false);
+    } catch { if (!silent) setCallsHistory([]); }
+    if (!silent) setCallsLoading(false);
   };
   const fetchHealthHistory = async () => {
     try {
@@ -1984,7 +1993,8 @@ export default function App() {
                   <span style={{color:'#94a3b8'}}>~</span>
                   <input type="date" value={callsTo} onChange={e=>setCallsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
                 </>)}
-                <button onClick={fetchCalls} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'⏳':'🔄'}</button>
+                <button onClick={()=>fetchCalls()} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'⏳':'🔄'}</button>
+                <span style={{fontSize:12,color:'#94a3b8'}}>🔄 15초마다 자동 갱신됩니다</span>
                 <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="🔍 이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#1d4ed8':'#e2e8f0'),fontSize:13,width:120}}/>
                 <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#1d4ed8':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#1d4ed8':'#334155',background:'#fff',cursor:'pointer'}}>
                   <option value="">전체 어르신</option>
