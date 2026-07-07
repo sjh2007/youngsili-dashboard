@@ -1935,12 +1935,24 @@ export default function App() {
                       {savedAlertTpl[curAlertKey()] && !alertTplSaved && <span style={{fontSize:12,color:'#2563eb'}}>· 저장된 맞춤 멘트 사용 중</span>}
                     </div>
                     {(() => {
-                      // 실제 발송 미리보기 — {{변수}}가 실제 값으로 치환된 결과(대피소명 입력하면 실시간 반영)
-                      const pe = elders.find(e => e.region) || { name: '어르신', region: '○○구', guardian: '' };
+                      // 실제 발송 미리보기 — 어르신마다 {{지역}} 등이 자기 값으로 치환됨을 "지역별 예시"로 확인
+                      // (체크된 어르신 우선, 없으면 전체 기준. 지역별 1명씩 최대 4개 지역)
+                      const pool = (checked.length ? elders.filter(e => checked.includes(e.id)) : elders).filter(e => e.region);
+                      const byRegion = [];
+                      const seen = new Set();
+                      for (const e of pool) { if (!seen.has(e.region)) { seen.add(e.region); byRegion.push(e); } }
+                      const shown = byRegion.slice(0, 4);
+                      if (!shown.length) shown.push({ name: '어르신', region: '○○구', guardian: '' });
                       return (
                         <div style={{marginTop:12,background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:10,padding:'12px 14px'}}>
-                          <div style={{fontWeight:700,fontSize:13,color:'#0369a1',marginBottom:6}}>📋 실제 발송 미리보기 <span style={{fontWeight:500,color:'#64748b'}}>— 발송하면 어르신마다 자기 지역·보호자{activeAlert==='wildfire'?'·대피소':''} 값으로 채워집니다. 아래는 {pe.name || '어르신'} 어르신에게 가는 예시입니다.</span></div>
-                          <div style={{fontSize:14,lineHeight:1.6,color:'#1f2937',whiteSpace:'pre-wrap'}}>{alertMsgFor(pe)}</div>
+                          <div style={{fontWeight:700,fontSize:13,color:'#0369a1',marginBottom:8}}>📋 실제 발송 미리보기 <span style={{fontWeight:500,color:'#64748b'}}>— 어르신마다 자기 지역·보호자{activeAlert==='wildfire'?'·대피소':''} 값으로 채워져 발송됩니다{checked.length?` (선택한 ${checked.length}명 기준)`:''}.</span></div>
+                          {shown.map((e, i) => (
+                            <div key={i} style={{marginBottom: i < shown.length - 1 ? 10 : 0}}>
+                              <div style={{fontSize:12,fontWeight:800,color:'#0369a1',marginBottom:2}}>📍 {e.region} <span style={{fontWeight:500,color:'#94a3b8'}}>({e.name} 어르신 등)</span></div>
+                              <div style={{fontSize:14,lineHeight:1.6,color:'#1f2937',whiteSpace:'pre-wrap'}}>{alertMsgFor(e)}</div>
+                            </div>
+                          ))}
+                          {byRegion.length > shown.length && <div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>… 외 {byRegion.length - shown.length}개 지역도 각자 지역명으로 발송됩니다.</div>}
                           {activeAlert === 'wildfire' && !shelterName.trim() && <div style={{fontSize:12,color:'#f59e0b',marginTop:6}}>⚠️ 위 대피소명 칸이 비어 있어 "가까운 대피소"로 나옵니다. 대피소명을 입력해 보세요.</div>}
                         </div>
                       );
