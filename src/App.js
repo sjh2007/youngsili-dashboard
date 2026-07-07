@@ -740,6 +740,7 @@ export default function App() {
             alertMessage: alertMsgFor(elder),
             alertType: activeAlert,
             alertStage: alertStageFor(),
+            shelter: activeAlert === 'wildfire' ? shelterName.trim() : '',   // 앱 긴급 안내 대피소 일치용
           }),
         });
         const data = await res.json();
@@ -1000,6 +1001,7 @@ export default function App() {
           alertMessage: alertMsgFor(elder),
           alertType: activeAlert,
           alertStage: alertStageFor(),
+          shelter: activeAlert === 'wildfire' ? shelterName.trim() : '',   // 앱 긴급 안내 대피소 일치용
         }),
       });
       const data = await res.json();
