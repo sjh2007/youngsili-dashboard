@@ -1939,7 +1939,7 @@ export default function App() {
                       const pe = elders.find(e => e.region) || { name: '어르신', region: '○○구', guardian: '' };
                       return (
                         <div style={{marginTop:12,background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:10,padding:'12px 14px'}}>
-                          <div style={{fontWeight:700,fontSize:13,color:'#0369a1',marginBottom:6}}>📋 실제 발송 미리보기 <span style={{fontWeight:500,color:'#64748b'}}>({pe.name || '어르신'} 어르신 기준 · 대피소명·변수가 실제 값으로 채워집니다)</span></div>
+                          <div style={{fontWeight:700,fontSize:13,color:'#0369a1',marginBottom:6}}>📋 실제 발송 미리보기 <span style={{fontWeight:500,color:'#64748b'}}>— 발송하면 어르신마다 자기 지역·보호자{activeAlert==='wildfire'?'·대피소':''} 값으로 채워집니다. 아래는 {pe.name || '어르신'} 어르신에게 가는 예시입니다.</span></div>
                           <div style={{fontSize:14,lineHeight:1.6,color:'#1f2937',whiteSpace:'pre-wrap'}}>{alertMsgFor(pe)}</div>
                           {activeAlert === 'wildfire' && !shelterName.trim() && <div style={{fontSize:12,color:'#f59e0b',marginTop:6}}>⚠️ 위 대피소명 칸이 비어 있어 "가까운 대피소"로 나옵니다. 대피소명을 입력해 보세요.</div>}
                         </div>
