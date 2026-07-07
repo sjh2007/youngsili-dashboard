@@ -124,13 +124,16 @@ const WILDFIRE_STAGES = [
 
 // 경보 멘트 변수 치환 (실제 발송·미리보기 공통). 값이 없으면 자연스럽게 생략.
 // {{이름}}은 UI에서 제거했으나, 과거 저장분 호환을 위해 치환은 유지(있으면 '어르신'으로).
-function fillAlertVars(text, elder, shelter) {
+// fireLoc(산불 발생 위치)이 있으면 {{지역}}은 발생 위치로 치환 — 산불 위치는 어르신 거주지와 다른 개념
+// (예: 달서구 거주 어르신에게 "봉화군 도개면 야산 산불" 안내). 없으면 기존대로 어르신 지역.
+function fillAlertVars(text, elder, shelter, fireLoc) {
   return String(text || '')
     .replace(/\{\{이름\}\}/g, (elder && elder.name) || '어르신')
     .replace(/\{\{호칭\}\}/g, (elder && elder.title) || '어르신')
-    .replace(/\{\{지역\}\}/g, (elder && elder.region) || '')
+    .replace(/\{\{지역\}\}/g, (fireLoc || (elder && elder.region) || ''))
     .replace(/\{\{보호자\}\}/g, (elder && elder.guardian) ? `${elder.guardian}님` : '보호자님')
     .replace(/\{\{대피소\}\}/g, (shelter || '가까운 대피소'))
+    .replace(/\{\{([^{}]*)\}\}/g, '$1')   // 미등록 변수({{봉화군 …}} 등 오기입)는 괄호 벗겨 내용만 발화
     .replace(/\s{2,}/g, ' ').trim();
 }
 
@@ -559,6 +562,7 @@ export default function App() {
   const [alertScript, setAlertScript]   = useState(ALERT_TEMPLATES.none);
   const [wildfireStage, setWildfireStage] = useState('prepare');   // 산불 3단계 선택
   const [shelterName, setShelterName]     = useState('');          // {{대피소}} 담당자 입력
+  const [fireLoc, setFireLoc]             = useState('');          // 산불 발생 위치({{지역}} 치환 + 위치질문 답변)
   const [alertResponses, setAlertResponses] = useState([]);        // 경보 응답 현황(safe/help/missed)
   const [alertRespLoading, setAlertRespLoading] = useState(false);
   const [savedAlertTpl, setSavedAlertTpl]  = useState({});         // 서버 저장된 경보 멘트(기관 공유) — 키별
@@ -674,7 +678,8 @@ export default function App() {
 
   // 어르신별 최종 경보 멘트(모든 변수 치환). 산불도 alertScript에 현재 단계 텍스트가 들어있음.
   // {{대피소}}: 담당자가 입력한 대피소명(한 칸)을 그대로 사용. 비우면 fillAlertVars가 '가까운 대피소'로.
-  const alertMsgFor = (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterName);
+  // 산불이면 {{지역}}=발생 위치(fireLoc, 비우면 어르신 지역).
+  const alertMsgFor = (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterName, activeAlert === 'wildfire' ? fireLoc.trim() : '');
   const alertStageFor = () => activeAlert === 'wildfire' ? wildfireStage : '';
 
   const buildPreview = (elder) => {
@@ -770,6 +775,7 @@ export default function App() {
             alertType: activeAlert,
             alertStage: alertStageFor(),
             shelter: activeAlert === 'wildfire' ? shelterName.trim() : '',   // 앱 긴급 안내 대피소 일치용
+            fireLoc: activeAlert === 'wildfire' ? fireLoc.trim() : '',       // 산불 발생 위치(위치질문 답변 일치용)
           }),
         });
         const data = await res.json();
@@ -1038,6 +1044,7 @@ export default function App() {
           alertType: activeAlert,
           alertStage: alertStageFor(),
           shelter: activeAlert === 'wildfire' ? shelterName.trim() : '',   // 앱 긴급 안내 대피소 일치용
+            fireLoc: activeAlert === 'wildfire' ? fireLoc.trim() : '',       // 산불 발생 위치(위치질문 답변 일치용)
         }),
       });
       const data = await res.json();
@@ -1904,7 +1911,11 @@ export default function App() {
                         </button>
                       ))}
                     </div>
-                    <label className="form-label">🏠 대피소명 (담당자 입력 · {'{{대피소}}'}에 들어감)</label>
+                    <label className="form-label">🔥 산불 발생 위치 (담당자 입력 · {'{{지역}}'}에 들어감)</label>
+                    <input className="form-input" type="text" value={fireLoc} placeholder="예) 봉화군 도개면 야산"
+                      onChange={e => setFireLoc(e.target.value)} style={{marginBottom:4}}/>
+                    <div className="var-hint" style={{color:'#94a3b8'}}>산불이 난 곳 — 멘트의 {'{{지역}}'} 자리와 어르신이 "어디서 났어?"라고 물을 때의 답변에 쓰입니다. 비워두면 어르신 거주 지역으로 안내됩니다.</div>
+                    <label className="form-label" style={{marginTop:10}}>🏠 대피소명 (담당자 입력 · {'{{대피소}}'}에 들어감)</label>
                     <input className="form-input" type="text" value={shelterName} placeholder="예) 봉화초등학교 운동장, 북구민운동장"
                       onChange={e => setShelterName(e.target.value)} style={{marginBottom:4}}/>
                     <div className="var-hint" style={{color:'#94a3b8'}}>여기에 입력한 대피소명이 경보 멘트의 {'{{대피소}}'} 자리에 들어갑니다. 비워두면 "가까운 대피소"로 안내됩니다.</div>
