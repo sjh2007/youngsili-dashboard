@@ -565,6 +565,7 @@ export default function App() {
   const [fireLoc, setFireLoc]             = useState('');          // 산불 발생 위치({{지역}} 치환 + 위치질문 답변)
   const [alertResponses, setAlertResponses] = useState([]);        // 경보 응답 현황(safe/help/missed)
   const [alertRespLoading, setAlertRespLoading] = useState(false);
+  const [draftingCallId, setDraftingCallId] = useState(null);      // 통화→일지 초안 생성 중인 통화 id
   const [savedAlertTpl, setSavedAlertTpl]  = useState({});         // 서버 저장된 경보 멘트(기관 공유) — 키별
   const [alertTplSaving, setAlertTplSaving] = useState(false);
   const [alertTplSaved, setAlertTplSaved]  = useState(false);
@@ -945,8 +946,26 @@ export default function App() {
   const TIME_OPTS = (() => { const a = []; for (let h = 0; h < 24; h++) for (const m of [0, 30]) a.push(`${pad2(h)}:${pad2(m)}`); return a; })();
 
   // 새 일지 작성 폼 열기 (prefill: 어르신/주제/연동알림)
+  // 통화 내용 → 활동일지 초안 생성 (AI서버 Gemini 요약, Railway 프록시) → 일지 작성 모달 프리필
+  const makeNoteDraft = async (c) => {
+    if (draftingCallId) return;
+    setDraftingCallId(c.id);
+    try {
+      const r = await authFetch(`${SERVER_URL}/case-notes/draft`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ elderName: nameByPhone(c.phone, c.elderName), transcript: c.transcript, riskLevel: c.riskLevel, durationSec: c.durationSec }),
+      });
+      const d = await r.json();
+      openNewNote({
+        elderPhone: c.phone, elderName: nameByPhone(c.phone, c.elderName), type: 'phone',
+        category: d.category || 'safety', content: d.content || '', action: d.action || '', visitedAt: c.at,
+      });
+    } catch { window.alert('일지 초안 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.'); }
+    setDraftingCallId(null);
+  };
+
   const openNewNote = (prefill = {}) => {
-    const now = new Date();
+    const now = prefill.visitedAt ? new Date(prefill.visitedAt) : new Date();   // 통화→초안이면 통화 시각을 상담일시로
     setNoteForm({
       id: null,
       elderPhone: prefill.elderPhone || '',
@@ -2087,6 +2106,13 @@ export default function App() {
                           <div style={{minWidth:46,color:'#64748b',fontSize:13}}>{hm}</div>
                           <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                           <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
+                          {c.transcript && (
+                            <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px',marginLeft:'auto'}}
+                              disabled={!!draftingCallId} title="통화 내용을 AI가 활동일지 초안으로 요약해 일지 작성 창에 채워줍니다"
+                              onClick={()=>makeNoteDraft(c)}>
+                              {draftingCallId===c.id ? '⏳ 초안 생성 중…' : '📝 일지 초안'}
+                            </button>
+                          )}
                           <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
                         </div>
                       );
