@@ -69,7 +69,7 @@ const RISK_CONFIG = {
   normal:   { label: '정상', color: '#22c55e' },
 };
 // SPA 페이지 목록 (URL 해시 라우팅 — F5 시 현재 페이지 유지)
-const PAGES = ['dashboard','elders','schedule','script','calls','health','casenotes','report','data','admin','help'];
+const PAGES = ['dashboard','elders','safety','schedule','script','calls','health','casenotes','report','data','admin','help'];
 
 // 페이지 렌더 오류가 앱 전체를 흰 화면으로 만들지 않게 방어. 오류 시 메시지 표시 + 메뉴 이동(resetKey) 시 복구.
 class PageErrorBoundary extends Component {
@@ -87,7 +87,13 @@ class PageErrorBoundary extends Component {
     return this.props.children;
   }
 }
-const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', caregiver:'', caregiverPhone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
+const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', caregiver:'', caregiverPhone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', careGroup:'', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
+
+// 노인맞춤돌봄서비스 돌봄군 — 전화 안전확인 권장 주기(제도 기준): 일반돌봄군 주 2회, 중점돌봄군 주 1회(방문이 주 2회라 전화는 1회)
+const CARE_GROUPS = {
+  general:   { label: '일반돌봄군', weeklyCalls: 2, days: ['월','목'], color: '#2563eb' },
+  intensive: { label: '중점돌봄군', weeklyCalls: 1, days: ['수'],     color: '#7c3aed' },
+};
 
 const TITLE_OPTIONS = {
   female: ['할머니', '어머니', '여사님'],
@@ -398,7 +404,7 @@ export default function App() {
   useEffect(() => { if (page === 'admin' && isAdmin) { if (isSuper) fetchOrgs(); fetchAccounts(); setAdminMsg(''); } }, [page, isAdmin, isSuper]); // eslint-disable-line
   useEffect(() => { if (page === 'help' && hasNewNotice) { try { localStorage.setItem('youngsili_help_seen', String(LATEST_NOTICE)); } catch {} setHelpSeen(LATEST_NOTICE); } }, [page]); // eslint-disable-line
   useEffect(() => {
-    if (page !== 'elders' && page !== 'dashboard' && page !== 'calls') return;
+    if (page !== 'elders' && page !== 'dashboard' && page !== 'calls' && page !== 'safety') return;
     fetchElders();
     // 어르신 관리에 있는 동안 15초 자동 갱신 → 다른 담당자의 등록/삭제·앱 등록 승인도 반영
     // (pollRecent/pollAlerts는 기존 목록의 통화·상태만 patch — 목록 추가/삭제는 여기서)
@@ -414,12 +420,12 @@ export default function App() {
   }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
   useEffect(() => {
-    if (page !== 'calls' && page !== 'elders' && page !== 'dashboard') return;
+    if (page !== 'calls' && page !== 'elders' && page !== 'dashboard' && page !== 'safety') return;   // safety=안전확인 관리(주기 준수율)
     fetchCalls();
     // 통화기록 탭·홈에 있는 동안 15초 자동 갱신 → 방금 끝난 통화가 새로고침 없이 표시
     // (홈 '오늘 통화 현황'의 긴급/주의/정상 KPI도 callsHistory 기반이라 홈도 포함 — 발신 KPI만 갱신되던 반쪽 불일치 해소)
     // (5초는 /calls가 매번 30일치 문서를 읽어 Firestore 비용 과다 → 다른 실시간 요소와 동일한 15초로 통일)
-    if (page !== 'calls' && page !== 'dashboard') return;
+    if (page !== 'calls' && page !== 'dashboard' && page !== 'safety') return;
     const t = setInterval(() => fetchCalls(true), 15000);
     return () => clearInterval(t);
   }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
@@ -840,7 +846,7 @@ export default function App() {
   };
   // 발신 관리 탭에 있는 동안 15초마다 자동 갱신 → 발신 90초 뒤 부재중 등이 새로고침 없이 반영
   useEffect(() => {
-    if (page !== 'schedule' && page !== 'dashboard') return;   // 홈 '오늘 통화 현황'도 발신 집계 필요
+    if (page !== 'schedule' && page !== 'dashboard' && page !== 'safety') return;   // 홈·안전확인 페이지도 발신 집계 필요
     loadDispatchHistory(histDays);
     const t = setInterval(() => loadDispatchHistory(histDays, true), 15000);
     return () => clearInterval(t);
@@ -1120,7 +1126,7 @@ export default function App() {
   };
 
   // ── CSV 일괄 등록 ──
-  const CSV_HEADERS = ['이름','전화번호','나이','성별(남/여)','호칭(할머니/할아버지)','지역','담당복지사','전화시간(예 09:00)','보호자','보호자연락처','질환','복약'];
+  const CSV_HEADERS = ['이름','전화번호','나이','성별(남/여)','호칭(할머니/할아버지)','지역','담당복지사','전화시간(예 09:00)','보호자','보호자연락처','질환','복약','돌봄군(일반/중점)'];
   const downloadCsvTemplate = () => {
     const example = ['홍복순','010-1234-5678','82','여','할머니','대구 북구','김복지','09:00','홍길동','010-8765-4321','고혈압','혈압약 아침'].join(',');
     const csv = '﻿' + CSV_HEADERS.join(',') + '\n' + example + '\n';   // BOM: 엑셀에서 한글 안 깨짐
@@ -1147,7 +1153,7 @@ export default function App() {
     if(/�/.test(text)){ try{ text = new TextDecoder('euc-kr').decode(buf); }catch{} }   // 한글 깨지면 cp949로 재디코딩
     const rows = parseCsv(text);
     if(rows.length<2){ alert('데이터가 없습니다. 양식에 어르신 정보를 채워 주세요.'); return; }
-    const alias = {'이름':'name','성함':'name','성명':'name','전화번호':'phone','연락처':'phone','휴대폰':'phone','전화':'phone','나이':'age','연세':'age','성별':'gender','호칭':'title','지역':'region','주소':'region','담당복지사':'caregiver','담당':'caregiver','복지사':'caregiver','전화시간':'callTime','시간':'callTime','보호자':'guardian','보호자연락처':'guardianPhone','보호자전화':'guardianPhone','질환':'disease','병력':'disease','복약':'medicine','약':'medicine'};
+    const alias = {'이름':'name','성함':'name','성명':'name','전화번호':'phone','연락처':'phone','휴대폰':'phone','전화':'phone','나이':'age','연세':'age','성별':'gender','호칭':'title','지역':'region','주소':'region','담당복지사':'caregiver','담당':'caregiver','복지사':'caregiver','전화시간':'callTime','시간':'callTime','보호자':'guardian','보호자연락처':'guardianPhone','보호자전화':'guardianPhone','질환':'disease','병력':'disease','복약':'medicine','약':'medicine','돌봄군':'careGroup'};
     const colIdx={};
     rows[0].forEach((h,i)=>{ const base=String(h).replace(/^﻿/,'').replace(/\(.*?\)/g,'').replace(/\s/g,'').trim(); const k=alias[base]; if(k&&colIdx[k]===undefined)colIdx[k]=i; });
     if(colIdx.name===undefined||colIdx.phone===undefined){ alert('양식에 "이름"과 "전화번호" 열이 있어야 합니다. CSV 양식을 받아 사용해 주세요.'); return; }
@@ -1156,7 +1162,7 @@ export default function App() {
     const parsed = rows.slice(1).map((r,ri)=>{
       const get=k=>colIdx[k]!==undefined?String(r[colIdx[k]]||'').trim():'';
       const name=get('name'); const phone=get('phone').replace(/\D/g,''); const gender=/남/.test(get('gender'))?'male':'female';
-      const rec={ name, phone, age:get('age').replace(/\D/g,''), gender, title:get('title')||(gender==='male'?'할아버지':'할머니'), region:get('region'), caregiver:get('caregiver'), callTime:/^\d{1,2}:\d{2}$/.test(get('callTime'))?get('callTime'):'09:00', guardian:get('guardian'), guardianPhone:get('guardianPhone').replace(/\D/g,''), disease:get('disease'), medicine:get('medicine') };
+      const rec={ name, phone, age:get('age').replace(/\D/g,''), gender, title:get('title')||(gender==='male'?'할아버지':'할머니'), region:get('region'), caregiver:get('caregiver'), callTime:/^\d{1,2}:\d{2}$/.test(get('callTime'))?get('callTime'):'09:00', guardian:get('guardian'), guardianPhone:get('guardianPhone').replace(/\D/g,''), disease:get('disease'), medicine:get('medicine'), careGroup:/중점/.test(get('careGroup'))?'intensive':/일반/.test(get('careGroup'))?'general':'' };
       let st='ok', why='';
       if(!name){st='error';why='이름 없음';}
       else if(!phone||phone.length<9){st='error';why='전화번호 오류';}
@@ -1172,7 +1178,7 @@ export default function App() {
     if(rows.length===0){ alert('등록할 유효한 행이 없습니다.'); return; }
     setCsvSaving(true); let ok=0, fail=0;
     for(const r of rows){
-      const saved={...EMPTY_FORM, name:r.name, phone:r.phone, age:r.age, gender:r.gender, title:r.title, region:r.region, caregiver:r.caregiver, callTime:r.callTime, guardian:r.guardian, guardianPhone:r.guardianPhone, disease:r.disease, medicine:r.medicine, id:Date.now()+Math.floor(Math.random()*100000), status:'normal', lastCall:'아직 없음', callActive:true };
+      const saved={...EMPTY_FORM, name:r.name, phone:r.phone, age:r.age, gender:r.gender, title:r.title, region:r.region, caregiver:r.caregiver, callTime:r.callTime, guardian:r.guardian, guardianPhone:r.guardianPhone, disease:r.disease, medicine:r.medicine, careGroup:r.careGroup||'', ...(CARE_GROUPS[r.careGroup]?{callCycle:'custom',callDays:[...CARE_GROUPS[r.careGroup].days]}:{}), id:Date.now()+Math.floor(Math.random()*100000), status:'normal', lastCall:'아직 없음', callActive:true };
       try{ const res=await authFetch(`${SERVER_URL}/elders/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(saved)}); const d=await res.json(); (d&&d.success)?ok++:fail++; }catch{ fail++; }
     }
     setCsvSaving(false); setCsvImport(null); await fetchElders();
@@ -1210,6 +1216,19 @@ export default function App() {
   const dispatchTotal = todayDispatches.length;
   const answeredCount = todayDispatches.filter(d => d.status==='completed'||d.status==='answered').length;
   const missedCount   = todayDispatches.filter(d => d.status==='missed').length;
+  // 오늘 안전확인 집계 (홈 보드 + 안전확인 관리 페이지 공용)
+  const safetyToday = () => {
+    const norm = (p) => String(p || '').replace(/\D/g, '');
+    const okPhones = new Set(todayCalls.map(c => norm(c.phone)).filter(Boolean));
+    todayDispatches.forEach(d => { if (d.status === 'completed' || d.status === 'answered') okPhones.add(norm(d.phone)); });
+    const lastDisp = {};
+    todayDispatches.forEach(d => { const p = norm(d.phone); if (!p) return; const prev = lastDisp[p]; if (!prev || (d.sentAtIso || '') > (prev.sentAtIso || '')) lastDisp[p] = d; });
+    const active = elders.filter(e => e.callActive !== false && norm(e.phone));
+    const unchecked = active.filter(e => !okPhones.has(norm(e.phone))).map(e => ({ e, d: lastDisp[norm(e.phone)] })).filter(x => x.d && (x.d.status === 'missed' || x.d.status === 'failed'));
+    const undialed = active.filter(e => !okPhones.has(norm(e.phone)) && !lastDisp[norm(e.phone)]).length;
+    const checkedCount = active.filter(e => okPhones.has(norm(e.phone))).length;
+    return { unchecked, undialed, checkedCount, activeCount: active.length };
+  };
   // 통화기록 위험도 필터 매칭 (KPI 드릴다운)
   const callsRiskMatch = (c) => callsRisk==='all' ? true : callsRisk==='critical' ? c.riskLevel==='critical' : callsRisk==='urgent' ? (c.riskLevel==='urgent'||c.riskLevel==='warning') : (!c.riskLevel||c.riskLevel==='normal');
   // KPI 클릭 → 상세로 이동(+필터). 위험도는 오늘 범위로 좁혀 KPI 숫자와 일치.
@@ -1364,6 +1383,7 @@ export default function App() {
           {[
             {id:'dashboard', icon:'⊞', label:'대시보드'},
             {id:'elders',    icon:'👥', label:'어르신 관리'},
+            {id:'safety',    icon:'✅', label:'안전확인 관리'},
             {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
             {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
             {id:'calls',     icon:'📞', label:'통화 기록'},
@@ -1411,7 +1431,7 @@ export default function App() {
         <header className="header">
           <div className="header-title">
             {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}
-            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='admin'&&(isSuper?'🏢 기관 관리 (운영자)':'👥 계정 관리')}{page==='help'&&'📖 도움말 보기'}
+            {page==='safety'&&'✅ 안전확인 관리'}{page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='admin'&&(isSuper?'🏢 기관 관리 (운영자)':'👥 계정 관리')}{page==='help'&&'📖 도움말 보기'}
             {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
           </div>
           <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
@@ -1486,16 +1506,7 @@ export default function App() {
                   {(() => {
                     // ⚠️ 오늘 안전확인 미완료 보드 — 부재중(자동 재발신 소진)·발신실패로 끝나고 오늘 성공 통화가 없는 어르신
                     // (안전확인의 핵심 = 응답 없는 어르신을 놓치지 않기 → 담당자 재발신/방문으로 폐루프)
-                    const _norm = (p) => String(p || '').replace(/\D/g, '');
-                    const okPhones = new Set(todayCalls.map(c => _norm(c.phone)).filter(Boolean));
-                    todayDispatches.forEach(d => { if (d.status === 'completed' || d.status === 'answered') okPhones.add(_norm(d.phone)); });
-                    const lastDisp = {};
-                    todayDispatches.forEach(d => { const p = _norm(d.phone); if (!p) return; const prev = lastDisp[p]; if (!prev || (d.sentAtIso || '') > (prev.sentAtIso || '')) lastDisp[p] = d; });
-                    const unchecked = elders
-                      .filter(e => e.callActive !== false && _norm(e.phone) && !okPhones.has(_norm(e.phone)))
-                      .map(e => ({ e, d: lastDisp[_norm(e.phone)] }))
-                      .filter(x => x.d && (x.d.status === 'missed' || x.d.status === 'failed'));
-                    const undialed = elders.filter(e => e.callActive !== false && _norm(e.phone) && !okPhones.has(_norm(e.phone)) && !lastDisp[_norm(e.phone)]).length;
+                    const { unchecked, undialed } = safetyToday();
                     if (!unchecked.length && !undialed) return null;
                     return (
                       <div className="section" style={unchecked.length ? { borderLeft: '4px solid #dc2626' } : {}}>
@@ -1585,6 +1596,89 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {page==='safety' && (
+            <div className="fade-in">
+              <div className="data-banner" style={{marginBottom:16}}>
+                <div>
+                  <div className="data-banner-title">✅ 안전확인 관리</div>
+                  <div className="data-banner-sub">노인맞춤돌봄서비스 전화 안전확인 기준 — 일반돌봄군 주 2회 · 중점돌봄군 주 1회(방문이 주 2회) · 🔄 15초마다 자동 갱신됩니다</div>
+                </div>
+              </div>
+              {(() => {
+                const st = safetyToday();
+                // ── 이번 주(월~오늘) 주기 준수 집계 — 성공 통화가 있었던 '날 수' 기준 ──
+                const now = new Date();
+                const monday = new Date(now); monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+                const mondayStr = monday.toLocaleDateString('sv-SE');
+                const norm = (ph) => String(ph || '').replace(/\D/g, '');
+                const weekDays = {};
+                callsHistory.forEach(c => { if ((c.date || '') >= mondayStr) { const ph = norm(c.phone); if (ph) (weekDays[ph] = weekDays[ph] || new Set()).add(c.date); } });
+                const rows = elders.filter(e => e.callActive !== false && norm(e.phone)).map(e => {
+                  const g = CARE_GROUPS[e.careGroup];
+                  const target = g ? g.weeklyCalls : (e.callCycle === 'custom' ? (e.callDays || []).length : 7);
+                  const done = (weekDays[norm(e.phone)] || new Set()).size;
+                  return { e, g, target, done, met: target > 0 && done >= target };
+                }).filter(r => r.target > 0);
+                const totT = rows.reduce((sum, r) => sum + r.target, 0);
+                const totD = rows.reduce((sum, r) => sum + Math.min(r.done, r.target), 0);
+                const rate = totT ? Math.round(totD / totT * 100) : 0;
+                const sorted = [...rows].sort((a, b) => (a.met === b.met ? (a.done / a.target) - (b.done / b.target) : (a.met ? 1 : -1)));
+                const nNone = elders.filter(e => e.callActive !== false && !CARE_GROUPS[e.careGroup]).length;
+                const nGen = elders.filter(e => e.careGroup === 'general').length;
+                const nInt = elders.filter(e => e.careGroup === 'intensive').length;
+                return (<>
+                  <div className="report-stat-grid" style={{marginBottom:16}}>
+                    <div className="report-stat-card"><div className="report-stat-icon">✅</div><div className="report-stat-value" style={{color:'#16a34a'}}>{st.checkedCount}명</div><div className="report-stat-label">오늘 안전확인 완료</div></div>
+                    <div className="report-stat-card"><div className="report-stat-icon">⚠️</div><div className="report-stat-value" style={{color:st.unchecked.length?'#dc2626':'#16a34a'}}>{st.unchecked.length}명</div><div className="report-stat-label">오늘 미확인 (부재중·실패)</div></div>
+                    <div className="report-stat-card"><div className="report-stat-icon">📞</div><div className="report-stat-value" style={{color:'#64748b'}}>{st.undialed}명</div><div className="report-stat-label">오늘 미발신</div></div>
+                    <div className="report-stat-card"><div className="report-stat-icon">📅</div><div className="report-stat-value" style={{color:rate>=80?'#16a34a':rate>=50?'#f59e0b':'#dc2626'}}>{rate}%</div><div className="report-stat-label">이번 주 주기 준수율</div></div>
+                  </div>
+
+                  {st.unchecked.length > 0 && (
+                    <div className="section" style={{borderLeft:'4px solid #dc2626'}}>
+                      <div className="section-title">⚠️ 오늘 미확인 어르신 — 우선 대응</div>
+                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        {st.unchecked.map(({ e, d }) => (
+                          <div key={e.id} style={{display:'flex',alignItems:'center',gap:12,background:d.status==='missed'?'#fff7ed':'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'10px 14px',flexWrap:'wrap'}}>
+                            <div style={{minWidth:90,fontWeight:800}}>{e.name}</div>
+                            <div style={{minWidth:80,fontSize:13,color:'#64748b'}}>{e.region}</div>
+                            <div style={{flex:1,fontSize:13,fontWeight:700,color:d.status==='missed'?'#ea580c':'#dc2626'}}>
+                              {d.status==='missed' ? `📵 부재중 — 자동 재발신 ${d.retryCount||0}회에도 무응답` : `❌ 발신 실패${d.reason?` (${d.reason})`:''}`}
+                            </div>
+                            <button className="btn-call" style={{fontSize:12,padding:'5px 12px'}} disabled={calling===e.id} onClick={()=>makeCall(e)}>{calling===e.id?'📱 발신 중…':'📞 재발신'}</button>
+                          </div>
+                        ))}
+                        <div style={{fontSize:12.5,color:'#dc2626',fontWeight:600}}>🚨 재발신에도 무응답이면 직접 전화 또는 방문 확인 후, 상담·방문 일지에 기록해 주세요.</div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="section">
+                    <div className="section-title">📅 이번 주 주기 준수 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(월요일~오늘 · 통화 성공한 날 수 기준 · 돌봄군: 일반 {nGen}명 · 중점 {nInt}명)</span></div>
+                    <div style={{overflowX:'auto'}}>
+                      <table className="table" style={{width:'100%'}}>
+                        <thead><tr><th>어르신</th><th>돌봄군</th><th>주간 목표</th><th>이번 주 통화</th><th>상태</th><th></th></tr></thead>
+                        <tbody>
+                          {sorted.map(({ e, g, target, done, met }) => (
+                            <tr key={e.id} style={met?{}:{background:'#fffbeb'}}>
+                              <td style={{fontWeight:700}}>{e.name} <span style={{fontSize:12,color:'#94a3b8'}}>{e.region}</span></td>
+                              <td>{g ? <span style={{fontSize:12,fontWeight:800,color:g.color,background:`${g.color}15`,padding:'2px 8px',borderRadius:6}}>{g.label}</span> : <span style={{fontSize:12,color:'#94a3b8'}}>미지정</span>}</td>
+                              <td>{target}회</td>
+                              <td style={{fontWeight:800,color:met?'#16a34a':'#f59e0b'}}>{done}회</td>
+                              <td>{met ? <span style={{color:'#16a34a',fontWeight:700}}>✅ 달성</span> : <span style={{color:'#f59e0b',fontWeight:700}}>⏳ 진행 중 ({done}/{target})</span>}</td>
+                              <td>{!met && <button className="btn-secondary" style={{fontSize:12,padding:'3px 10px'}} disabled={calling===e.id} onClick={()=>makeCall(e)}>📞 발신</button>}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {nNone > 0 && <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 돌봄군 미지정 어르신 {nNone}명은 설정된 전화 주기를 목표로 계산합니다. 어르신 관리 → 정보 수정에서 돌봄군을 지정하면 제도 기준(일반 주2회·중점 주1회)으로 관리됩니다.</div>}
+                  </div>
+                </>);
+              })()}
             </div>
           )}
 
@@ -2589,7 +2683,7 @@ export default function App() {
                       <button onClick={()=>toggleCallActive(selected.id)} style={{fontSize:13,fontWeight:700,padding:'7px 14px',borderRadius:8,cursor:'pointer',...(selected.callActive?{background:'#fff',color:'#64748b',border:'1px solid #d1d5db'}:{background:'#16a34a',color:'#fff',border:'none'})}}>{selected.callActive?'⏸ 중단하기':'▶ 발신 켜기'}</button>
                     </div>
                   </div>
-                  {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',`${selected.address||''} ${selected.addressDetail||''}`.trim()],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle, selected.callDays)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
+                  {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['돌봄군',(CARE_GROUPS[selected.careGroup]||{}).label||'미지정'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',`${selected.address||''} ${selected.addressDetail||''}`.trim()],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle, selected.callDays)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
                 </div>
                 <div className="detail-right">
                   {selected.keyword&&<div className="alert-box"><div className="alert-box-title">🚨 감지된 위험 키워드</div><div className="alert-box-keyword">"{selected.keyword}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
@@ -2763,7 +2857,7 @@ export default function App() {
                   <div className="form-field full-width"><label className="form-label">복지사 전화번호</label><input {...inp('caregiverPhone')} placeholder="010-0000-0000" /></div>
                 </div><div className="form-footer"><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
                 {formStep===2&&(<div className="fade-in"><div className="form-section-title">👨‍👩‍👧 보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">💡 위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
-                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid"><div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #2563eb':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#1d4ed8':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
+                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid"><div className="form-field full-width"><label className="form-label">돌봄군 (노인맞춤돌봄서비스)</label><div className="radio-group">{[{value:'',label:'미지정'},{value:'general',label:'일반돌봄군'},{value:'intensive',label:'중점돌봄군'}].map(opt=><label key={opt.value} className={`radio-option ${form.careGroup===opt.value?'radio-selected':''}`}><input type="radio" name="careGroup" value={opt.value} checked={(form.careGroup||'')===opt.value} onChange={()=>{const g=CARE_GROUPS[opt.value];setForm(f=>({...f,careGroup:opt.value,...(g?{callCycle:'custom',callDays:[...g.days]}:{})}));}} style={{display:'none'}}/>{opt.label}</label>)}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>선택하면 전화 안전확인 권장 주기가 자동 적용됩니다 (일반 주 2회 · 중점 주 1회, 아래에서 수정 가능). 미지정은 기존 주기 그대로.</div></div><div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #2563eb':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#1d4ed8':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
               </div>
             </div>
           )}
