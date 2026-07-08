@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Component } from 'react';
 import './App.css';
 import { auth, authEnabled } from './firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
+import * as XLSX from 'xlsx';
 import HelpGuide, { LATEST_NOTICE } from './HelpGuide';
 import AuthScreen from './AuthScreen';
 
@@ -307,6 +308,106 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  // ── 월간 실적 보고서(엑셀 4시트: 요약/어르신별/일별/위험감지) — 지자체 안전확인 실적 보고용 ──
+  const downloadMonthlyReport = async () => {
+    if (monthlyBusy) return;
+    setMonthlyBusy(true);
+    try {
+      const [y, m] = reportMonth.split('-').map(Number);
+      const from = new Date(y, m - 1, 1);
+      const to = new Date(y, m, 0, 23, 59, 59);
+      const fi = from.toISOString(), ti = to.toISOString();
+      const [callsR, dispR, notesR, arR] = await Promise.all([
+        authFetch(`${SERVER_URL}/calls?from=${fi}&to=${ti}`).then(r => r.json()),
+        authFetch(`${SERVER_URL}/call/dispatches?from=${fi}&to=${ti}`).then(r => r.json()),
+        authFetch(`${SERVER_URL}/case-notes?from=${fi}&to=${ti}`).then(r => r.json()).catch(() => ({ notes: [] })),
+        authFetch(`${SERVER_URL}/alert/responses?from=${fi}`).then(r => r.json()).catch(() => ({ responses: [] })),
+      ]);
+      const calls = callsR.calls || [];
+      const disps = dispR.dispatches || [];
+      const notes = notesR.notes || [];
+      const ar = (arR.responses || []).filter(x => (x.at || '') >= fi && (x.at || '') <= ti);
+      const norm = (ph) => String(ph || '').replace(/\D/g, '');
+      const st = (v) => disps.filter(d => d.status === v).length;
+      const received = st('completed') + st('answered');
+      const totalDisp = disps.length;
+      const durMin = Math.round(calls.reduce((sum, c) => sum + (c.durationSec || 0), 0) / 60);
+      const nCrit = calls.filter(c => c.riskLevel === 'critical').length;
+      const nUrg = calls.filter(c => c.riskLevel === 'urgent' || c.riskLevel === 'warning').length;
+      const monthLabel = `${y}년 ${m}월`;
+
+      // 시트1: 요약
+      const aoaS = [
+        [`AI 영실이 월간 실적 보고서 — ${monthLabel}`], [],
+        ['구분', '값'],
+        ['대상 어르신(등록)', `${elders.length}명`],
+        ['· 일반돌봄군', `${elders.filter(e => e.careGroup === 'general').length}명`],
+        ['· 중점돌봄군', `${elders.filter(e => e.careGroup === 'intensive').length}명`],
+        ['· 미지정', `${elders.filter(e => !CARE_GROUPS[e.careGroup]).length}명`], [],
+        ['AI 전화 안전확인 발신', `${totalDisp}건`],
+        ['· 안전확인 완료(받음)', `${received}건`],
+        ['· 부재중', `${st('missed')}건`],
+        ['· 발신 실패', `${st('failed')}건`],
+        ['· 안전확인 성공률', totalDisp ? `${Math.round(received / totalDisp * 100)}%` : '-'], [],
+        ['통화(안부대화) 건수', `${calls.length}건`],
+        ['총 통화 시간', `${durMin}분`],
+        ['위험 감지 — 긴급', `${nCrit}건`],
+        ['위험 감지 — 주의', `${nUrg}건`], [],
+        ['재난 경보 응답 — 안전확인', `${ar.filter(x => x.response === 'safe').length}건`],
+        ['재난 경보 응답 — 도움요청', `${ar.filter(x => x.response === 'help').length}건`],
+        ['재난 경보 응답 — 미응답', `${ar.filter(x => x.response === 'missed').length}건`], [],
+        ['상담·방문 일지 작성', `${notes.length}건`],
+        ['· 방문', `${notes.filter(n => n.type === 'visit').length}건`],
+        ['· 전화', `${notes.filter(n => n.type === 'phone').length}건`],
+      ];
+
+      // 시트2: 어르신별 실적
+      const aoaE = [['이름', '돌봄군', '지역', '통화 성공(건)', '통화한 날(일)', '부재중(건)', '총 통화(분)', '긴급', '주의', '마지막 통화일']];
+      elders.forEach(e => {
+        const ph = norm(e.phone);
+        const my = calls.filter(c => norm(c.phone) === ph);
+        const days = new Set(my.map(c => c.date)).size;
+        const myDisp = disps.filter(d => norm(d.phone) === ph);
+        const last = my.map(c => c.date).sort().pop() || '-';
+        aoaE.push([
+          e.name, (CARE_GROUPS[e.careGroup] || {}).label || '미지정', e.region || '',
+          my.length, days, myDisp.filter(d => d.status === 'missed').length,
+          Math.round(my.reduce((sum, c) => sum + (c.durationSec || 0), 0) / 60),
+          my.filter(c => c.riskLevel === 'critical').length,
+          my.filter(c => c.riskLevel === 'urgent' || c.riskLevel === 'warning').length,
+          last,
+        ]);
+      });
+
+      // 시트3: 일별 현황
+      const aoaD = [['날짜', '발신', '받음', '부재중', '통화 성공', '긴급 감지']];
+      const daysInMonth = new Date(y, m, 0).getDate();
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ds = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const dd = disps.filter(x => (x.sentAtIso || '').slice(0, 10) === ds);
+        if (!dd.length && !calls.some(c => c.date === ds)) continue;
+        aoaD.push([ds, dd.length, dd.filter(x => x.status === 'completed' || x.status === 'answered').length,
+          dd.filter(x => x.status === 'missed').length, calls.filter(c => c.date === ds).length,
+          calls.filter(c => c.date === ds && c.riskLevel === 'critical').length]);
+      }
+
+      // 시트4: 위험 감지 상세
+      const aoaR = [['날짜', '어르신', '위험도', '통화(초)']];
+      calls.filter(c => c.riskLevel && c.riskLevel !== 'normal')
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+        .forEach(c => aoaR.push([c.date, nameByPhone(c.phone, c.elderName), (RISK_CONFIG[c.riskLevel] || {}).label || c.riskLevel, c.durationSec || 0]));
+
+      const wb = XLSX.utils.book_new();
+      const add = (aoa, name, cols) => { const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = cols; XLSX.utils.book_append_sheet(wb, ws, name); };
+      add(aoaS, '요약', [{ wch: 30 }, { wch: 16 }]);
+      add(aoaE, '어르신별 실적', [{ wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 11 }, { wch: 7 }, { wch: 7 }, { wch: 13 }]);
+      add(aoaD, '일별 현황', [{ wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }]);
+      add(aoaR, '위험 감지', [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }]);
+      XLSX.writeFile(wb, `영실이_월간실적_${reportMonth}.xlsx`);
+    } catch (e) { window.alert('보고서 생성에 실패했습니다: ' + e.message); }
+    setMonthlyBusy(false);
+  };
+
   const fetchElders = async () => {
     try {
       const res = await authFetch(`${SERVER_URL}/elders`);
@@ -572,6 +673,8 @@ export default function App() {
   const [alertResponses, setAlertResponses] = useState([]);        // 경보 응답 현황(safe/help/missed)
   const [alertRespLoading, setAlertRespLoading] = useState(false);
   const [draftingCallId, setDraftingCallId] = useState(null);      // 통화→일지 초안 생성 중인 통화 id
+  const [reportMonth, setReportMonth] = useState(new Date().toLocaleDateString('sv-SE').slice(0, 7));  // 월간 보고서 대상 월
+  const [monthlyBusy, setMonthlyBusy] = useState(false);
   const [savedAlertTpl, setSavedAlertTpl]  = useState({});         // 서버 저장된 경보 멘트(기관 공유) — 키별
   const [alertTplSaving, setAlertTplSaving] = useState(false);
   const [alertTplSaved, setAlertTplSaved]  = useState(false);
@@ -2260,6 +2363,14 @@ export default function App() {
           {page==='report' && (
             <div className="fade-in">
               <div className="report-banner"><div className="report-banner-title">📊 {new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>📊 엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>⬇️ PDF 다운로드</button></div></div>
+              <div className="section" style={{marginBottom:16,borderLeft:'4px solid #1d4ed8'}}>
+                <div className="section-title">📥 월간 실적 보고서 (지자체 보고용 엑셀)</div>
+                <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+                  <input type="month" className="form-input" style={{width:170,marginBottom:0}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)}/>
+                  <button className="btn-primary" disabled={monthlyBusy} onClick={downloadMonthlyReport}>{monthlyBusy?'⏳ 생성 중…':'📥 엑셀 다운로드'}</button>
+                  <span style={{fontSize:12,color:'#94a3b8'}}>시트 4개 — 요약(안전확인 성공률·위험감지·일지) · 어르신별 실적 · 일별 현황 · 위험 감지 상세</span>
+                </div>
+              </div>
               <div className="report-stat-grid">
                 {[{label:'총 통화',value:`${reportCalls.length}건`,icon:'📞',color:'#1d4ed8'},{label:'긴급 감지',value:`${reportCalls.filter(c=>c.riskLevel==='critical').length}건`,icon:'🚨',color:'#ef4444'},{label:'주의 감지',value:`${reportCalls.filter(c=>c.riskLevel==='urgent').length}건`,icon:'⚠️',color:'#f59e0b'},{label:'정상 통화',value:`${reportCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length}건`,icon:'✅',color:'#16a34a'},{label:'총 통화 시간',value:`${Math.round(reportCalls.reduce((s,c)=>s+(c.durationSec||0),0)/60)}분`,icon:'⏱️',color:'#7c3aed'},{label:'관리 어르신',value:`${elders.length}명`,icon:'👥',color:'#0891b2'}].map((s,i)=>(
                   <div key={i} className="report-stat-card"><div className="report-stat-icon">{s.icon}</div><div className="report-stat-value" style={{color:s.color}}>{s.value}</div><div className="report-stat-label">{s.label}</div></div>
