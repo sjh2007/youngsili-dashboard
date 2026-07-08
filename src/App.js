@@ -1857,7 +1857,19 @@ export default function App() {
                 const nHelp = list.filter(r => r.response === 'help').length;
                 const nMissed = list.filter(r => r.response === 'missed').length;
                 const nSafe = list.filter(r => r.response === 'safe').length;
-                const fmtTime = (iso) => { try { const d = new Date(iso); return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
+                const fmtTime = (iso) => {
+                  // 날짜 없이 시각만 표시하면 어제 기록이 '미래 시각'처럼 보임 → 오늘 아니면 날짜 병기
+                  try {
+                    const d = new Date(iso);
+                    const t = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                    const ds = d.toLocaleDateString('sv-SE');
+                    const today = new Date().toLocaleDateString('sv-SE');
+                    if (ds === today) return `오늘 ${t}`;
+                    const yest = new Date(Date.now() - 86400000).toLocaleDateString('sv-SE');
+                    if (ds === yest) return `어제 ${t}`;
+                    return `${d.getMonth() + 1}/${d.getDate()} ${t}`;
+                  } catch { return ''; }
+                };
                 return (
                   <div className="section" style={{borderLeft:'4px solid #ea580c'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
