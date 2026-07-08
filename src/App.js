@@ -850,6 +850,8 @@ export default function App() {
   const openDetail = elder => { setSelected(elder); setCallResult(null); setPage('detail'); };
   const openRegister = () => { setForm({...EMPTY_FORM}); setFormStep(1); setFormErrors({}); setSaveSuccess(false); setEditMode(false); setPage('register'); };
   const openEdit = elder => { setForm({...elder}); setFormStep(1); setFormErrors({}); setSaveSuccess(false); setEditMode(true); setPage('register'); };
+  // 안전확인 관리에서 이름 클릭 → 곧장 돌봄군·주기 설정(정보수정 3단계)으로 (탭 왕복 불편 해소)
+  const openEditSchedule = elder => { setForm({...elder}); setFormStep(3); setFormErrors({}); setSaveSuccess(false); setEditMode(true); setPage('register'); };
 
   const smartElders = (() => {
     if (smartFilter==='danger')  return elders.filter(e=>e.status==='danger'||e.status==='warning');
@@ -1753,7 +1755,7 @@ export default function App() {
                       <div style={{display:'flex',flexDirection:'column',gap:8}}>
                         {st.unchecked.map(({ e, d }) => (
                           <div key={e.id} style={{display:'flex',alignItems:'center',gap:12,background:d.status==='missed'?'#fff7ed':'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'10px 14px',flexWrap:'wrap'}}>
-                            <div style={{minWidth:90,fontWeight:800}}>{e.name}</div>
+                            <div style={{minWidth:90,fontWeight:800,color:'#1d4ed8',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name}</div>
                             <div style={{minWidth:80,fontSize:13,color:'#64748b'}}>{e.region}</div>
                             <div style={{flex:1,fontSize:13,fontWeight:700,color:d.status==='missed'?'#ea580c':'#dc2626'}}>
                               {d.status==='missed' ? `📵 부재중 — 자동 재발신 ${d.retryCount||0}회에도 무응답` : `❌ 발신 실패${d.reason?` (${d.reason})`:''}`}
@@ -1774,7 +1776,7 @@ export default function App() {
                         <tbody>
                           {sorted.map(({ e, g, target, done, met }) => (
                             <tr key={e.id} style={met?{}:{background:'#fffbeb'}}>
-                              <td style={{fontWeight:700}}>{e.name} <span style={{fontSize:12,color:'#94a3b8'}}>{e.region}</span></td>
+                              <td style={{fontWeight:700,color:'#1d4ed8',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name} <span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>{e.region}</span></td>
                               <td>{g ? <span style={{fontSize:12,fontWeight:800,color:g.color,background:`${g.color}15`,padding:'2px 8px',borderRadius:6}}>{g.label}</span> : <span style={{fontSize:12,color:'#94a3b8'}}>미지정</span>}</td>
                               <td>{target}회</td>
                               <td style={{fontWeight:800,color:met?'#16a34a':'#f59e0b'}}>{done}회</td>
@@ -1785,7 +1787,7 @@ export default function App() {
                         </tbody>
                       </table>
                     </div>
-                    {nNone > 0 && <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 돌봄군 미지정 어르신 {nNone}명은 설정된 전화 주기를 목표로 계산합니다. 어르신 관리 → 정보 수정에서 돌봄군을 지정하면 제도 기준(일반 주2회·중점 주1회)으로 관리됩니다.</div>}
+                    {nNone > 0 && <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 돌봄군 미지정 어르신 {nNone}명은 설정된 전화 주기를 목표로 계산합니다. 위 표에서 어르신 이름을 클릭하면 바로 돌봄군·주기를 설정할 수 있습니다 (제도 기준: 일반 주2회·중점 주1회).</div>}
                   </div>
                 </>);
               })()}
