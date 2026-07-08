@@ -491,7 +491,7 @@ export default function App() {
       const aArr = Array.isArray(aData) ? aData : [];
       setHealthData(hArr);
       setAlertsData(aArr);
-      setAlertCount(aArr.filter(a => !a.read).length);
+      setAlertCount(aArr.filter(a => a.status ? a.status === 'new' : !a.read).length);
     } catch (err) {
       console.error('건강 데이터 오류:', err);
     } finally {
@@ -615,7 +615,7 @@ export default function App() {
     const pollAlerts = () => authFetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(raw => {
       const data = Array.isArray(raw) ? raw : [];   // 401/에러 응답(객체) 방어 → .filter 크래시 차단
       setAlertsData(data);
-      const unread = data.filter(a=>!a.read);
+      const unread = data.filter(a=>a.status ? a.status === 'new' : !a.read);   // 폐루프: 미확인(new)만 배지
       setAlertCount(unread.length);
       // 어르신별 "가장 최근" 위험 알림만 반영 (data는 최신순 → 이름별 첫 항목이 최신)
       const latestByName = {};
@@ -1129,6 +1129,13 @@ export default function App() {
         const r = await authFetch(`${SERVER_URL}/case-notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         let newId = null; try { const d = await r.json(); newId = d && d.id; } catch {}
         setCaseNotes(prev => [{ ...localNote, id: newId || `local_${Date.now()}` }, ...prev]);      // 낙관적 반영(저장 즉시 표시)
+        // 폐루프: 알림에서 시작한 일지면 해당 알림을 자동 '조치 완료' 처리 (일지 = 조치 기록)
+        if (noteForm.linkedAlertId && !String(noteForm.linkedAlertId).startsWith('alertresp_')) {
+          authFetch(`${SERVER_URL}/alerts/${noteForm.linkedAlertId}/status`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'done', note: '상담·방문 일지 작성으로 조치 완료' }),
+          }).then(() => fetchHealth()).catch(() => {});
+        }
       }
       setNoteModal(null); setNoteForm(null);
       loadCaseNotes();   // 백그라운드 재조회로 서버와 정합성 보정(낙관적 반영이 먼저 보임)
@@ -2473,7 +2480,7 @@ export default function App() {
                 <div className="report-stat-card"><div className="report-stat-icon">📱</div><div className="report-stat-value" style={{color:'#6b7280'}}>{elders.length - healthData.length}명</div><div className="report-stat-label">미체크</div></div>
               </div>
               {(()=>{
-                const un = alertsData.filter(a=>!a.read&&alertIsReal(a));
+                const un = alertsData.filter(a=>(a.status ? a.status !== 'done' : !a.read) && alertIsReal(a));   // 폐루프: 완료(done) 전까지 표시
                 if (un.length === 0) return null;
                 const CAT = {
                   health:  { label:'건강', icon:'❤️', c:'#dc2626', bg:'#fef2f2', bd:'#fecaca' },
@@ -2486,7 +2493,7 @@ export default function App() {
                 const cnt = c => un.filter(a=>(a.category||'health')===c).length;
                 return (
                 <div className="section" style={{marginBottom:20}}>
-                  <div className="section-title">🚨 미확인 알림 ({un.length}건)</div>
+                  <div className="section-title">🚨 미처리 알림 ({un.length}건) <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 조치 시작 → 조치 완료(또는 일지 작성)로 마감하세요</span></div>
                   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
                     {['health','fall','emotion','living','meal'].map(c=> cnt(c)>0 && (
                       <span key={c} style={{fontSize:12.5,fontWeight:700,color:CAT[c].c,background:CAT[c].bg,border:'1px solid '+CAT[c].bd,padding:'3px 10px',borderRadius:20}}>{CAT[c].icon} {CAT[c].label} {cnt(c)}건</span>
@@ -2498,8 +2505,19 @@ export default function App() {
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:m.bg,border:'2px solid '+m.bd,borderRadius:12,padding:'14px 18px',marginBottom:10,flexWrap:'wrap'}}>
                       <span style={{fontSize:24}}>{m.icon}</span>
                       <div style={{flex:1,minWidth:180}}><div style={{fontSize:14,fontWeight:700,color:m.c,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:11,fontWeight:800,background:m.c,color:'#fff',padding:'2px 8px',borderRadius:20}}>{m.label}</span>{nameByPhone(alert.phone, alert.name)} · "{alert.keyword || (alert.message ? alert.message.split(/감지[::]?/).pop().trim() : alert.message)}"</div><div style={{fontSize:12,color:m.c,marginTop:2,opacity:0.85}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
+                      {alert.status === 'ack' && <span style={{fontSize:12,fontWeight:800,color:'#b45309',background:'#fef3c7',padding:'3px 10px',borderRadius:20}}>🔧 조치중{alert.actionBy?` · ${alert.actionBy.split('@')[0]}`:''}</span>}
                       <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} onClick={()=>openNewNote({elderPhone:alert.phone,elderName:nameByPhone(alert.phone,alert.name),category:NOTE_CAT[alert.category]||'safety',linkedAlertId:alert.id})}>📝 일지 작성</button>
-                      <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/read`,{method:'POST'});fetchHealth();}}>확인</button>
+                      {(!alert.status || alert.status === 'new') && (
+                        <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'ack'})}).catch(()=>{});fetchHealth();}}>🔧 조치 시작</button>
+                      )}
+                      {alert.status === 'ack' && (
+                        <button className="btn-small" style={{background:'#16a34a',color:'#fff',borderColor:'#16a34a'}} onClick={async()=>{
+                          const note = window.prompt('조치 내용을 입력하세요 (예: 유선 확인 — 이상 없음, 보호자 연락, 방문 예정)');
+                          if (note === null) return;
+                          await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'done',note})}).catch(()=>{});
+                          fetchHealth();
+                        }}>✅ 조치 완료</button>
+                      )}
                     </div>
                     );
                   })}
