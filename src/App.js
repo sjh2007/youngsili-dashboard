@@ -1075,6 +1075,48 @@ export default function App() {
     setDraftingCallId(null);
   };
 
+  // 일지 → 정부 노인맞춤돌봄시스템 붙여넣기용 텍스트 복사 (현장 최다 사용 흐름)
+  const [copiedNoteId, setCopiedNoteId] = useState(null);
+  const noteToText = (n) => {
+    const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
+    const CAT_KO = { safety: '안전', health: '건강', meal: '식사', emotional: '정서', welfare: '생활지원', etc: '기타' };
+    const when = n.visitedAt ? new Date(n.visitedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const lines = [
+      `[상담·방문 일지] ${when} · ${TYPE_KO[n.type] || n.type} · ${CAT_KO[n.category] || n.category}`,
+      `어르신: ${n.elderName || ''}`,
+      '', n.content || '',
+    ];
+    if (n.action) lines.push('', `조치사항: ${n.action}`);
+    if (n.followUp && n.followUp.needed) lines.push(`후속조치 필요${n.followUp.dueDate ? ` (기한: ${n.followUp.dueDate})` : ''}`);
+    return lines.join('\n');
+  };
+  const copyNote = async (n, key) => {
+    try {
+      await navigator.clipboard.writeText(noteToText(n));
+      setCopiedNoteId(key); setTimeout(() => setCopiedNoteId(null), 2000);
+    } catch { window.alert('복사에 실패했습니다. 브라우저 권한을 확인해 주세요.'); }
+  };
+  // 일지 목록 엑셀 다운로드 (기관 내부 보관·결재용)
+  const exportNotesXlsx = (list) => {
+    const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
+    const CAT_KO = { safety: '안전', health: '건강', meal: '식사', emotional: '정서', welfare: '생활지원', etc: '기타' };
+    const aoa = [['일시', '어르신', '유형', '분류', '내용', '조치사항', '후속필요', '후속기한', '작성자']];
+    [...list].sort((a, b) => (a.visitedAt || '').localeCompare(b.visitedAt || '')).forEach(n => {
+      aoa.push([
+        n.visitedAt ? new Date(n.visitedAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '',
+        n.elderName || '', TYPE_KO[n.type] || n.type, CAT_KO[n.category] || n.category,
+        n.content || '', n.action || '',
+        (n.followUp && n.followUp.needed) ? 'O' : '', (n.followUp && n.followUp.dueDate) || '',
+        (n.authorEmail || '').split('@')[0],
+      ]);
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 60 }, { wch: 26 }, { wch: 8 }, { wch: 11 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws, '상담방문일지');
+    XLSX.writeFile(wb, `영실이_상담방문일지_${new Date().toLocaleDateString('sv-SE')}.xlsx`);
+  };
+
   const openNewNote = (prefill = {}) => {
     const now = prefill.visitedAt ? new Date(prefill.visitedAt) : new Date();   // 통화→초안이면 통화 시각을 상담일시로
     setNoteForm({
@@ -1479,6 +1521,7 @@ export default function App() {
             </div>
             <div className="modal-btns" style={{marginTop:20,justifyContent:'flex-end'}}>
               <button className="btn-secondary" onClick={close}>취소</button>
+              <button className="btn-secondary" onClick={()=>copyNote({elderName:noteForm.elderName,type:noteForm.type,category:noteForm.category,content:noteForm.content,action:noteForm.action,visitedAt:(noteForm.visitedDate&&noteForm.visitedTime)?`${noteForm.visitedDate}T${noteForm.visitedTime}`:new Date().toISOString(),followUp:{needed:noteForm.followUpNeeded,dueDate:noteForm.followUpDue}},'modal')} title="정부 노인맞춤돌봄시스템 등에 붙여넣기용 텍스트 복사">{copiedNoteId==='modal'?'✅ 복사됨':'📋 복사'}</button>
               <button className="btn-primary" onClick={saveNote} disabled={noteSaving}>{noteSaving?'저장 중...':(noteForm.id?'수정 저장':'일지 저장')}</button>
             </div>
           </div>
@@ -2614,6 +2657,7 @@ export default function App() {
                   ))}
                   <span style={{width:1,height:20,background:'#e2e8f0',margin:'0 2px'}}/>
                   <button className="smart-btn" style={{fontSize:12,padding:'5px 10px',...(caseFollowUpOnly?{background:'#f59e0b',borderColor:'#f59e0b',color:'#fff'}:{})}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>🔔 후속 필요{caseFollowUpOnly?' ✕':''}</button>
+                  <button className="btn-secondary" onClick={()=>exportNotesXlsx(caseNotes)} title="일지 전체(최근 90일)를 엑셀로 다운로드 — 기관 보관·결재용">📥 엑셀</button>
                   <button className="btn-primary" onClick={()=>openNewNote()}>＋ 새 일지</button>
                   <span style={{fontSize:12,color:'#94a3b8'}}>🔄 15초마다 자동 갱신됩니다</span>
                 </div>
@@ -2695,6 +2739,7 @@ export default function App() {
                               {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>🔗 알림 대응</span>}
                               {fu&&<span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>🔔 후속{n.followUp.dueDate?` ~${n.followUp.dueDate}`:''}</span>}
                               <span style={{flex:1}}/>
+                              <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'✅ 복사됨':'📋 복사'}</button>
                               <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
                               <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
                             </div>
@@ -2861,6 +2906,7 @@ export default function App() {
                               <span style={{fontSize:12,color:'#64748b'}}>{CASE_CAT_META[n.category]||'기타'}</span>
                               {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>🔗 알림 대응</span>}
                               <span style={{flex:1}}/>
+                              <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'✅ 복사됨':'📋 복사'}</button>
                               <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
                               <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
                             </div>
