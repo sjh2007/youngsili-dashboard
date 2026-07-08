@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Component } from 'react';
 import './App.css';
 import { auth, authEnabled } from './firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
+import * as XLSX from 'xlsx';
 import HelpGuide, { LATEST_NOTICE } from './HelpGuide';
 import AuthScreen from './AuthScreen';
 
@@ -69,7 +70,7 @@ const RISK_CONFIG = {
   normal:   { label: '정상', color: '#22c55e' },
 };
 // SPA 페이지 목록 (URL 해시 라우팅 — F5 시 현재 페이지 유지)
-const PAGES = ['dashboard','elders','schedule','script','calls','health','casenotes','report','data','admin','help'];
+const PAGES = ['dashboard','elders','safety','schedule','script','calls','health','casenotes','report','data','admin','help'];
 
 // 페이지 렌더 오류가 앱 전체를 흰 화면으로 만들지 않게 방어. 오류 시 메시지 표시 + 메뉴 이동(resetKey) 시 복구.
 class PageErrorBoundary extends Component {
@@ -87,7 +88,13 @@ class PageErrorBoundary extends Component {
     return this.props.children;
   }
 }
-const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', caregiver:'', caregiverPhone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
+const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', caregiver:'', caregiverPhone:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', careGroup:'', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
+
+// 노인맞춤돌봄서비스 돌봄군 — 전화 안전확인 권장 주기(제도 기준): 일반돌봄군 주 2회, 중점돌봄군 주 1회(방문이 주 2회라 전화는 1회)
+const CARE_GROUPS = {
+  general:   { label: '일반돌봄군', weeklyCalls: 2, days: ['월','목'], color: '#2563eb' },
+  intensive: { label: '중점돌봄군', weeklyCalls: 1, days: ['수'],     color: '#7c3aed' },
+};
 
 const TITLE_OPTIONS = {
   female: ['할머니', '어머니', '여사님'],
@@ -107,10 +114,35 @@ const ALERT_TEMPLATES = {
   cold:     `오늘 {{지역}} 한파경보가 발령되었어요. 외출 시 따뜻하게 입으시고, 가급적 실내에 계세요.`,
   dust:     `오늘 {{지역}} 미세먼지 농도가 매우 나쁨이에요. 외출 시 마스크를 꼭 착용하세요.`,
   rain:     `오늘 {{지역}} 비가 많이 온다고 해요. 외출 시 우산을 챙기시고 미끄러운 곳을 조심하세요.`,
-  typhoon:  `{{지역}} 태풍 영향권에 들어있어요. 외출을 삼가시고 안전한 실내에 계세요.`,
+  typhoon:  `{{지역}} 태풍 영향권에 들어있어요. 오늘은 밖에 나가지 마시고 안전한 실내에 계세요. 창문은 꼭 닫아 잠그시고, 창문에서 떨어진 곳에 계시는 게 좋아요. 정전이 될 수 있으니 손전등이나 휴대폰을 가까이 두세요. 몸이 불편하거나 걱정되는 일이 있으면 언제든 말씀해 주세요.`,
   wildfire: `오늘 {{지역}} 인근에 산불이 발생했어요. 안내 방송에 귀 기울이시고, 대피 안내가 있으면 꼭 따르세요. 위급하면 119로 연락하세요.`,
   none:     ``,
 };
+
+// 산불 3단계 대본 (발생 초기 → 긴급 대피 → 안전 확인). 각 단계는 응답 분기(괜찮아/도와줘)로 마무리.
+const WILDFIRE_STAGES = [
+  { id: 'prepare',  label: '① 발생 초기(대피 준비)', color: '#f59e0b',
+    text: `어르신, 저 영실이예요. 지금 {{지역}} 가까운 곳에 산불이 났어요. 놀라지 마시고 제 말 잘 들어주세요. 지금 바로 나갈 준비를 해두세요. 신발이랑 겉옷, 그리고 이 전화기 꼭 챙기세요. 대피소는 {{대피소}} 쪽으로 가시면 돼요. 혼자 나가기 힘드시면 지금 저한테 "도와줘" 라고 말씀해 주세요. 바로 119로 연결해 드릴게요.` },
+  { id: 'evacuate', label: '② 긴급 대피(불길 접근)', color: '#dc2626',
+    text: `어르신, 지금 바로 밖으로 나가셔야 해요. {{지역}} 산불이 가까워졌어요. 가스 밸브 잠그시고, 젖은 수건으로 코와 입을 막고 낮은 자세로 나가세요. 나가시면 {{대피소}} 쪽으로 가시거나 이웃과 함께 움직이세요. 위급하면 꼭 119에 전화하세요. 혼자 못 움직이시면 지금 "도와줘" 라고 말씀해 주세요. 바로 119로 연결해 드릴게요.` },
+  { id: 'safety',   label: '③ 안전 확인(상황 종료)', color: '#16a34a',
+    text: `어르신, 저 영실이예요. 지금 안전한 곳에 계신가요? 몸은 괜찮으세요? 괜찮으시면 "괜찮아", 도움이 필요하면 "도와줘" 라고 말씀해 주세요.` },
+];
+
+// 경보 멘트 변수 치환 (실제 발송·미리보기 공통). 값이 없으면 자연스럽게 생략.
+// {{이름}}은 UI에서 제거했으나, 과거 저장분 호환을 위해 치환은 유지(있으면 '어르신'으로).
+// fireLoc(산불 발생 위치)이 있으면 {{지역}}은 발생 위치로 치환 — 산불 위치는 어르신 거주지와 다른 개념
+// (예: 달서구 거주 어르신에게 "봉화군 도개면 야산 산불" 안내). 없으면 기존대로 어르신 지역.
+function fillAlertVars(text, elder, shelter, fireLoc) {
+  return String(text || '')
+    .replace(/\{\{이름\}\}/g, (elder && elder.name) || '어르신')
+    .replace(/\{\{호칭\}\}/g, (elder && elder.title) || '어르신')
+    .replace(/\{\{지역\}\}/g, (fireLoc || (elder && elder.region) || ''))
+    .replace(/\{\{보호자\}\}/g, (elder && elder.guardian) ? `${elder.guardian}님` : '보호자님')
+    .replace(/\{\{대피소\}\}/g, (shelter || '가까운 대피소'))
+    .replace(/\{\{([^{}]*)\}\}/g, '$1')   // 미등록 변수({{봉화군 …}} 등 오기입)는 괄호 벗겨 내용만 발화
+    .replace(/\s{2,}/g, ' ').trim();
+}
 
 const getWeatherIcon = (c = '') => {
   if (c.includes('소나기')) return '🌦️';
@@ -276,6 +308,106 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  // ── 월간 실적 보고서(엑셀 4시트: 요약/어르신별/일별/위험감지) — 지자체 안전확인 실적 보고용 ──
+  const downloadMonthlyReport = async () => {
+    if (monthlyBusy) return;
+    setMonthlyBusy(true);
+    try {
+      const [y, m] = reportMonth.split('-').map(Number);
+      const from = new Date(y, m - 1, 1);
+      const to = new Date(y, m, 0, 23, 59, 59);
+      const fi = from.toISOString(), ti = to.toISOString();
+      const [callsR, dispR, notesR, arR] = await Promise.all([
+        authFetch(`${SERVER_URL}/calls?from=${fi}&to=${ti}`).then(r => r.json()),
+        authFetch(`${SERVER_URL}/call/dispatches?from=${fi}&to=${ti}`).then(r => r.json()),
+        authFetch(`${SERVER_URL}/case-notes?from=${fi}&to=${ti}`).then(r => r.json()).catch(() => ({ notes: [] })),
+        authFetch(`${SERVER_URL}/alert/responses?from=${fi}`).then(r => r.json()).catch(() => ({ responses: [] })),
+      ]);
+      const calls = callsR.calls || [];
+      const disps = dispR.dispatches || [];
+      const notes = notesR.notes || [];
+      const ar = (arR.responses || []).filter(x => (x.at || '') >= fi && (x.at || '') <= ti);
+      const norm = (ph) => String(ph || '').replace(/\D/g, '');
+      const st = (v) => disps.filter(d => d.status === v).length;
+      const received = st('completed') + st('answered');
+      const totalDisp = disps.length;
+      const durMin = Math.round(calls.reduce((sum, c) => sum + (c.durationSec || 0), 0) / 60);
+      const nCrit = calls.filter(c => c.riskLevel === 'critical').length;
+      const nUrg = calls.filter(c => c.riskLevel === 'urgent' || c.riskLevel === 'warning').length;
+      const monthLabel = `${y}년 ${m}월`;
+
+      // 시트1: 요약
+      const aoaS = [
+        [`AI 영실이 월간 실적 보고서 — ${monthLabel}`], [],
+        ['구분', '값'],
+        ['대상 어르신(등록)', `${elders.length}명`],
+        ['· 일반돌봄군', `${elders.filter(e => e.careGroup === 'general').length}명`],
+        ['· 중점돌봄군', `${elders.filter(e => e.careGroup === 'intensive').length}명`],
+        ['· 미지정', `${elders.filter(e => !CARE_GROUPS[e.careGroup]).length}명`], [],
+        ['AI 전화 안전확인 발신', `${totalDisp}건`],
+        ['· 안전확인 완료(받음)', `${received}건`],
+        ['· 부재중', `${st('missed')}건`],
+        ['· 발신 실패', `${st('failed')}건`],
+        ['· 안전확인 성공률', totalDisp ? `${Math.round(received / totalDisp * 100)}%` : '-'], [],
+        ['통화(안부대화) 건수', `${calls.length}건`],
+        ['총 통화 시간', `${durMin}분`],
+        ['위험 감지 — 긴급', `${nCrit}건`],
+        ['위험 감지 — 주의', `${nUrg}건`], [],
+        ['재난 경보 응답 — 안전확인', `${ar.filter(x => x.response === 'safe').length}건`],
+        ['재난 경보 응답 — 도움요청', `${ar.filter(x => x.response === 'help').length}건`],
+        ['재난 경보 응답 — 미응답', `${ar.filter(x => x.response === 'missed').length}건`], [],
+        ['상담·방문 일지 작성', `${notes.length}건`],
+        ['· 방문', `${notes.filter(n => n.type === 'visit').length}건`],
+        ['· 전화', `${notes.filter(n => n.type === 'phone').length}건`],
+      ];
+
+      // 시트2: 어르신별 실적
+      const aoaE = [['이름', '돌봄군', '지역', '통화 성공(건)', '통화한 날(일)', '부재중(건)', '총 통화(분)', '긴급', '주의', '마지막 통화일']];
+      elders.forEach(e => {
+        const ph = norm(e.phone);
+        const my = calls.filter(c => norm(c.phone) === ph);
+        const days = new Set(my.map(c => c.date)).size;
+        const myDisp = disps.filter(d => norm(d.phone) === ph);
+        const last = my.map(c => c.date).sort().pop() || '-';
+        aoaE.push([
+          e.name, (CARE_GROUPS[e.careGroup] || {}).label || '미지정', e.region || '',
+          my.length, days, myDisp.filter(d => d.status === 'missed').length,
+          Math.round(my.reduce((sum, c) => sum + (c.durationSec || 0), 0) / 60),
+          my.filter(c => c.riskLevel === 'critical').length,
+          my.filter(c => c.riskLevel === 'urgent' || c.riskLevel === 'warning').length,
+          last,
+        ]);
+      });
+
+      // 시트3: 일별 현황
+      const aoaD = [['날짜', '발신', '받음', '부재중', '통화 성공', '긴급 감지']];
+      const daysInMonth = new Date(y, m, 0).getDate();
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ds = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const dd = disps.filter(x => (x.sentAtIso || '').slice(0, 10) === ds);
+        if (!dd.length && !calls.some(c => c.date === ds)) continue;
+        aoaD.push([ds, dd.length, dd.filter(x => x.status === 'completed' || x.status === 'answered').length,
+          dd.filter(x => x.status === 'missed').length, calls.filter(c => c.date === ds).length,
+          calls.filter(c => c.date === ds && c.riskLevel === 'critical').length]);
+      }
+
+      // 시트4: 위험 감지 상세
+      const aoaR = [['날짜', '어르신', '위험도', '통화(초)']];
+      calls.filter(c => c.riskLevel && c.riskLevel !== 'normal')
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+        .forEach(c => aoaR.push([c.date, nameByPhone(c.phone, c.elderName), (RISK_CONFIG[c.riskLevel] || {}).label || c.riskLevel, c.durationSec || 0]));
+
+      const wb = XLSX.utils.book_new();
+      const add = (aoa, name, cols) => { const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = cols; XLSX.utils.book_append_sheet(wb, ws, name); };
+      add(aoaS, '요약', [{ wch: 30 }, { wch: 16 }]);
+      add(aoaE, '어르신별 실적', [{ wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 11 }, { wch: 7 }, { wch: 7 }, { wch: 13 }]);
+      add(aoaD, '일별 현황', [{ wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }]);
+      add(aoaR, '위험 감지', [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }]);
+      XLSX.writeFile(wb, `영실이_월간실적_${reportMonth}.xlsx`);
+    } catch (e) { window.alert('보고서 생성에 실패했습니다: ' + e.message); }
+    setMonthlyBusy(false);
+  };
+
   const fetchElders = async () => {
     try {
       const res = await authFetch(`${SERVER_URL}/elders`);
@@ -344,8 +476,9 @@ export default function App() {
     } catch { setAdminMsg('❌ 네트워크 오류'); }
   };
 
-  const fetchHealth = async () => {
-    setHealthLoading(true);
+  // silent=true면 로딩 표시 없이 조용히 갱신(자동 폴링용)
+  const fetchHealth = async (silent = false) => {
+    if (!silent) setHealthLoading(true);
     try {
       const [hRes, aRes] = await Promise.all([
         authFetch(`${SERVER_URL}/health/all`),
@@ -358,11 +491,11 @@ export default function App() {
       const aArr = Array.isArray(aData) ? aData : [];
       setHealthData(hArr);
       setAlertsData(aArr);
-      setAlertCount(aArr.filter(a => !a.read).length);
+      setAlertCount(aArr.filter(a => a.status ? a.status === 'new' : !a.read).length);
     } catch (err) {
       console.error('건강 데이터 오류:', err);
     } finally {
-      setHealthLoading(false);
+      if (!silent) setHealthLoading(false);
     }
   };
 
@@ -371,11 +504,38 @@ export default function App() {
   useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'admin' && isAdmin) { if (isSuper) fetchOrgs(); fetchAccounts(); setAdminMsg(''); } }, [page, isAdmin, isSuper]); // eslint-disable-line
   useEffect(() => { if (page === 'help' && hasNewNotice) { try { localStorage.setItem('youngsili_help_seen', String(LATEST_NOTICE)); } catch {} setHelpSeen(LATEST_NOTICE); } }, [page]); // eslint-disable-line
-  useEffect(() => { if (page === 'elders' || page === 'dashboard' || page === 'calls') fetchElders(); }, [page]); // eslint-disable-line
-  useEffect(() => { if (page === 'health') fetchHealth(); }, [page]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'elders' && page !== 'dashboard' && page !== 'calls' && page !== 'safety') return;
+    fetchElders();
+    // 어르신 관리에 있는 동안 15초 자동 갱신 → 다른 담당자의 등록/삭제·앱 등록 승인도 반영
+    // (pollRecent/pollAlerts는 기존 목록의 통화·상태만 patch — 목록 추가/삭제는 여기서)
+    if (page !== 'elders') return;
+    const t = setInterval(() => fetchElders(), 15000);
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'health') return;
+    fetchHealth();
+    const t = setInterval(() => fetchHealth(true), 15000);   // 건강 리포트도 15초 자동 갱신(알림과 동일)
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
-  useEffect(() => { if (page === 'calls' || page === 'elders' || page === 'dashboard') fetchCalls(); }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
-  useEffect(() => { if (page === 'health') fetchHealthHistory(); }, [page, healthRange, healthHistFrom, healthHistTo]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'calls' && page !== 'elders' && page !== 'dashboard' && page !== 'safety') return;   // safety=안전확인 관리(주기 준수율)
+    fetchCalls();
+    // 통화기록 탭·홈에 있는 동안 15초 자동 갱신 → 방금 끝난 통화가 새로고침 없이 표시
+    // (홈 '오늘 통화 현황'의 긴급/주의/정상 KPI도 callsHistory 기반이라 홈도 포함 — 발신 KPI만 갱신되던 반쪽 불일치 해소)
+    // (5초는 /calls가 매번 30일치 문서를 읽어 Firestore 비용 과다 → 다른 실시간 요소와 동일한 15초로 통일)
+    if (page !== 'calls' && page !== 'dashboard' && page !== 'safety') return;
+    const t = setInterval(() => fetchCalls(true), 15000);
+    return () => clearInterval(t);
+  }, [page, callsRange, callsFrom, callsTo]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'health') return;
+    fetchHealthHistory();
+    const t = setInterval(() => fetchHealthHistory(true), 15000);   // 건강 이력도 15초 자동 갱신
+    return () => clearInterval(t);
+  }, [page, healthRange, healthHistFrom, healthHistTo]); // eslint-disable-line
   // 통화 시각 ISO → "오늘 14:23" / "어제 09:10" / "6/14 15:30"
   const formatCallTime = (iso) => {
     if (!iso) return '통화 없음';
@@ -423,8 +583,9 @@ export default function App() {
     if (days === 1) return `${md} · 어제`;
     return md;
   };
-  const fetchCalls = async () => {
-    setCallsLoading(true);
+  // silent=true면 로딩 표시 없이 조용히 갱신(자동 폴링용 — 목록 깜빡임 방지). 실패 시 기존 목록 유지.
+  const fetchCalls = async (silent = false) => {
+    if (!silent) setCallsLoading(true);
     try {
       const now = new Date();
       let from = new Date(now.getTime() - 30 * 86400000), to = now;
@@ -433,10 +594,10 @@ export default function App() {
       const r = await authFetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`);
       const j = await r.json();
       setCallsHistory(j.calls || []);
-    } catch { setCallsHistory([]); }
-    setCallsLoading(false);
+    } catch { if (!silent) setCallsHistory([]); }
+    if (!silent) setCallsLoading(false);
   };
-  const fetchHealthHistory = async () => {
+  const fetchHealthHistory = async (silent = false) => {
     try {
       const now = new Date();
       let from = new Date(now.getTime() - 30 * 86400000), to = now;
@@ -445,7 +606,7 @@ export default function App() {
       const r = await authFetch(`${SERVER_URL}/health/history?from=${from.toISOString()}&to=${to.toISOString()}`);
       const j = await r.json();
       setHealthHistory(j.events || []);
-    } catch { setHealthHistory([]); }
+    } catch { if (!silent) setHealthHistory([]); }   // 폴링 순간 실패로 목록이 비워지지 않게
   };
 
   // 실시간 폴링 — 위험 알림(사이드바 🔴 배지)은 항상, 마지막통화는 필요한 페이지에서만.
@@ -454,7 +615,7 @@ export default function App() {
     const pollAlerts = () => authFetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(raw => {
       const data = Array.isArray(raw) ? raw : [];   // 401/에러 응답(객체) 방어 → .filter 크래시 차단
       setAlertsData(data);
-      const unread = data.filter(a=>!a.read);
+      const unread = data.filter(a=>a.status ? a.status === 'new' : !a.read);   // 폐루프: 미확인(new)만 배지
       setAlertCount(unread.length);
       // 어르신별 "가장 최근" 위험 알림만 반영 (data는 최신순 → 이름별 첫 항목이 최신)
       const latestByName = {};
@@ -464,7 +625,7 @@ export default function App() {
       setElders(prev => prev.map(e => {
         const a = latestByName[e.name];
         if (!a) return e;
-        const kw = a.keyword || (a.message ? a.message.split('감지:').pop().trim() : '') || a.message;
+        const kw = alertIsMissed(a) ? '전화 미응답' : (a.keyword || (a.message ? a.message.split('감지:').pop().trim() : '') || a.message);
         return { ...e, status: a.level === 'critical' ? 'danger' : 'warning', keyword: kw, keywordAt: a.timestamp };
       }));
     }).catch(()=>{});
@@ -506,6 +667,17 @@ export default function App() {
   const [editScript, setEditScript]     = useState(DEFAULT_SCRIPT);
   const [activeAlert, setActiveAlert]   = useState('none');
   const [alertScript, setAlertScript]   = useState(ALERT_TEMPLATES.none);
+  const [wildfireStage, setWildfireStage] = useState('prepare');   // 산불 3단계 선택
+  const [shelterName, setShelterName]     = useState('');          // {{대피소}} 담당자 입력
+  const [fireLoc, setFireLoc]             = useState('');          // 산불 발생 위치({{지역}} 치환 + 위치질문 답변)
+  const [alertResponses, setAlertResponses] = useState([]);        // 경보 응답 현황(safe/help/missed)
+  const [alertRespLoading, setAlertRespLoading] = useState(false);
+  const [draftingCallId, setDraftingCallId] = useState(null);      // 통화→일지 초안 생성 중인 통화 id
+  const [reportMonth, setReportMonth] = useState(new Date().toLocaleDateString('sv-SE').slice(0, 7));  // 월간 보고서 대상 월
+  const [monthlyBusy, setMonthlyBusy] = useState(false);
+  const [savedAlertTpl, setSavedAlertTpl]  = useState({});         // 서버 저장된 경보 멘트(기관 공유) — 키별
+  const [alertTplSaving, setAlertTplSaving] = useState(false);
+  const [alertTplSaved, setAlertTplSaved]  = useState(false);
   const [previewElder, setPreviewElder] = useState(null);
   const [scriptSaved, setScriptSaved]   = useState(false);
   const [fetchingWeather, setFetchingWeather] = useState(false);
@@ -614,8 +786,16 @@ export default function App() {
     } catch (e) { console.error('승인 실패:', e); }
   };
 
+  // 어르신별 최종 경보 멘트(모든 변수 치환). 산불도 alertScript에 현재 단계 텍스트가 들어있음.
+  // {{대피소}}: 담당자가 입력한 대피소명(한 칸)을 그대로 사용. 비우면 fillAlertVars가 '가까운 대피소'로.
+  // 산불이면 {{지역}}=발생 위치(fireLoc, 비우면 어르신 지역).
+  const alertMsgFor = (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterName, activeAlert === 'wildfire' ? fireLoc.trim() : '');
+  const alertStageFor = () => activeAlert === 'wildfire' ? wildfireStage : '';
+
   const buildPreview = (elder) => {
-    const alertMsg = activeAlert !== 'none' ? alertScript.replace(/{{지역}}/g, elder?.region || '') : '';
+    // 산불(대피)은 안부 대본을 얹지 않고 경보 멘트만 발화 → 미리보기도 경보 멘트 그대로
+    if (activeAlert === 'wildfire') return `${elder?.name || '어르신'} 어르신, ${alertMsgFor(elder)}`.slice(0, 500);
+    const alertMsg = alertMsgFor(elder);
     return mainScript
       .replace(/{{호칭}}/g, elder?.title || '어르신')
       .replace(/{{이름}}/g, elder?.name || '어르신')
@@ -657,6 +837,15 @@ export default function App() {
   // 실시간 위험 알림: 등록된 어르신 것만 표시 (테스트/더미 이름 제외)
   const _normPhone = s => String(s||'').replace(/[^0-9]/g,'');
   const alertIsReal = a => elders.some(e => e.name === a.name || (_normPhone(a.phone) && _normPhone(e.phone) === _normPhone(a.phone)));
+  // 부재중(무응답) 알림: 서버가 keyword/category에 내부값 'missed'를 쓰므로 화면엔 사람이 읽는 문구로 변환
+  const alertIsMissed = a => a.category === 'missed' || a.keyword === 'missed';
+  const alertKw = a => {
+    if (alertIsMissed(a)) {
+      const body = ((a.message || '').split('— ')[1] || '').replace(/\s*·.*$/, '').trim();
+      return body || (a.level === 'critical' ? '⚠️ 경보 통화 미응답' : '⚠️ 안부전화 부재중');
+    }
+    return a.keyword || (a.message ? a.message.split(/감지[::]?/).pop().trim() : '') || a.message || '';
+  };
   // 브라우저 뒤로가기 → 대시보드 홈 (SPA 히스토리 연동: 하위 탭에서 뒤로가기 시 새 탭/이탈 대신 홈으로)
   // URL 해시에 페이지 기록 → 새로고침(F5) 시 현재 페이지 유지, 뒤로가기 시 이전 페이지로
   useEffect(() => {
@@ -670,6 +859,8 @@ export default function App() {
   const openDetail = elder => { setSelected(elder); setCallResult(null); setPage('detail'); };
   const openRegister = () => { setForm({...EMPTY_FORM}); setFormStep(1); setFormErrors({}); setSaveSuccess(false); setEditMode(false); setPage('register'); };
   const openEdit = elder => { setForm({...elder}); setFormStep(1); setFormErrors({}); setSaveSuccess(false); setEditMode(true); setPage('register'); };
+  // 안전확인 관리에서 이름 클릭 → 곧장 돌봄군·주기 설정(정보수정 3단계)으로 (탭 왕복 불편 해소)
+  const openEditSchedule = elder => { setForm({...elder}); setFormStep(3); setFormErrors({}); setSaveSuccess(false); setEditMode(true); setPage('register'); };
 
   const smartElders = (() => {
     if (smartFilter==='danger')  return elders.filter(e=>e.status==='danger'||e.status==='warning');
@@ -701,8 +892,11 @@ export default function App() {
             elderTitle:   elder.title || '어르신',
             region:       elder.region,
             script:       mainScript,
-            alertMessage: activeAlert !== 'none' ? alertScript.replace(/{{지역}}/g, elder.region) : '',
+            alertMessage: alertMsgFor(elder),
             alertType: activeAlert,
+            alertStage: alertStageFor(),
+            shelter: activeAlert === 'wildfire' ? shelterName.trim() : '',   // 앱 긴급 안내 대피소 일치용
+            fireLoc: activeAlert === 'wildfire' ? fireLoc.trim() : '',       // 산불 발생 위치(위치질문 답변 일치용)
           }),
         });
         const data = await res.json();
@@ -766,11 +960,73 @@ export default function App() {
   };
   // 발신 관리 탭에 있는 동안 15초마다 자동 갱신 → 발신 90초 뒤 부재중 등이 새로고침 없이 반영
   useEffect(() => {
-    if (page !== 'schedule' && page !== 'dashboard') return;   // 홈 '오늘 통화 현황'도 발신 집계 필요
+    if (page !== 'schedule' && page !== 'dashboard' && page !== 'safety') return;   // 홈·안전확인 페이지도 발신 집계 필요
     loadDispatchHistory(histDays);
     const t = setInterval(() => loadDispatchHistory(histDays, true), 15000);
     return () => clearInterval(t);
   }, [page, histDays]); // eslint-disable-line
+
+  // ── 경보 응답 현황 (산불 대피: 안전확인/도움요청/미응답) ── 15초 자동 갱신
+  const loadAlertResponses = async (silent = false) => {
+    if (!silent) setAlertRespLoading(true);
+    try {
+      const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const r = await authFetch(`${SERVER_URL}/alert/responses?from=${encodeURIComponent(from)}`);
+      const d = await r.json();
+      setAlertResponses(Array.isArray(d.responses) ? d.responses : []);
+    } catch { if (!silent) setAlertResponses([]); }
+    if (!silent) setAlertRespLoading(false);
+  };
+  useEffect(() => {
+    if (page !== 'schedule') return;
+    loadAlertResponses();
+    const t = setInterval(() => loadAlertResponses(true), 15000);
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
+
+
+  // ── 경보 멘트: 서버 저장분 로드(기관 공유) → 담당자 수정이 모든 계정에 즉시 적용 ──
+  useEffect(() => {
+    if (page !== 'schedule') return;
+    authFetch(`${SERVER_URL}/settings/alerts`).then(r => r.json())
+      .then(d => setSavedAlertTpl((d && d.templates) || {})).catch(() => {});
+  }, [page]); // eslint-disable-line
+  // 편집 중인 멘트의 키 (산불은 단계별, 그 외는 경보 종류)
+  const curAlertKey = () => activeAlert === 'wildfire' ? `wildfire_${wildfireStage}` : activeAlert;
+  // 저장분 우선, 없으면 기본 텍스트
+  const tplText = (key, def) => (savedAlertTpl[key] && savedAlertTpl[key].trim()) ? savedAlertTpl[key] : def;
+  // 현재 편집 멘트를 서버에 저장(기관 공유)
+  const saveAlertTemplate = async () => {
+    const key = curAlertKey();
+    if (!key || key === 'none') return;
+    setAlertTplSaving(true); setAlertTplSaved(false);
+    try {
+      const r = await authFetch(`${SERVER_URL}/settings/alerts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates: { [key]: alertScript } }),
+      });
+      const d = await r.json();
+      if (d && d.templates) { setSavedAlertTpl(d.templates); setAlertTplSaved(true); setTimeout(() => setAlertTplSaved(false), 2500); }
+    } catch { /* noop */ }
+    setAlertTplSaving(false);
+  };
+  // 저장분을 기본값으로 되돌리기(빈 값 저장 → 서버가 해당 키 삭제)
+  const resetAlertTemplate = async () => {
+    const key = curAlertKey();
+    if (!key || key === 'none') return;
+    const def = activeAlert === 'wildfire' ? (WILDFIRE_STAGES.find(s => s.id === wildfireStage) || WILDFIRE_STAGES[0]).text : ALERT_TEMPLATES[activeAlert];
+    setAlertTplSaving(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/settings/alerts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates: { [key]: '' } }),
+      });
+      const d = await r.json();
+      if (d && d.templates) setSavedAlertTpl(d.templates);
+      setAlertScript(def);
+    } catch { /* noop */ }
+    setAlertTplSaving(false);
+  };
 
   // ── 상담·방문 일지(caseNotes) ──
   const CASE_TYPE_META = {
@@ -782,17 +1038,24 @@ export default function App() {
   };
   const CASE_CAT_META = { safety:'안전', health:'건강', meal:'식사', emotional:'정서', welfare:'복지연계', etc:'기타' };
 
-  const loadCaseNotes = async () => {
-    setCaseLoading(true);
+  const loadCaseNotes = async (silent = false) => {
+    if (!silent) setCaseLoading(true);
     try {
       const from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const r = await authFetch(`${SERVER_URL}/case-notes?from=${encodeURIComponent(from)}`);
       const d = await r.json();
       setCaseNotes(Array.isArray(d.notes) ? d.notes : []);
-    } catch { setCaseNotes([]); }
-    setCaseLoading(false);
+    } catch { if (!silent) setCaseNotes([]); }
+    if (!silent) setCaseLoading(false);
   };
-  useEffect(() => { if (page === 'casenotes' || page === 'detail') loadCaseNotes(); }, [page]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'casenotes' && page !== 'detail') return;
+    loadCaseNotes();
+    // 일지는 기관 공유 데이터 — 다른 담당자가 쓴 일지도 15초 안에 보이게 자동 갱신
+    if (page !== 'casenotes') return;
+    const t = setInterval(() => loadCaseNotes(true), 15000);
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
 
   // 날짜/시간 헬퍼 (상담 일시를 날짜 입력 + 시간 드롭다운으로 분리)
   const pad2 = (n) => String(n).padStart(2, '0');
@@ -803,15 +1066,120 @@ export default function App() {
   const TIME_OPTS = (() => { const a = []; for (let h = 0; h < 24; h++) for (const m of [0, 30]) a.push(`${pad2(h)}:${pad2(m)}`); return a; })();
 
   // 새 일지 작성 폼 열기 (prefill: 어르신/주제/연동알림)
+  // 통화 내용 → 활동일지 초안 생성 (AI서버 Gemini 요약, Railway 프록시) → 일지 작성 모달 프리필
+  const makeNoteDraft = async (c) => {
+    if (draftingCallId) return;
+    setDraftingCallId(c.id);
+    try {
+      const r = await authFetch(`${SERVER_URL}/case-notes/draft`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ elderName: nameByPhone(c.phone, c.elderName), transcript: c.transcript, riskLevel: c.riskLevel, durationSec: c.durationSec }),
+      });
+      const d = await r.json();
+      openNewNote({
+        elderPhone: c.phone, elderName: nameByPhone(c.phone, c.elderName), type: 'phone',
+        category: d.category || 'safety', content: d.content || '', action: d.action || '', visitedAt: c.at,
+      });
+    } catch { window.alert('일지 초안 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.'); }
+    setDraftingCallId(null);
+  };
+
+  // 일지 → 정부 노인맞춤돌봄시스템 붙여넣기용 텍스트 복사 (현장 최다 사용 흐름)
+  const [copiedNoteId, setCopiedNoteId] = useState(null);
+  const noteToText = (n) => {
+    const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
+    const CAT_KO = { safety: '안전', health: '건강', meal: '식사', emotional: '정서', welfare: '생활지원', etc: '기타' };
+    const when = n.visitedAt ? new Date(n.visitedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const lines = [
+      `[상담·방문 일지] ${when} · ${TYPE_KO[n.type] || n.type} · ${CAT_KO[n.category] || n.category}`,
+      `어르신: ${n.elderName || ''}`,
+      '', n.content || '',
+    ];
+    if (n.action) lines.push('', `조치사항: ${n.action}`);
+    if (n.followUp && n.followUp.needed) lines.push(`후속조치 필요${n.followUp.dueDate ? ` (기한: ${n.followUp.dueDate})` : ''}`);
+    return lines.join('\n');
+  };
+  const copyNote = async (n, key) => {
+    try {
+      await navigator.clipboard.writeText(noteToText(n));
+      setCopiedNoteId(key); setTimeout(() => setCopiedNoteId(null), 2000);
+    } catch { window.alert('복사에 실패했습니다. 브라우저 권한을 확인해 주세요.'); }
+  };
+  // 일지 목록 엑셀 다운로드 (기관 내부 보관·결재용)
+  const exportNotesXlsx = (list) => {
+    const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
+    const CAT_KO = { safety: '안전', health: '건강', meal: '식사', emotional: '정서', welfare: '생활지원', etc: '기타' };
+    const aoa = [['일시', '어르신', '유형', '분류', '내용', '조치사항', '후속필요', '후속기한', '작성자']];
+    [...list].sort((a, b) => (a.visitedAt || '').localeCompare(b.visitedAt || '')).forEach(n => {
+      aoa.push([
+        n.visitedAt ? new Date(n.visitedAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '',
+        n.elderName || '', TYPE_KO[n.type] || n.type, CAT_KO[n.category] || n.category,
+        n.content || '', n.action || '',
+        (n.followUp && n.followUp.needed) ? 'O' : '', (n.followUp && n.followUp.dueDate) || '',
+        (n.authorEmail || '').split('@')[0],
+      ]);
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 60 }, { wch: 26 }, { wch: 8 }, { wch: 11 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws, '상담방문일지');
+    XLSX.writeFile(wb, `영실이_상담방문일지_${new Date().toLocaleDateString('sv-SE')}.xlsx`);
+  };
+
+  // 건강 알림 → 일지 작성: 알림 시각 근처(±3시간)의 통화를 찾아 초안(요약)까지 채워서 열기.
+  // 통화를 못 찾으면 감지 신호 문구만이라도 채움(빈 내용란 방지 — 담당자는 추가 작성만).
+  const [draftingAlertId, setDraftingAlertId] = useState(null);
+  const ALERT_CAT_NOTE = { health: 'health', fall: 'safety', emotion: 'emotional', living: 'welfare', meal: 'meal', missed: 'safety' };
+  const openNoteFromAlert = async (alert) => {
+    if (draftingAlertId) return;
+    setDraftingAlertId(alert.id);
+    const when = alert.timestamp ? new Date(alert.timestamp).toLocaleString('ko-KR') : '';
+    let content = alertIsMissed(alert)
+      ? `[안부전화 부재중] ${alertKw(alert)} (${when}) — 유선·방문으로 안전확인 필요`
+      : `[신호 감지] "${alert.keyword || alert.message || ''}" (${when})`;
+    let category = ALERT_CAT_NOTE[alert.category] || 'safety';
+    let action = '';
+    try {
+      const ph = String(alert.phone || '').replace(/\D/g, '');
+      if (ph) {
+        const t = alert.timestamp ? new Date(alert.timestamp) : new Date();
+        const from = new Date(t.getTime() - 3 * 3600000).toISOString();
+        const to = new Date(t.getTime() + 3 * 3600000).toISOString();
+        const r = await authFetch(`${SERVER_URL}/calls?phone=${ph}&from=${from}&to=${to}`).then(x => x.json());
+        const cands = (r.calls || []).filter(c => c.transcript);
+        cands.sort((a, b) => Math.abs(new Date(a.at) - t) - Math.abs(new Date(b.at) - t));   // 알림 시각과 가장 가까운 통화
+        const call = cands[0];
+        if (call) {
+          const d = await authFetch(`${SERVER_URL}/case-notes/draft`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ elderName: nameByPhone(alert.phone, alert.name), transcript: call.transcript, riskLevel: call.riskLevel, durationSec: call.durationSec }),
+          }).then(x => x.json());
+          if (d && d.content) {
+            content = `${d.content}
+
+[감지 신호] "${alertKw(alert)}" (${when})`;
+            if (d.category) category = d.category;
+            action = d.action || '';
+          }
+        }
+      }
+    } catch { /* 폴백: 감지 문구만 */ }
+    openNewNote({
+      elderPhone: alert.phone, elderName: nameByPhone(alert.phone, alert.name), type: 'phone',
+      category, content, action, linkedAlertId: alert.id, visitedAt: alert.timestamp,
+    });
+    setDraftingAlertId(null);
+  };
+
   const openNewNote = (prefill = {}) => {
-    const now = new Date();
+    const now = prefill.visitedAt ? new Date(prefill.visitedAt) : new Date();   // 통화→초안이면 통화 시각을 상담일시로
     setNoteForm({
       id: null,
       elderPhone: prefill.elderPhone || '',
       elderName: prefill.elderName || '',
       type: prefill.type || 'visit',
       category: prefill.category || 'safety',
-      content: '', action: '',
+      content: prefill.content || '', action: prefill.action || '',
       visitedDate: dateStrOf(now), visitedTime: roundHalf(now),
       linkedAlertId: prefill.linkedAlertId || '',
       followUpNeeded: false, followUpDue: '',
@@ -859,6 +1227,13 @@ export default function App() {
         const r = await authFetch(`${SERVER_URL}/case-notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         let newId = null; try { const d = await r.json(); newId = d && d.id; } catch {}
         setCaseNotes(prev => [{ ...localNote, id: newId || `local_${Date.now()}` }, ...prev]);      // 낙관적 반영(저장 즉시 표시)
+        // 폐루프: 알림에서 시작한 일지면 해당 알림을 자동 '조치 완료' 처리 (일지 = 조치 기록)
+        if (noteForm.linkedAlertId && !String(noteForm.linkedAlertId).startsWith('alertresp_')) {
+          authFetch(`${SERVER_URL}/alerts/${noteForm.linkedAlertId}/status`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'done', note: '상담·방문 일지 작성으로 조치 완료' }),
+          }).then(() => fetchHealth()).catch(() => {});
+        }
       }
       setNoteModal(null); setNoteForm(null);
       loadCaseNotes();   // 백그라운드 재조회로 서버와 정합성 보정(낙관적 반영이 먼저 보임)
@@ -898,7 +1273,11 @@ export default function App() {
           elderTitle:   elder.title || '어르신',
           region:       elder.region,
           script:       mainScript,
-          alertMessage: activeAlert !== 'none' ? alertScript.replace(/{{지역}}/g, elder.region) : '',
+          alertMessage: alertMsgFor(elder),
+          alertType: activeAlert,
+          alertStage: alertStageFor(),
+          shelter: activeAlert === 'wildfire' ? shelterName.trim() : '',   // 앱 긴급 안내 대피소 일치용
+            fireLoc: activeAlert === 'wildfire' ? fireLoc.trim() : '',       // 산불 발생 위치(위치질문 답변 일치용)
         }),
       });
       const data = await res.json();
@@ -955,7 +1334,7 @@ export default function App() {
   };
 
   // ── CSV 일괄 등록 ──
-  const CSV_HEADERS = ['이름','전화번호','나이','성별(남/여)','호칭(할머니/할아버지)','지역','담당복지사','전화시간(예 09:00)','보호자','보호자연락처','질환','복약'];
+  const CSV_HEADERS = ['이름','전화번호','나이','성별(남/여)','호칭(할머니/할아버지)','지역','담당복지사','전화시간(예 09:00)','보호자','보호자연락처','질환','복약','돌봄군(일반/중점)'];
   const downloadCsvTemplate = () => {
     const example = ['홍복순','010-1234-5678','82','여','할머니','대구 북구','김복지','09:00','홍길동','010-8765-4321','고혈압','혈압약 아침'].join(',');
     const csv = '﻿' + CSV_HEADERS.join(',') + '\n' + example + '\n';   // BOM: 엑셀에서 한글 안 깨짐
@@ -982,7 +1361,7 @@ export default function App() {
     if(/�/.test(text)){ try{ text = new TextDecoder('euc-kr').decode(buf); }catch{} }   // 한글 깨지면 cp949로 재디코딩
     const rows = parseCsv(text);
     if(rows.length<2){ alert('데이터가 없습니다. 양식에 어르신 정보를 채워 주세요.'); return; }
-    const alias = {'이름':'name','성함':'name','성명':'name','전화번호':'phone','연락처':'phone','휴대폰':'phone','전화':'phone','나이':'age','연세':'age','성별':'gender','호칭':'title','지역':'region','주소':'region','담당복지사':'caregiver','담당':'caregiver','복지사':'caregiver','전화시간':'callTime','시간':'callTime','보호자':'guardian','보호자연락처':'guardianPhone','보호자전화':'guardianPhone','질환':'disease','병력':'disease','복약':'medicine','약':'medicine'};
+    const alias = {'이름':'name','성함':'name','성명':'name','전화번호':'phone','연락처':'phone','휴대폰':'phone','전화':'phone','나이':'age','연세':'age','성별':'gender','호칭':'title','지역':'region','주소':'region','담당복지사':'caregiver','담당':'caregiver','복지사':'caregiver','전화시간':'callTime','시간':'callTime','보호자':'guardian','보호자연락처':'guardianPhone','보호자전화':'guardianPhone','질환':'disease','병력':'disease','복약':'medicine','약':'medicine','돌봄군':'careGroup'};
     const colIdx={};
     rows[0].forEach((h,i)=>{ const base=String(h).replace(/^﻿/,'').replace(/\(.*?\)/g,'').replace(/\s/g,'').trim(); const k=alias[base]; if(k&&colIdx[k]===undefined)colIdx[k]=i; });
     if(colIdx.name===undefined||colIdx.phone===undefined){ alert('양식에 "이름"과 "전화번호" 열이 있어야 합니다. CSV 양식을 받아 사용해 주세요.'); return; }
@@ -991,7 +1370,7 @@ export default function App() {
     const parsed = rows.slice(1).map((r,ri)=>{
       const get=k=>colIdx[k]!==undefined?String(r[colIdx[k]]||'').trim():'';
       const name=get('name'); const phone=get('phone').replace(/\D/g,''); const gender=/남/.test(get('gender'))?'male':'female';
-      const rec={ name, phone, age:get('age').replace(/\D/g,''), gender, title:get('title')||(gender==='male'?'할아버지':'할머니'), region:get('region'), caregiver:get('caregiver'), callTime:/^\d{1,2}:\d{2}$/.test(get('callTime'))?get('callTime'):'09:00', guardian:get('guardian'), guardianPhone:get('guardianPhone').replace(/\D/g,''), disease:get('disease'), medicine:get('medicine') };
+      const rec={ name, phone, age:get('age').replace(/\D/g,''), gender, title:get('title')||(gender==='male'?'할아버지':'할머니'), region:get('region'), caregiver:get('caregiver'), callTime:/^\d{1,2}:\d{2}$/.test(get('callTime'))?get('callTime'):'09:00', guardian:get('guardian'), guardianPhone:get('guardianPhone').replace(/\D/g,''), disease:get('disease'), medicine:get('medicine'), careGroup:/중점/.test(get('careGroup'))?'intensive':/일반/.test(get('careGroup'))?'general':'' };
       let st='ok', why='';
       if(!name){st='error';why='이름 없음';}
       else if(!phone||phone.length<9){st='error';why='전화번호 오류';}
@@ -1007,7 +1386,7 @@ export default function App() {
     if(rows.length===0){ alert('등록할 유효한 행이 없습니다.'); return; }
     setCsvSaving(true); let ok=0, fail=0;
     for(const r of rows){
-      const saved={...EMPTY_FORM, name:r.name, phone:r.phone, age:r.age, gender:r.gender, title:r.title, region:r.region, caregiver:r.caregiver, callTime:r.callTime, guardian:r.guardian, guardianPhone:r.guardianPhone, disease:r.disease, medicine:r.medicine, id:Date.now()+Math.floor(Math.random()*100000), status:'normal', lastCall:'아직 없음', callActive:true };
+      const saved={...EMPTY_FORM, name:r.name, phone:r.phone, age:r.age, gender:r.gender, title:r.title, region:r.region, caregiver:r.caregiver, callTime:r.callTime, guardian:r.guardian, guardianPhone:r.guardianPhone, disease:r.disease, medicine:r.medicine, careGroup:r.careGroup||'', ...(CARE_GROUPS[r.careGroup]?{callCycle:'custom',callDays:[...CARE_GROUPS[r.careGroup].days]}:{}), id:Date.now()+Math.floor(Math.random()*100000), status:'normal', lastCall:'아직 없음', callActive:true };
       try{ const res=await authFetch(`${SERVER_URL}/elders/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(saved)}); const d=await res.json(); (d&&d.success)?ok++:fail++; }catch{ fail++; }
     }
     setCsvSaving(false); setCsvImport(null); await fetchElders();
@@ -1045,6 +1424,19 @@ export default function App() {
   const dispatchTotal = todayDispatches.length;
   const answeredCount = todayDispatches.filter(d => d.status==='completed'||d.status==='answered').length;
   const missedCount   = todayDispatches.filter(d => d.status==='missed').length;
+  // 오늘 안전확인 집계 (홈 보드 + 안전확인 관리 페이지 공용)
+  const safetyToday = () => {
+    const norm = (p) => String(p || '').replace(/\D/g, '');
+    const okPhones = new Set(todayCalls.map(c => norm(c.phone)).filter(Boolean));
+    todayDispatches.forEach(d => { if (d.status === 'completed' || d.status === 'answered') okPhones.add(norm(d.phone)); });
+    const lastDisp = {};
+    todayDispatches.forEach(d => { const p = norm(d.phone); if (!p) return; const prev = lastDisp[p]; if (!prev || (d.sentAtIso || '') > (prev.sentAtIso || '')) lastDisp[p] = d; });
+    const active = elders.filter(e => e.callActive !== false && norm(e.phone));
+    const unchecked = active.filter(e => !okPhones.has(norm(e.phone))).map(e => ({ e, d: lastDisp[norm(e.phone)] })).filter(x => x.d && (x.d.status === 'missed' || x.d.status === 'failed'));
+    const undialed = active.filter(e => !okPhones.has(norm(e.phone)) && !lastDisp[norm(e.phone)]).length;
+    const checkedCount = active.filter(e => okPhones.has(norm(e.phone))).length;
+    return { unchecked, undialed, checkedCount, activeCount: active.length };
+  };
   // 통화기록 위험도 필터 매칭 (KPI 드릴다운)
   const callsRiskMatch = (c) => callsRisk==='all' ? true : callsRisk==='critical' ? c.riskLevel==='critical' : callsRisk==='urgent' ? (c.riskLevel==='urgent'||c.riskLevel==='warning') : (!c.riskLevel||c.riskLevel==='normal');
   // KPI 클릭 → 상세로 이동(+필터). 위험도는 오늘 범위로 좁혀 KPI 숫자와 일치.
@@ -1183,6 +1575,7 @@ export default function App() {
             </div>
             <div className="modal-btns" style={{marginTop:20,justifyContent:'flex-end'}}>
               <button className="btn-secondary" onClick={close}>취소</button>
+              <button className="btn-secondary" onClick={()=>copyNote({elderName:noteForm.elderName,type:noteForm.type,category:noteForm.category,content:noteForm.content,action:noteForm.action,visitedAt:(noteForm.visitedDate&&noteForm.visitedTime)?`${noteForm.visitedDate}T${noteForm.visitedTime}`:new Date().toISOString(),followUp:{needed:noteForm.followUpNeeded,dueDate:noteForm.followUpDue}},'modal')} title="정부 노인맞춤돌봄시스템 등에 붙여넣기용 텍스트 복사">{copiedNoteId==='modal'?'✅ 복사됨':'📋 복사'}</button>
               <button className="btn-primary" onClick={saveNote} disabled={noteSaving}>{noteSaving?'저장 중...':(noteForm.id?'수정 저장':'일지 저장')}</button>
             </div>
           </div>
@@ -1199,6 +1592,7 @@ export default function App() {
           {[
             {id:'dashboard', icon:'⊞', label:'대시보드'},
             {id:'elders',    icon:'👥', label:'어르신 관리'},
+            {id:'safety',    icon:'✅', label:'안전확인 관리'},
             {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
             {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
             {id:'calls',     icon:'📞', label:'통화 기록'},
@@ -1246,7 +1640,7 @@ export default function App() {
         <header className="header">
           <div className="header-title">
             {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}
-            {page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='admin'&&(isSuper?'🏢 기관 관리 (운영자)':'👥 계정 관리')}{page==='help'&&'📖 도움말 보기'}
+            {page==='safety'&&'✅ 안전확인 관리'}{page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='admin'&&(isSuper?'🏢 기관 관리 (운영자)':'👥 계정 관리')}{page==='help'&&'📖 도움말 보기'}
             {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
           </div>
           <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
@@ -1265,9 +1659,9 @@ export default function App() {
                   .filter(a => !a.read && (a.level === 'critical' || a.level === 'urgent') && alertIsReal(a))
                   .slice(0, 10)
                   .forEach(a => {
-                    const kw = a.keyword || (a.message ? a.message.split('감지:').pop().trim() : '') || a.message;
+                    const kw = alertKw(a);
                     const el = elders.find(e => e.name === a.name);
-                    alerts.push({ elder: el, name: a.name, msg: `"${kw}" 위험 키워드 감지`, time: a.timestamp, color: a.level === 'critical' ? '#ef4444' : '#f59e0b', bg: a.level === 'critical' ? '#fef2f2' : '#fffbeb', icon: '🚨' });
+                    alerts.push({ elder: el, name: a.name, msg: alertIsMissed(a) ? `${kw} → 안전확인 필요` : `"${kw}" 위험 키워드 감지`, time: a.timestamp, color: a.level === 'critical' ? '#ef4444' : '#f59e0b', bg: a.level === 'critical' ? '#fef2f2' : '#fffbeb', icon: alertIsMissed(a) ? '📵' : '🚨' });
                   });
                 // 2) 미응답 (어르신 데이터 기반)
                 elders.forEach(e => {
@@ -1317,6 +1711,37 @@ export default function App() {
                     </div>
                     <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 숫자를 클릭하면 해당 통화·발신 목록으로 이동합니다. (발신 = 받음 + 부재중, 긴급·주의·정상은 받은 통화의 위험 분류)</div>
                   </div>
+
+                  {(() => {
+                    // ⚠️ 오늘 안전확인 미완료 보드 — 부재중(자동 재발신 소진)·발신실패로 끝나고 오늘 성공 통화가 없는 어르신
+                    // (안전확인의 핵심 = 응답 없는 어르신을 놓치지 않기 → 담당자 재발신/방문으로 폐루프)
+                    const { unchecked, undialed } = safetyToday();
+                    if (!unchecked.length && !undialed) return null;
+                    return (
+                      <div className="section" style={unchecked.length ? { borderLeft: '4px solid #dc2626' } : {}}>
+                        <div className="section-title">⚠️ 오늘 안전확인 미완료 {unchecked.length > 0 && <span style={{ color: '#dc2626' }}>{unchecked.length}명</span>}</div>
+                        {unchecked.length === 0 ? (
+                          <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>✅ 발신한 어르신은 모두 안전확인 완료됐습니다.</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {unchecked.map(({ e, d }) => (
+                              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: d.status === 'missed' ? '#fff7ed' : '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', flexWrap: 'wrap' }}>
+                                <div style={{ minWidth: 90, fontWeight: 800 }}>{e.name}</div>
+                                <div style={{ minWidth: 80, fontSize: 13, color: '#64748b' }}>{e.region}</div>
+                                <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: d.status === 'missed' ? '#ea580c' : '#dc2626' }}>
+                                  {d.status === 'missed' ? `📵 부재중 — 자동 재발신 ${d.retryCount || 0}회에도 무응답` : `❌ 발신 실패${d.reason ? ` (${d.reason})` : ''}`}
+                                </div>
+                                <div style={{ fontSize: 12, color: '#94a3b8' }}>{d.sentAtIso ? new Date(d.sentAtIso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+                                <button className="btn-call" style={{ fontSize: 12, padding: '5px 12px' }} disabled={calling === e.id} onClick={() => makeCall(e)}>{calling === e.id ? '📱 발신 중…' : '📞 재발신'}</button>
+                              </div>
+                            ))}
+                            <div style={{ fontSize: 12.5, color: '#dc2626', fontWeight: 600 }}>🚨 재발신에도 무응답이면 직접 전화 또는 방문 확인이 필요합니다.</div>
+                          </div>
+                        )}
+                        {undialed > 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>· 오늘 아직 발신하지 않은 어르신 {undialed}명 (전화 발신 관리에서 발신)</div>}
+                      </div>
+                    );
+                  })()}
 
                   <div className="section">
                     <div className="section-title">⚡ 빠른 실행</div>
@@ -1383,8 +1808,164 @@ export default function App() {
             </div>
           )}
 
+          {page==='safety' && (
+            <div className="fade-in">
+              <div className="data-banner" style={{marginBottom:16}}>
+                <div>
+                  <div className="data-banner-title">✅ 안전확인 관리</div>
+                  <div className="data-banner-sub">노인맞춤돌봄서비스 전화 안전확인 기준 — 일반돌봄군 주 2회 · 중점돌봄군 주 1회(방문이 주 2회) · 🔄 15초마다 자동 갱신됩니다</div>
+                </div>
+              </div>
+              {(() => {
+                const st = safetyToday();
+                // ── 이번 주(월~오늘) 주기 준수 집계 — 성공 통화가 있었던 '날 수' 기준 ──
+                const now = new Date();
+                const monday = new Date(now); monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+                const mondayStr = monday.toLocaleDateString('sv-SE');
+                const norm = (ph) => String(ph || '').replace(/\D/g, '');
+                const weekDays = {};
+                callsHistory.forEach(c => { if ((c.date || '') >= mondayStr) { const ph = norm(c.phone); if (ph) (weekDays[ph] = weekDays[ph] || new Set()).add(c.date); } });
+                const rows = elders.filter(e => e.callActive !== false && norm(e.phone)).map(e => {
+                  const g = CARE_GROUPS[e.careGroup];
+                  const target = g ? g.weeklyCalls : (e.callCycle === 'custom' ? (e.callDays || []).length : 7);
+                  const done = (weekDays[norm(e.phone)] || new Set()).size;
+                  return { e, g, target, done, met: target > 0 && done >= target };
+                }).filter(r => r.target > 0);
+                const totT = rows.reduce((sum, r) => sum + r.target, 0);
+                const totD = rows.reduce((sum, r) => sum + Math.min(r.done, r.target), 0);
+                const rate = totT ? Math.round(totD / totT * 100) : 0;
+                const sorted = [...rows].sort((a, b) => (a.met === b.met ? (a.done / a.target) - (b.done / b.target) : (a.met ? 1 : -1)));
+                const nNone = elders.filter(e => e.callActive !== false && !CARE_GROUPS[e.careGroup]).length;
+                const nGen = elders.filter(e => e.careGroup === 'general').length;
+                const nInt = elders.filter(e => e.careGroup === 'intensive').length;
+                return (<>
+                  <div className="report-stat-grid" style={{marginBottom:16}}>
+                    <div className="report-stat-card"><div className="report-stat-icon">✅</div><div className="report-stat-value" style={{color:'#16a34a'}}>{st.checkedCount}명</div><div className="report-stat-label">오늘 안전확인 완료</div></div>
+                    <div className="report-stat-card"><div className="report-stat-icon">⚠️</div><div className="report-stat-value" style={{color:st.unchecked.length?'#dc2626':'#16a34a'}}>{st.unchecked.length}명</div><div className="report-stat-label">오늘 미확인 (부재중·실패)</div></div>
+                    <div className="report-stat-card"><div className="report-stat-icon">📞</div><div className="report-stat-value" style={{color:'#64748b'}}>{st.undialed}명</div><div className="report-stat-label">오늘 미발신</div></div>
+                    <div className="report-stat-card"><div className="report-stat-icon">📅</div><div className="report-stat-value" style={{color:rate>=80?'#16a34a':rate>=50?'#f59e0b':'#dc2626'}}>{rate}%</div><div className="report-stat-label">이번 주 주기 준수율</div></div>
+                  </div>
+
+                  {st.unchecked.length > 0 && (
+                    <div className="section" style={{borderLeft:'4px solid #dc2626'}}>
+                      <div className="section-title">⚠️ 오늘 미확인 어르신 — 우선 대응</div>
+                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        {st.unchecked.map(({ e, d }) => (
+                          <div key={e.id} style={{display:'flex',alignItems:'center',gap:12,background:d.status==='missed'?'#fff7ed':'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'10px 14px',flexWrap:'wrap'}}>
+                            <div style={{minWidth:90,fontWeight:800,color:'#1d4ed8',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name}</div>
+                            <div style={{minWidth:80,fontSize:13,color:'#64748b'}}>{e.region}</div>
+                            <div style={{flex:1,fontSize:13,fontWeight:700,color:d.status==='missed'?'#ea580c':'#dc2626'}}>
+                              {d.status==='missed' ? `📵 부재중 — 자동 재발신 ${d.retryCount||0}회에도 무응답` : `❌ 발신 실패${d.reason?` (${d.reason})`:''}`}
+                            </div>
+                            <button className="btn-call" style={{fontSize:12,padding:'5px 12px'}} disabled={calling===e.id} onClick={()=>makeCall(e)}>{calling===e.id?'📱 발신 중…':'📞 재발신'}</button>
+                          </div>
+                        ))}
+                        <div style={{fontSize:12.5,color:'#dc2626',fontWeight:600}}>🚨 재발신에도 무응답이면 직접 전화 또는 방문 확인 후, 상담·방문 일지에 기록해 주세요.</div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="section">
+                    <div className="section-title">📅 이번 주 주기 준수 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(월요일~오늘 · 통화 성공한 날 수 기준 · 돌봄군: 일반 {nGen}명 · 중점 {nInt}명)</span></div>
+                    <div style={{overflowX:'auto'}}>
+                      <table className="table" style={{width:'100%'}}>
+                        <thead><tr><th>어르신</th><th>돌봄군</th><th>주간 목표</th><th>이번 주 통화</th><th>상태</th><th></th></tr></thead>
+                        <tbody>
+                          {sorted.map(({ e, g, target, done, met }) => (
+                            <tr key={e.id} style={met?{}:{background:'#fffbeb'}}>
+                              <td style={{fontWeight:700,color:'#1d4ed8',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name} <span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>{e.region}</span></td>
+                              <td>{g ? <span style={{fontSize:12,fontWeight:800,color:g.color,background:`${g.color}15`,padding:'2px 8px',borderRadius:6}}>{g.label}</span> : <span style={{fontSize:12,color:'#94a3b8'}}>미지정</span>}</td>
+                              <td>{target}회</td>
+                              <td style={{fontWeight:800,color:met?'#16a34a':'#f59e0b'}}>{done}회</td>
+                              <td>{met ? <span style={{color:'#16a34a',fontWeight:700}}>✅ 달성</span> : <span style={{color:'#f59e0b',fontWeight:700}}>⏳ 진행 중 ({done}/{target})</span>}</td>
+                              <td>{!met && <button className="btn-secondary" style={{fontSize:12,padding:'3px 10px'}} disabled={calling===e.id} onClick={()=>makeCall(e)}>📞 발신</button>}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {nNone > 0 && <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 돌봄군 미지정 어르신 {nNone}명은 설정된 전화 주기를 목표로 계산합니다. 위 표에서 어르신 이름을 클릭하면 바로 돌봄군·주기를 설정할 수 있습니다 (제도 기준: 일반 주2회·중점 주1회).</div>}
+                  </div>
+                </>);
+              })()}
+            </div>
+          )}
+
           {page==='schedule' && (
             <div className="fade-in">
+              {(() => {
+                // 어르신별 최신 응답만(safe/help/missed) → help·missed를 상단으로(우선대응)
+                const latest = {};
+                for (const r of alertResponses) { const k = r.phone || r.elderName; if (!latest[k]) latest[k] = r; }
+                const checkedCnt = Object.values(latest).filter(r => r.checked).length;
+                const list = Object.values(latest).filter(r => !r.checked);   // 확인 처리된 건 숨김(기록은 보존 → 월간 실적 집계)
+                if (list.length === 0 && checkedCnt === 0) return null;
+                const rank = { help: 0, missed: 1, safe: 2 };
+                list.sort((a, b) => (rank[a.response] ?? 3) - (rank[b.response] ?? 3) || (b.at || '').localeCompare(a.at || ''));
+                const cfg = {
+                  help:   { icon: '🚨', label: '도움 요청', color: '#dc2626', bg: '#fef2f2', desc: '즉시 복지사·보호자 대응 필요' },
+                  missed: { icon: '⚠️', label: '미응답',   color: '#ea580c', bg: '#fff7ed', desc: '자동 재발신 후에도 무응답 — 직접 확인 필요' },
+                  safe:   { icon: '✅', label: '안전 확인', color: '#16a34a', bg: '#f0fdf4', desc: '' },
+                };
+                const stageLabel = { prepare: '발생 초기', evacuate: '긴급 대피', safety: '안전 확인' };
+                const nHelp = list.filter(r => r.response === 'help').length;
+                const nMissed = list.filter(r => r.response === 'missed').length;
+                const nSafe = list.filter(r => r.response === 'safe').length;
+                const fmtTime = (iso) => {
+                  // 날짜 없이 시각만 표시하면 어제 기록이 '미래 시각'처럼 보임 → 오늘 아니면 날짜 병기
+                  try {
+                    const d = new Date(iso);
+                    const t = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                    const ds = d.toLocaleDateString('sv-SE');
+                    const today = new Date().toLocaleDateString('sv-SE');
+                    if (ds === today) return `오늘 ${t}`;
+                    const yest = new Date(Date.now() - 86400000).toLocaleDateString('sv-SE');
+                    if (ds === yest) return `어제 ${t}`;
+                    return `${d.getMonth() + 1}/${d.getDate()} ${t}`;
+                  } catch { return ''; }
+                };
+                return (
+                  <div className="section" style={{borderLeft:'4px solid #ea580c'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+                      <div className="section-title" style={{margin:0}}>🔥 경보 응답 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(최근 24시간분 표시 · 15초 자동 갱신{checkedCnt>0?` · 확인됨 ${checkedCnt}건 숨김`:''})</span></div>
+                      <div style={{display:'flex',gap:10,fontSize:13,fontWeight:700}}>
+                        <span style={{color:'#dc2626'}}>🚨 {nHelp}</span>
+                        <span style={{color:'#ea580c'}}>⚠️ {nMissed}</span>
+                        <span style={{color:'#16a34a'}}>✅ {nSafe}</span>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'2px 8px'}} onClick={()=>loadAlertResponses()}>🔄</button>
+                      </div>
+                    </div>
+                    {list.length === 0 && <div style={{marginTop:10,fontSize:13,color:'#16a34a',fontWeight:600}}>✅ 모든 응답이 확인 처리됐습니다. (확인됨 {checkedCnt}건 · 24시간 경과 시 자동으로 사라집니다)</div>}
+                    <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:8}}>
+                      {list.map((r, i) => {
+                        const c = cfg[r.response] || cfg.safe;
+                        return (
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:12,background:c.bg,border:`1px solid ${c.color}30`,borderRadius:10,padding:'10px 14px',flexWrap:'wrap'}}>
+                            <span style={{fontSize:20}}>{c.icon}</span>
+                            <div style={{minWidth:90}}>
+                              <div style={{fontWeight:800,color:'#1f2937'}}>{r.elderName || '어르신'}</div>
+                              <div style={{fontSize:12,color:'#94a3b8'}}>{r.phone}</div>
+                            </div>
+                            <span style={{fontWeight:800,color:c.color,fontSize:14,minWidth:74}}>{c.label}</span>
+                            <span style={{fontSize:12.5,color:'#64748b',flex:1}}>{c.desc}{r.response==='missed'&&r.retryCount?` (재발신 ${r.retryCount}회)`:''}</span>
+                            <span style={{fontSize:11.5,color:'#94a3b8'}}>{stageLabel[r.alertStage]||''} · {fmtTime(r.at)}</span>
+                            {(r.response==='help'||r.response==='missed') && (
+                              <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}
+                                onClick={()=>openNewNote({ elderPhone:r.phone, elderName:r.elderName, type:'phone', category:'safety',
+                                  content:`[산불 경보 ${stageLabel[r.alertStage]||''}] ${r.response==='help'?'어르신이 "도와줘" — 도움 요청':`미응답(자동 재발신 ${r.retryCount||0}회 후)`}. 조치 확인 필요.`,
+                                  linkedAlertId:`alertresp_${r.id}` })}>📝 일지</button>
+                            )}
+                            <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}
+                              title="확인 처리 — 목록에서 숨겨집니다(기록은 월간 실적에 보존)"
+                              onClick={async()=>{await authFetch(`${SERVER_URL}/alert/responses/${r.id}/check`,{method:'POST'}).catch(()=>{});loadAlertResponses(true);}}>✔ 확인</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {(nHelp>0||nMissed>0) && <div style={{marginTop:10,fontSize:12.5,color:'#ea580c',fontWeight:600}}>🚨 도움 요청·미응답 어르신을 먼저 확인하세요. 목록 상단에 자동 정렬됩니다.</div>}
+                  </div>
+                );
+              })()}
               <div className="bulk-toolbar">
                 <div className="bulk-left">
                   <div className="bulk-title">스마트 선택</div>
@@ -1692,18 +2273,86 @@ export default function App() {
                 <div className="section-title">⚠️ 경보 멘트 설정</div>
                 <div className="alert-template-grid">
                   {[{id:'none',icon:'✅',label:'경보 없음',color:'#22c55e'},{id:'heatwave',icon:'🌡️',label:'폭염경보',color:'#ef4444'},{id:'cold',icon:'❄️',label:'한파경보',color:'#3b82f6'},{id:'dust',icon:'😷',label:'미세먼지 나쁨',color:'#f59e0b'},{id:'rain',icon:'🌧️',label:'호우주의보',color:'#6366f1'},{id:'typhoon',icon:'🌀',label:'태풍경보',color:'#7c3aed'},{id:'wildfire',icon:'🔥',label:'산불발생',color:'#ea580c'}].map(t => (
-                    <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} style={activeAlert===t.id?{borderColor:t.color,background:`${t.color}15`}:{}} onClick={() => { setActiveAlert(t.id); setAlertScript(ALERT_TEMPLATES[t.id]); }}>
+                    <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} style={activeAlert===t.id?{borderColor:t.color,background:`${t.color}15`}:{}} onClick={() => { setActiveAlert(t.id); if (t.id==='wildfire') { setWildfireStage('prepare'); setAlertScript(tplText('wildfire_prepare', WILDFIRE_STAGES[0].text)); } else { setAlertScript(tplText(t.id, ALERT_TEMPLATES[t.id])); } }}>
                       <span style={{fontSize:20}}>{t.icon}</span><span style={{fontWeight:700,color:activeAlert===t.id?t.color:'#374151'}}>{t.label}</span>
                     </button>
                   ))}
                 </div>
-                {activeAlert !== 'none' && (<div className="alert-script-edit"><label className="form-label">경보 멘트 수정</label><textarea className="script-textarea" value={alertScript} onChange={e => setAlertScript(e.target.value)} rows={3}/><div className="var-hint">사용 가능 변수: <code>{'{{지역}}'}</code></div></div>)}
+                {activeAlert === 'wildfire' && (
+                  <div style={{marginTop:14}}>
+                    <div className="var-hint" style={{marginBottom:8,color:'#ea580c',fontWeight:700}}>🔥 산불 대피 3단계 — 상황에 맞는 단계를 골라 발신하세요. 어르신이 "괜찮아/도와줘"로 응답하면 자동 처리됩니다.</div>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                      {WILDFIRE_STAGES.map(s => (
+                        <button key={s.id} className={`alert-template-btn ${wildfireStage===s.id?'alert-template-active':''}`}
+                          style={{flex:'1 1 30%',minWidth:150,justifyContent:'center',...(wildfireStage===s.id?{borderColor:s.color,background:`${s.color}15`}:{})}}
+                          onClick={() => { setWildfireStage(s.id); setAlertScript(tplText('wildfire_'+s.id, s.text)); }}>
+                          <span style={{fontWeight:700,fontSize:13,color:wildfireStage===s.id?s.color:'#374151'}}>{s.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <label className="form-label">🔥 산불 발생 위치 (담당자 입력 · {'{{지역}}'}에 들어감)</label>
+                    <input className="form-input" type="text" value={fireLoc} placeholder="예) 봉화군 도개면 야산"
+                      onChange={e => setFireLoc(e.target.value)} style={{marginBottom:4}}/>
+                    <div className="var-hint" style={{color:'#94a3b8'}}>산불이 난 곳 — 멘트의 {'{{지역}}'} 자리와 어르신이 "어디서 났어?"라고 물을 때의 답변에 쓰입니다. 비워두면 어르신 거주 지역으로 안내됩니다.</div>
+                    <label className="form-label" style={{marginTop:10}}>🏠 대피소명 (담당자 입력 · {'{{대피소}}'}에 들어감)</label>
+                    <input className="form-input" type="text" value={shelterName} placeholder="예) 봉화초등학교 운동장, 북구민운동장"
+                      onChange={e => setShelterName(e.target.value)} style={{marginBottom:4}}/>
+                    <div className="var-hint" style={{color:'#94a3b8'}}>여기에 입력한 대피소명이 경보 멘트의 {'{{대피소}}'} 자리에 들어갑니다. 비워두면 "가까운 대피소"로 안내됩니다.</div>
+                  </div>
+                )}
+                {activeAlert !== 'none' && (
+                  <div className="alert-script-edit">
+                    <label className="form-label">경보 멘트 수정{activeAlert==='wildfire'?' (선택한 단계)':''}</label>
+                    <textarea className="script-textarea" value={alertScript} onChange={e => { setAlertScript(e.target.value); setAlertTplSaved(false); }} rows={activeAlert==='wildfire'?5:3}/>
+                    <div className="var-hint">사용 가능 변수: <code>{'{{지역}}'}</code> <code>{'{{보호자}}'}</code>{activeAlert==='wildfire'&&<> <code>{'{{대피소}}'}</code></>}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8,flexWrap:'wrap'}}>
+                      <button className="btn-primary" style={{fontSize:13,padding:'6px 14px'}} disabled={alertTplSaving} onClick={saveAlertTemplate}>
+                        {alertTplSaving ? '저장 중…' : '💾 이 멘트 저장'}
+                      </button>
+                      <button className="btn-secondary" style={{fontSize:12,padding:'6px 10px'}} disabled={alertTplSaving} onClick={resetAlertTemplate}>기본값으로 되돌리기</button>
+                      {alertTplSaved && <span style={{fontSize:12.5,color:'#16a34a',fontWeight:700}}>✅ 저장됨 — 같은 기관 모든 담당자에게 즉시 적용됩니다</span>}
+                      {savedAlertTpl[curAlertKey()] && !alertTplSaved && <span style={{fontSize:12,color:'#2563eb'}}>· 저장된 맞춤 멘트 사용 중</span>}
+                    </div>
+                    {(() => {
+                      // 실제 발송 미리보기 — 어르신마다 {{지역}} 등이 자기 값으로 치환됨을 "지역별 예시"로 확인
+                      // (체크된 어르신 우선, 없으면 전체 기준. 지역별 1명씩 최대 4개 지역)
+                      const pool = (checked.length ? elders.filter(e => checked.includes(e.id)) : elders).filter(e => e.region);
+                      const byRegion = [];
+                      const seen = new Set();
+                      for (const e of pool) { if (!seen.has(e.region)) { seen.add(e.region); byRegion.push(e); } }
+                      const shown = byRegion.slice(0, 4);
+                      if (!shown.length) shown.push({ name: '어르신', region: '○○구', guardian: '' });
+                      return (
+                        <div style={{marginTop:12,background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:10,padding:'12px 14px'}}>
+                          <div style={{fontWeight:700,fontSize:13,color:'#0369a1',marginBottom:8}}>📋 실제 발송 미리보기 <span style={{fontWeight:500,color:'#64748b'}}>— 어르신마다 자기 지역·보호자{activeAlert==='wildfire'?'·대피소':''} 값으로 채워져 발송됩니다{checked.length?` (선택한 ${checked.length}명 기준)`:''}.</span></div>
+                          {shown.map((e, i) => (
+                            <div key={i} style={{marginBottom: i < shown.length - 1 ? 10 : 0}}>
+                              <div style={{fontSize:12,fontWeight:800,color:'#0369a1',marginBottom:2}}>📍 {e.region} <span style={{fontWeight:500,color:'#94a3b8'}}>({e.name} 어르신 등)</span></div>
+                              <div style={{fontSize:14,lineHeight:1.6,color:'#1f2937',whiteSpace:'pre-wrap'}}>{alertMsgFor(e)}</div>
+                            </div>
+                          ))}
+                          {byRegion.length > shown.length && <div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>… 외 {byRegion.length - shown.length}개 지역도 각자 지역명으로 발송됩니다.</div>}
+                          {activeAlert === 'wildfire' && !shelterName.trim() && <div style={{fontSize:12,color:'#f59e0b',marginTop:6}}>⚠️ 위 대피소명 칸이 비어 있어 "가까운 대피소"로 나옵니다. 대피소명을 입력해 보세요.</div>}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
                 {activeAlert !== 'none' && (
                   <div style={{marginTop:18,borderTop:'1px solid #e5e7eb',paddingTop:16}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
                       <label className="form-label" style={{margin:0}}>📋 이 경보 멘트로 발신할 어르신 (체크 후 일괄 발신)</label>
                       <div style={{display:'flex',gap:6}}>
-                        <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked(elders.filter(e=>weatherData[e.region]?.alert===activeAlert).map(e=>e.id))}>🎯 경보지역 자동선택</button>
+                        {(() => {
+                          // 자동선택 = "지금 선택한 경보 종류"가 발효 중인 지역만 (예: 폭염 선택 시 비 오는 달서구는 제외 — 호우 멘트를 따로 보내는 설계)
+                          const AL = { heatwave:'폭염', cold:'한파', dust:'미세먼지', rain:'호우', typhoon:'태풍', wildfire:'산불' };
+                          const label = AL[activeAlert] || '경보';
+                          return (
+                            <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}}
+                              title={`지금 선택한 '${label}' 경보가 발효 중인 지역의 어르신만 선택합니다. 다른 경보(예: 호우) 지역은 그 경보를 선택한 뒤 눌러 주세요.`}
+                              onClick={()=>setChecked(elders.filter(e=>weatherData[e.region]?.alert===activeAlert).map(e=>e.id))}>🎯 {label} 지역 자동선택</button>
+                          );
+                        })()}
                         <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked(elders.map(e=>e.id))}>전체</button>
                         <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked([])}>해제</button>
                       </div>
@@ -1782,7 +2431,8 @@ export default function App() {
                   <span style={{color:'#94a3b8'}}>~</span>
                   <input type="date" value={callsTo} onChange={e=>setCallsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
                 </>)}
-                <button onClick={fetchCalls} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'⏳':'🔄'}</button>
+                <button onClick={()=>fetchCalls()} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'⏳':'🔄'}</button>
+                <span style={{fontSize:12,color:'#94a3b8'}}>🔄 15초마다 자동 갱신됩니다</span>
                 <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="🔍 이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#1d4ed8':'#e2e8f0'),fontSize:13,width:120}}/>
                 <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#1d4ed8':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#1d4ed8':'#334155',background:'#fff',cursor:'pointer'}}>
                   <option value="">전체 어르신</option>
@@ -1816,6 +2466,13 @@ export default function App() {
                           <div style={{minWidth:46,color:'#64748b',fontSize:13}}>{hm}</div>
                           <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                           <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
+                          {c.transcript && (
+                            <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px',marginLeft:'auto'}}
+                              disabled={!!draftingCallId} title="통화 내용을 AI가 활동일지 초안으로 요약해 일지 작성 창에 채워줍니다"
+                              onClick={()=>makeNoteDraft(c)}>
+                              {draftingCallId===c.id ? '⏳ 초안 생성 중…' : '📝 일지 초안'}
+                            </button>
+                          )}
                           <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
                         </div>
                       );
@@ -1829,6 +2486,14 @@ export default function App() {
           {page==='report' && (
             <div className="fade-in">
               <div className="report-banner"><div className="report-banner-title">📊 {new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>📊 엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>⬇️ PDF 다운로드</button></div></div>
+              <div className="section" style={{marginBottom:16,borderLeft:'4px solid #1d4ed8'}}>
+                <div className="section-title">📥 월간 실적 보고서 (지자체 보고용 엑셀)</div>
+                <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+                  <input type="month" className="form-input" style={{width:170,marginBottom:0}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)}/>
+                  <button className="btn-primary" disabled={monthlyBusy} onClick={downloadMonthlyReport}>{monthlyBusy?'⏳ 생성 중…':'📥 엑셀 다운로드'}</button>
+                  <span style={{fontSize:12,color:'#94a3b8'}}>시트 4개 — 요약(안전확인 성공률·위험감지·일지) · 어르신별 실적 · 일별 현황 · 위험 감지 상세</span>
+                </div>
+              </div>
               <div className="report-stat-grid">
                 {[{label:'총 통화',value:`${reportCalls.length}건`,icon:'📞',color:'#1d4ed8'},{label:'긴급 감지',value:`${reportCalls.filter(c=>c.riskLevel==='critical').length}건`,icon:'🚨',color:'#ef4444'},{label:'주의 감지',value:`${reportCalls.filter(c=>c.riskLevel==='urgent').length}건`,icon:'⚠️',color:'#f59e0b'},{label:'정상 통화',value:`${reportCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length}건`,icon:'✅',color:'#16a34a'},{label:'총 통화 시간',value:`${Math.round(reportCalls.reduce((s,c)=>s+(c.durationSec||0),0)/60)}분`,icon:'⏱️',color:'#7c3aed'},{label:'관리 어르신',value:`${elders.length}명`,icon:'👥',color:'#0891b2'}].map((s,i)=>(
                   <div key={i} className="report-stat-card"><div className="report-stat-icon">{s.icon}</div><div className="report-stat-value" style={{color:s.color}}>{s.value}</div><div className="report-stat-label">{s.label}</div></div>
@@ -1921,8 +2586,8 @@ export default function App() {
           {page==='health' && (
             <div className="fade-in">
               <div className="data-banner" style={{marginBottom:20}}>
-                <div><div className="data-banner-title">💊 어르신 건강 상태 현황</div><div className="data-banner-sub">영실이 앱에서 어르신이 직접 체크한 건강 상태</div></div>
-                <button className={`btn-download ${healthLoading?'btn-calling':''}`} onClick={fetchHealth} disabled={healthLoading}>{healthLoading ? '⏳ 불러오는 중...' : '🔄 갱신'}</button>
+                <div><div className="data-banner-title">💊 어르신 건강 상태 현황</div><div className="data-banner-sub">영실이 앱에서 어르신이 직접 체크한 건강 상태 · 🔄 15초마다 자동 갱신됩니다</div></div>
+                <button className={`btn-download ${healthLoading?'btn-calling':''}`} onClick={()=>fetchHealth()} disabled={healthLoading}>{healthLoading ? '⏳ 불러오는 중...' : '🔄 갱신'}</button>
               </div>
               <div className="report-stat-grid" style={{marginBottom:20}}>
                 <div className="report-stat-card"><div className="report-stat-icon">😊</div><div className="report-stat-value" style={{color:'#16a34a'}}>{healthData.filter(h=>h.status==='good').length}명</div><div className="report-stat-label">좋아요</div></div>
@@ -1931,7 +2596,7 @@ export default function App() {
                 <div className="report-stat-card"><div className="report-stat-icon">📱</div><div className="report-stat-value" style={{color:'#6b7280'}}>{elders.length - healthData.length}명</div><div className="report-stat-label">미체크</div></div>
               </div>
               {(()=>{
-                const un = alertsData.filter(a=>!a.read&&alertIsReal(a));
+                const un = alertsData.filter(a=>(a.status ? a.status !== 'done' : !a.read) && alertIsReal(a));   // 폐루프: 완료(done) 전까지 표시
                 if (un.length === 0) return null;
                 const CAT = {
                   health:  { label:'건강', icon:'❤️', c:'#dc2626', bg:'#fef2f2', bd:'#fecaca' },
@@ -1939,14 +2604,14 @@ export default function App() {
                   emotion: { label:'정서', icon:'💙', c:'#2563eb', bg:'#eff6ff', bd:'#bfdbfe' },
                   living:  { label:'생활', icon:'🧺', c:'#16a34a', bg:'#f0fdf4', bd:'#bbf7d0' },
                   meal:    { label:'식사', icon:'🍚', c:'#ea580c', bg:'#fff7ed', bd:'#fed7aa' },
+                  missed:  { label:'부재중', icon:'📵', c:'#b45309', bg:'#fffbeb', bd:'#fde68a' },
                 };
-                const NOTE_CAT = { health:'health', fall:'safety', emotion:'emotional', living:'welfare', meal:'meal' };
                 const cnt = c => un.filter(a=>(a.category||'health')===c).length;
                 return (
                 <div className="section" style={{marginBottom:20}}>
-                  <div className="section-title">🚨 미확인 알림 ({un.length}건)</div>
+                  <div className="section-title">🚨 미처리 알림 ({un.length}건) <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 조치 시작 → 조치 완료(또는 일지 작성)로 마감하세요</span></div>
                   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
-                    {['health','fall','emotion','living','meal'].map(c=> cnt(c)>0 && (
+                    {['health','fall','emotion','living','meal','missed'].map(c=> cnt(c)>0 && (
                       <span key={c} style={{fontSize:12.5,fontWeight:700,color:CAT[c].c,background:CAT[c].bg,border:'1px solid '+CAT[c].bd,padding:'3px 10px',borderRadius:20}}>{CAT[c].icon} {CAT[c].label} {cnt(c)}건</span>
                     ))}
                   </div>
@@ -1955,9 +2620,20 @@ export default function App() {
                     return (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:m.bg,border:'2px solid '+m.bd,borderRadius:12,padding:'14px 18px',marginBottom:10,flexWrap:'wrap'}}>
                       <span style={{fontSize:24}}>{m.icon}</span>
-                      <div style={{flex:1,minWidth:180}}><div style={{fontSize:14,fontWeight:700,color:m.c,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:11,fontWeight:800,background:m.c,color:'#fff',padding:'2px 8px',borderRadius:20}}>{m.label}</span>{nameByPhone(alert.phone, alert.name)} · "{alert.keyword || (alert.message ? alert.message.split(/감지[::]?/).pop().trim() : alert.message)}"</div><div style={{fontSize:12,color:m.c,marginTop:2,opacity:0.85}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
-                      <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} onClick={()=>openNewNote({elderPhone:alert.phone,elderName:nameByPhone(alert.phone,alert.name),category:NOTE_CAT[alert.category]||'safety',linkedAlertId:alert.id})}>📝 일지 작성</button>
-                      <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/read`,{method:'POST'});fetchHealth();}}>확인</button>
+                      <div style={{flex:1,minWidth:180}}><div style={{fontSize:14,fontWeight:700,color:m.c,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:11,fontWeight:800,background:m.c,color:'#fff',padding:'2px 8px',borderRadius:20}}>{m.label}</span>{nameByPhone(alert.phone, alert.name)} · {alertIsMissed(alert) ? alertKw(alert) : `"${alertKw(alert)}"`}</div><div style={{fontSize:12,color:m.c,marginTop:2,opacity:0.85}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
+                      {alert.status === 'ack' && <span style={{fontSize:12,fontWeight:800,color:'#b45309',background:'#fef3c7',padding:'3px 10px',borderRadius:20}}>🔧 조치중{alert.actionBy?` · ${alert.actionBy.split('@')[0]}`:''}</span>}
+                      <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} disabled={!!draftingAlertId} title="통화 내용을 찾아 초안까지 채워서 엽니다" onClick={()=>openNoteFromAlert(alert)}>{draftingAlertId===alert.id?'⏳ 초안 생성 중…':'📝 일지 작성'}</button>
+                      {(!alert.status || alert.status === 'new') && (
+                        <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'ack'})}).catch(()=>{});fetchHealth();}}>🔧 조치 시작</button>
+                      )}
+                      {alert.status === 'ack' && (
+                        <button className="btn-small" style={{background:'#16a34a',color:'#fff',borderColor:'#16a34a'}} onClick={async()=>{
+                          const note = window.prompt('조치 내용을 입력하세요 (예: 유선 확인 — 이상 없음, 보호자 연락, 방문 예정)');
+                          if (note === null) return;
+                          await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'done',note})}).catch(()=>{});
+                          fetchHealth();
+                        }}>✅ 조치 완료</button>
+                      )}
                     </div>
                     );
                   })}
@@ -2052,7 +2728,9 @@ export default function App() {
                   ))}
                   <span style={{width:1,height:20,background:'#e2e8f0',margin:'0 2px'}}/>
                   <button className="smart-btn" style={{fontSize:12,padding:'5px 10px',...(caseFollowUpOnly?{background:'#f59e0b',borderColor:'#f59e0b',color:'#fff'}:{})}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>🔔 후속 필요{caseFollowUpOnly?' ✕':''}</button>
+                  <button className="btn-secondary" onClick={()=>exportNotesXlsx(caseNotes)} title="일지 전체(최근 90일)를 엑셀로 다운로드 — 기관 보관·결재용">📥 엑셀</button>
                   <button className="btn-primary" onClick={()=>openNewNote()}>＋ 새 일지</button>
+                  <span style={{fontSize:12,color:'#94a3b8'}}>🔄 15초마다 자동 갱신됩니다</span>
                 </div>
               </div>
               {(()=>{
@@ -2132,6 +2810,7 @@ export default function App() {
                               {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>🔗 알림 대응</span>}
                               {fu&&<span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>🔔 후속{n.followUp.dueDate?` ~${n.followUp.dueDate}`:''}</span>}
                               <span style={{flex:1}}/>
+                              <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'✅ 복사됨':'📋 복사'}</button>
                               <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
                               <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
                             </div>
@@ -2251,7 +2930,7 @@ export default function App() {
                       <button onClick={()=>toggleCallActive(selected.id)} style={{fontSize:13,fontWeight:700,padding:'7px 14px',borderRadius:8,cursor:'pointer',...(selected.callActive?{background:'#fff',color:'#64748b',border:'1px solid #d1d5db'}:{background:'#16a34a',color:'#fff',border:'none'})}}>{selected.callActive?'⏸ 중단하기':'▶ 발신 켜기'}</button>
                     </div>
                   </div>
-                  {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',`${selected.address||''} ${selected.addressDetail||''}`.trim()],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle, selected.callDays)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
+                  {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['돌봄군',(CARE_GROUPS[selected.careGroup]||{}).label||'미지정'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',`${selected.address||''} ${selected.addressDetail||''}`.trim()],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle, selected.callDays)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
                 </div>
                 <div className="detail-right">
                   {selected.keyword&&<div className="alert-box"><div className="alert-box-title">🚨 감지된 위험 키워드</div><div className="alert-box-keyword">"{selected.keyword}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
@@ -2298,6 +2977,7 @@ export default function App() {
                               <span style={{fontSize:12,color:'#64748b'}}>{CASE_CAT_META[n.category]||'기타'}</span>
                               {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>🔗 알림 대응</span>}
                               <span style={{flex:1}}/>
+                              <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'✅ 복사됨':'📋 복사'}</button>
                               <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
                               <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
                             </div>
@@ -2425,7 +3105,7 @@ export default function App() {
                   <div className="form-field full-width"><label className="form-label">복지사 전화번호</label><input {...inp('caregiverPhone')} placeholder="010-0000-0000" /></div>
                 </div><div className="form-footer"><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
                 {formStep===2&&(<div className="fade-in"><div className="form-section-title">👨‍👩‍👧 보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">💡 위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
-                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid"><div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #2563eb':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#1d4ed8':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
+                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid"><div className="form-field full-width"><label className="form-label">돌봄군 (노인맞춤돌봄서비스)</label><div className="radio-group">{[{value:'',label:'미지정'},{value:'general',label:'일반돌봄군'},{value:'intensive',label:'중점돌봄군'}].map(opt=><label key={opt.value} className={`radio-option ${form.careGroup===opt.value?'radio-selected':''}`}><input type="radio" name="careGroup" value={opt.value} checked={(form.careGroup||'')===opt.value} onChange={()=>{const g=CARE_GROUPS[opt.value];setForm(f=>({...f,careGroup:opt.value,...(g?{callCycle:'custom',callDays:[...g.days]}:{})}));}} style={{display:'none'}}/>{opt.label}</label>)}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>선택하면 전화 안전확인 권장 주기가 자동 적용됩니다 (일반 주 2회 · 중점 주 1회, 아래에서 수정 가능). 미지정은 기존 주기 그대로.</div></div><div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #2563eb':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#1d4ed8':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
               </div>
             </div>
           )}
