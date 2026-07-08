@@ -1117,6 +1117,49 @@ export default function App() {
     XLSX.writeFile(wb, `영실이_상담방문일지_${new Date().toLocaleDateString('sv-SE')}.xlsx`);
   };
 
+  // 건강 알림 → 일지 작성: 알림 시각 근처(±3시간)의 통화를 찾아 초안(요약)까지 채워서 열기.
+  // 통화를 못 찾으면 감지 신호 문구만이라도 채움(빈 내용란 방지 — 담당자는 추가 작성만).
+  const [draftingAlertId, setDraftingAlertId] = useState(null);
+  const ALERT_CAT_NOTE = { health: 'health', fall: 'safety', emotion: 'emotional', living: 'welfare', meal: 'meal' };
+  const openNoteFromAlert = async (alert) => {
+    if (draftingAlertId) return;
+    setDraftingAlertId(alert.id);
+    const when = alert.timestamp ? new Date(alert.timestamp).toLocaleString('ko-KR') : '';
+    let content = `[신호 감지] "${alert.keyword || alert.message || ''}" (${when})`;
+    let category = ALERT_CAT_NOTE[alert.category] || 'safety';
+    let action = '';
+    try {
+      const ph = String(alert.phone || '').replace(/\D/g, '');
+      if (ph) {
+        const t = alert.timestamp ? new Date(alert.timestamp) : new Date();
+        const from = new Date(t.getTime() - 3 * 3600000).toISOString();
+        const to = new Date(t.getTime() + 3 * 3600000).toISOString();
+        const r = await authFetch(`${SERVER_URL}/calls?phone=${ph}&from=${from}&to=${to}`).then(x => x.json());
+        const cands = (r.calls || []).filter(c => c.transcript);
+        cands.sort((a, b) => Math.abs(new Date(a.at) - t) - Math.abs(new Date(b.at) - t));   // 알림 시각과 가장 가까운 통화
+        const call = cands[0];
+        if (call) {
+          const d = await authFetch(`${SERVER_URL}/case-notes/draft`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ elderName: nameByPhone(alert.phone, alert.name), transcript: call.transcript, riskLevel: call.riskLevel, durationSec: call.durationSec }),
+          }).then(x => x.json());
+          if (d && d.content) {
+            content = `${d.content}
+
+[감지 신호] "${alert.keyword || ''}" (${when})`;
+            if (d.category) category = d.category;
+            action = d.action || '';
+          }
+        }
+      }
+    } catch { /* 폴백: 감지 문구만 */ }
+    openNewNote({
+      elderPhone: alert.phone, elderName: nameByPhone(alert.phone, alert.name), type: 'phone',
+      category, content, action, linkedAlertId: alert.id, visitedAt: alert.timestamp,
+    });
+    setDraftingAlertId(null);
+  };
+
   const openNewNote = (prefill = {}) => {
     const now = prefill.visitedAt ? new Date(prefill.visitedAt) : new Date();   // 통화→초안이면 통화 시각을 상담일시로
     setNoteForm({
@@ -2568,7 +2611,7 @@ export default function App() {
                       <span style={{fontSize:24}}>{m.icon}</span>
                       <div style={{flex:1,minWidth:180}}><div style={{fontSize:14,fontWeight:700,color:m.c,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:11,fontWeight:800,background:m.c,color:'#fff',padding:'2px 8px',borderRadius:20}}>{m.label}</span>{nameByPhone(alert.phone, alert.name)} · "{alert.keyword || (alert.message ? alert.message.split(/감지[::]?/).pop().trim() : alert.message)}"</div><div style={{fontSize:12,color:m.c,marginTop:2,opacity:0.85}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
                       {alert.status === 'ack' && <span style={{fontSize:12,fontWeight:800,color:'#b45309',background:'#fef3c7',padding:'3px 10px',borderRadius:20}}>🔧 조치중{alert.actionBy?` · ${alert.actionBy.split('@')[0]}`:''}</span>}
-                      <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} onClick={()=>openNewNote({elderPhone:alert.phone,elderName:nameByPhone(alert.phone,alert.name),category:NOTE_CAT[alert.category]||'safety',linkedAlertId:alert.id})}>📝 일지 작성</button>
+                      <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} disabled={!!draftingAlertId} title="통화 내용을 찾아 초안까지 채워서 엽니다" onClick={()=>openNoteFromAlert(alert)}>{draftingAlertId===alert.id?'⏳ 초안 생성 중…':'📝 일지 작성'}</button>
                       {(!alert.status || alert.status === 'new') && (
                         <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'ack'})}).catch(()=>{});fetchHealth();}}>🔧 조치 시작</button>
                       )}
