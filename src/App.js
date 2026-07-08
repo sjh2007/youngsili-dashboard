@@ -1843,8 +1843,9 @@ export default function App() {
                 // 어르신별 최신 응답만(safe/help/missed) → help·missed를 상단으로(우선대응)
                 const latest = {};
                 for (const r of alertResponses) { const k = r.phone || r.elderName; if (!latest[k]) latest[k] = r; }
-                const list = Object.values(latest);
-                if (list.length === 0) return null;
+                const checkedCnt = Object.values(latest).filter(r => r.checked).length;
+                const list = Object.values(latest).filter(r => !r.checked);   // 확인 처리된 건 숨김(기록은 보존 → 월간 실적 집계)
+                if (list.length === 0 && checkedCnt === 0) return null;
                 const rank = { help: 0, missed: 1, safe: 2 };
                 list.sort((a, b) => (rank[a.response] ?? 3) - (rank[b.response] ?? 3) || (b.at || '').localeCompare(a.at || ''));
                 const cfg = {
@@ -1860,7 +1861,7 @@ export default function App() {
                 return (
                   <div className="section" style={{borderLeft:'4px solid #ea580c'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
-                      <div className="section-title" style={{margin:0}}>🔥 경보 응답 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(최근 24시간 · 15초 자동 갱신)</span></div>
+                      <div className="section-title" style={{margin:0}}>🔥 경보 응답 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(최근 24시간분 표시 · 15초 자동 갱신{checkedCnt>0?` · 확인됨 ${checkedCnt}건 숨김`:''})</span></div>
                       <div style={{display:'flex',gap:10,fontSize:13,fontWeight:700}}>
                         <span style={{color:'#dc2626'}}>🚨 {nHelp}</span>
                         <span style={{color:'#ea580c'}}>⚠️ {nMissed}</span>
@@ -1868,6 +1869,7 @@ export default function App() {
                         <button className="btn-secondary" style={{fontSize:12,padding:'2px 8px'}} onClick={()=>loadAlertResponses()}>🔄</button>
                       </div>
                     </div>
+                    {list.length === 0 && <div style={{marginTop:10,fontSize:13,color:'#16a34a',fontWeight:600}}>✅ 모든 응답이 확인 처리됐습니다. (확인됨 {checkedCnt}건 · 24시간 경과 시 자동으로 사라집니다)</div>}
                     <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:8}}>
                       {list.map((r, i) => {
                         const c = cfg[r.response] || cfg.safe;
@@ -1887,6 +1889,9 @@ export default function App() {
                                   content:`[산불 경보 ${stageLabel[r.alertStage]||''}] ${r.response==='help'?'어르신이 "도와줘" — 도움 요청':`미응답(자동 재발신 ${r.retryCount||0}회 후)`}. 조치 확인 필요.`,
                                   linkedAlertId:`alertresp_${r.id}` })}>📝 일지</button>
                             )}
+                            <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}
+                              title="확인 처리 — 목록에서 숨겨집니다(기록은 월간 실적에 보존)"
+                              onClick={async()=>{await authFetch(`${SERVER_URL}/alert/responses/${r.id}/check`,{method:'POST'}).catch(()=>{});loadAlertResponses(true);}}>✔ 확인</button>
                           </div>
                         );
                       })}
