@@ -627,7 +627,9 @@ export default function App() {
       setElders(prev => prev.map(e => {
         const a = latestByName[e.name];
         if (!a) return e;
-        const kw = alertIsMissed(a) ? '전화 미응답' : (a.keyword || (a.message ? a.message.split('감지:').pop().trim() : '') || a.message);
+        // 영문 코드값(missed/help/safe)은 짧은 한글 라벨로 (어르신 카드 키워드 태그용)
+        const EN_TAG = { missed: '전화 미응답', help: '구조 요청', safe: '안전 확인', sos: '긴급 호출' };
+        const kw = EN_TAG[a.keyword] || EN_TAG[a.category] || (a.keyword || (a.message ? a.message.split('감지:').pop().trim() : '') || a.message);
         return { ...e, status: a.level === 'critical' ? 'danger' : 'warning', keyword: kw, keywordAt: a.timestamp };
       }));
     }).catch(()=>{});
@@ -839,12 +841,17 @@ export default function App() {
   // 실시간 위험 알림: 등록된 어르신 것만 표시 (테스트/더미 이름 제외)
   const _normPhone = s => String(s||'').replace(/[^0-9]/g,'');
   const alertIsReal = a => elders.some(e => e.name === a.name || (_normPhone(a.phone) && _normPhone(e.phone) === _normPhone(a.phone)));
-  // 부재중(무응답) 알림: 서버가 keyword/category에 내부값 'missed'를 쓰므로 화면엔 사람이 읽는 문구로 변환
+  // 서버 내부 코드값(영문)은 화면에 그대로 노출하지 않고 사람이 읽는 한글로 변환.
+  // 원칙: 대시보드에 영문 원문값 노출 금지 — 새 코드값이 생기면 EN_ALERT_KO에 추가.
+  const EN_ALERT_KO = { missed: '⚠️ 전화 미응답', help: '🚨 도와줘 (구조 요청)', safe: '✅ 괜찮아 (안전 확인)', sos: '🚨 긴급 호출(SOS)' };
   const alertIsMissed = a => a.category === 'missed' || a.keyword === 'missed';
+  const alertEnCode = a => EN_ALERT_KO[a.keyword] ? a.keyword : (EN_ALERT_KO[a.category] ? a.category : null);
   const alertKw = a => {
-    if (alertIsMissed(a)) {
+    const code = alertEnCode(a);
+    if (code) {
+      // 서버 message가 "이름 — (한글 설명)" 형식 → 이름 뒤 본문을 그대로 쓰면 가장 정확
       const body = ((a.message || '').split('— ')[1] || '').replace(/\s*·.*$/, '').trim();
-      return body || (a.level === 'critical' ? '⚠️ 경보 통화 미응답' : '⚠️ 안부전화 부재중');
+      return body || EN_ALERT_KO[code];
     }
     return a.keyword || (a.message ? a.message.split(/감지[::]?/).pop().trim() : '') || a.message || '';
   };
@@ -1131,7 +1138,7 @@ export default function App() {
   // 건강 알림 → 일지 작성: 알림 시각 근처(±3시간)의 통화를 찾아 초안(요약)까지 채워서 열기.
   // 통화를 못 찾으면 감지 신호 문구만이라도 채움(빈 내용란 방지 — 담당자는 추가 작성만).
   const [draftingAlertId, setDraftingAlertId] = useState(null);
-  const ALERT_CAT_NOTE = { health: 'health', fall: 'safety', emotion: 'emotional', living: 'welfare', meal: 'meal', missed: 'safety' };
+  const ALERT_CAT_NOTE = { health: 'health', fall: 'safety', emotion: 'emotional', living: 'welfare', meal: 'meal', missed: 'safety', help: 'safety', safe: 'safety' };
   const openNoteFromAlert = async (alert) => {
     if (draftingAlertId) return;
     setDraftingAlertId(alert.id);
@@ -1663,7 +1670,8 @@ export default function App() {
                   .forEach(a => {
                     const kw = alertKw(a);
                     const el = elders.find(e => e.name === a.name);
-                    alerts.push({ elder: el, name: a.name, msg: alertIsMissed(a) ? `${kw} → 안전확인 필요` : `"${kw}" 위험 키워드 감지`, time: a.timestamp, color: a.level === 'critical' ? '#ef4444' : '#f59e0b', bg: a.level === 'critical' ? '#fef2f2' : '#fffbeb', icon: alertIsMissed(a) ? '📵' : '🚨' });
+                    const code = alertEnCode(a);   // missed/help/safe 등 코드 알림은 문구 자체가 설명 → 따옴표 없이
+                    alerts.push({ elder: el, name: a.name, msg: code ? `${kw} → ${code === 'missed' ? '안전확인 필요' : '즉시 확인'}` : `"${kw}" 위험 키워드 감지`, time: a.timestamp, color: a.level === 'critical' ? '#ef4444' : '#f59e0b', bg: a.level === 'critical' ? '#fef2f2' : '#fffbeb', icon: code === 'missed' ? '📵' : code ? '🆘' : '🚨' });
                   });
                 // 2) 미응답 (어르신 데이터 기반)
                 elders.forEach(e => {
@@ -2625,13 +2633,15 @@ export default function App() {
                   living:  { label:'생활', icon:'🧺', c:'#16a34a', bg:'#f0fdf4', bd:'#bbf7d0' },
                   meal:    { label:'식사', icon:'🍚', c:'#ea580c', bg:'#fff7ed', bd:'#fed7aa' },
                   missed:  { label:'부재중', icon:'📵', c:'#b45309', bg:'#fffbeb', bd:'#fde68a' },
+                  help:    { label:'구조요청', icon:'🆘', c:'#dc2626', bg:'#fef2f2', bd:'#fecaca' },
+                  safe:    { label:'안전확인', icon:'✅', c:'#16a34a', bg:'#f0fdf4', bd:'#bbf7d0' },
                 };
                 const cnt = c => un.filter(a=>(a.category||'health')===c).length;
                 return (
                 <div className="section" style={{marginBottom:20}}>
                   <div className="section-title">🚨 미처리 알림 ({un.length}건) <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 조치 시작 → 조치 완료(또는 일지 작성)로 마감하세요</span></div>
                   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
-                    {['health','fall','emotion','living','meal','missed'].map(c=> cnt(c)>0 && (
+                    {['health','fall','emotion','living','meal','missed','help','safe'].map(c=> cnt(c)>0 && (
                       <span key={c} style={{fontSize:12.5,fontWeight:700,color:CAT[c].c,background:CAT[c].bg,border:'1px solid '+CAT[c].bd,padding:'3px 10px',borderRadius:20}}>{CAT[c].icon} {CAT[c].label} {cnt(c)}건</span>
                     ))}
                   </div>
@@ -2640,7 +2650,7 @@ export default function App() {
                     return (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:m.bg,border:'2px solid '+m.bd,borderRadius:12,padding:'14px 18px',marginBottom:10,flexWrap:'wrap'}}>
                       <span style={{fontSize:24}}>{m.icon}</span>
-                      <div style={{flex:1,minWidth:180}}><div style={{fontSize:14,fontWeight:700,color:m.c,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:11,fontWeight:800,background:m.c,color:'#fff',padding:'2px 8px',borderRadius:20}}>{m.label}</span>{nameByPhone(alert.phone, alert.name)} · {alertIsMissed(alert) ? alertKw(alert) : `"${alertKw(alert)}"`}</div><div style={{fontSize:12,color:m.c,marginTop:2,opacity:0.85}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
+                      <div style={{flex:1,minWidth:180}}><div style={{fontSize:14,fontWeight:700,color:m.c,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:11,fontWeight:800,background:m.c,color:'#fff',padding:'2px 8px',borderRadius:20}}>{m.label}</span>{nameByPhone(alert.phone, alert.name)} · {alertEnCode(alert) ? alertKw(alert) : `"${alertKw(alert)}"`}</div><div style={{fontSize:12,color:m.c,marginTop:2,opacity:0.85}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
                       {alert.status === 'ack' && <span style={{fontSize:12,fontWeight:800,color:'#b45309',background:'#fef3c7',padding:'3px 10px',borderRadius:20}}>🔧 조치중{alert.actionBy?` · ${alert.actionBy.split('@')[0]}`:''}</span>}
                       <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} disabled={!!draftingAlertId} title="통화 내용을 찾아 초안까지 채워서 엽니다" onClick={()=>openNoteFromAlert(alert)}>{draftingAlertId===alert.id?'⏳ 초안 생성 중…':'📝 일지 작성'}</button>
                       {(!alert.status || alert.status === 'new') && (
