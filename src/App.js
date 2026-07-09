@@ -519,7 +519,9 @@ export default function App() {
     const t = setInterval(() => fetchHealth(true), 15000);   // 건강 리포트도 15초 자동 갱신(알림과 동일)
     return () => clearInterval(t);
   }, [page]); // eslint-disable-line
-  useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo]); // eslint-disable-line
+  // authUser 의존 추가: 새로고침으로 #report 직행 시 로그인 복원 전 무토큰 401로 통계가 0건 고정되던 버그
+  // (elders 등은 로그인 시 재로드되는데 stats만 빠져 있었음 — 로그인 복원되면 자동 재조회)
+  useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo, authUser]); // eslint-disable-line
   useEffect(() => {
     if (page !== 'calls' && page !== 'elders' && page !== 'dashboard' && page !== 'safety') return;   // safety=안전확인 관리(주기 준수율)
     fetchCalls();
@@ -2523,8 +2525,9 @@ export default function App() {
                   </div>
                 </div>
 
-                {(!statsData || statsData.available===false) ? (
-                  <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{statsLoading?'불러오는 중...':'아직 통계 데이터가 없습니다. 통화 중 위험 키워드가 감지되면 자동으로 쌓입니다.'}</div>
+                {(!statsData || statsData.available !== true) ? (
+                  // available!==true: 실패 응답({error:'인증 필요'} 등)이 '0건'으로 그럴듯하게 표시되지 않게
+                  <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{statsLoading?'불러오는 중...':(statsData&&statsData.error?'통계를 불러오지 못했습니다. 🔄 버튼으로 다시 시도해 주세요.':'아직 통계 데이터가 없습니다. 통화 중 위험 키워드가 감지되면 자동으로 쌓입니다.')}</div>
                 ) : (()=>{
                   const elderEntries = Object.entries(statsData.elders||{})
                     .filter(([name])=>elders.some(e=>e.name===name))  // 등록된 어르신만 (옛 이름·더미 제외)
