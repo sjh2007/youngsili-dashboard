@@ -2563,22 +2563,39 @@ export default function App() {
                 })()}
               </div>
               <div className="section">
-                <div className="section-title">🎯 위험도 분포</div>
+                <div className="section-title">🎯 위험도 분포 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 위 키워드 통계와 같은 기간 기준 (긴급 감지=위험, 그 외 감지=주의)</span></div>
+                {(()=>{
+                  // 위 '위험 키워드 통계'와 같은 데이터(선택 기간 statsData)로 분류 — 실시간 알림 상태(status)와
+                  // 소스가 달라 "목록엔 주의 감지가 있는데 그래프는 0명"으로 어긋나던 문제 수정.
+                  const st = (statsData && statsData.elders) || null;
+                  const lvlOf = (name) => {
+                    if (!st) return null;
+                    const es = st[name];
+                    if (!es || !es.total) return 'normal';
+                    return ((es.byLevel || {}).critical || 0) > 0 ? 'danger' : 'warning';
+                  };
+                  // statsData 없으면(로딩·서버 장애) 기존 실시간 상태 기준 폴백
+                  const rDanger  = st ? elders.filter(e => lvlOf(e.name) === 'danger').length  : danger;
+                  const rWarning = st ? elders.filter(e => lvlOf(e.name) === 'warning').length : warning;
+                  const rNormal  = Math.max(0, elders.length - rDanger - rWarning);
+                  return (
                 <div className="donut-wrap">
                   <div className="donut-chart">
                     <svg viewBox="0 0 120 120" width="160" height="160">
                       <circle cx="60" cy="60" r="45" fill="none" stroke="#fef2f2" strokeWidth="18"/>
-                      <circle cx="60" cy="60" r="45" fill="none" stroke="#ef4444" strokeWidth="18" strokeDasharray={`${danger/elders.length*283} 283`} strokeDashoffset="0" transform="rotate(-90 60 60)"/>
-                      <circle cx="60" cy="60" r="45" fill="none" stroke="#f59e0b" strokeWidth="18" strokeDasharray={`${warning/elders.length*283} 283`} strokeDashoffset={`-${danger/elders.length*283}`} transform="rotate(-90 60 60)"/>
-                      <circle cx="60" cy="60" r="45" fill="none" stroke="#22c55e" strokeWidth="18" strokeDasharray={`${normal/elders.length*283} 283`} strokeDashoffset={`-${(danger+warning)/elders.length*283}`} transform="rotate(-90 60 60)"/>
+                      <circle cx="60" cy="60" r="45" fill="none" stroke="#ef4444" strokeWidth="18" strokeDasharray={`${rDanger/elders.length*283} 283`} strokeDashoffset="0" transform="rotate(-90 60 60)"/>
+                      <circle cx="60" cy="60" r="45" fill="none" stroke="#f59e0b" strokeWidth="18" strokeDasharray={`${rWarning/elders.length*283} 283`} strokeDashoffset={`-${rDanger/elders.length*283}`} transform="rotate(-90 60 60)"/>
+                      <circle cx="60" cy="60" r="45" fill="none" stroke="#22c55e" strokeWidth="18" strokeDasharray={`${rNormal/elders.length*283} 283`} strokeDashoffset={`-${(rDanger+rWarning)/elders.length*283}`} transform="rotate(-90 60 60)"/>
                       <text x="60" y="55" textAnchor="middle" fontSize="14" fontWeight="900" fill="#0f172a">{elders.length}</text>
                       <text x="60" y="70" textAnchor="middle" fontSize="9" fill="#94a3b8">전체</text>
                     </svg>
                   </div>
                   <div className="donut-legend">
-                    {[{label:'위험',count:danger,color:'#ef4444'},{label:'주의',count:warning,color:'#f59e0b'},{label:'정상',count:normal,color:'#22c55e'}].map(item=>(<div key={item.label} className="donut-legend-item"><div className="donut-dot" style={{background:item.color}}/><div><div className="donut-label">{item.label}</div><div className="donut-count" style={{color:item.color}}>{item.count}명 ({Math.round(item.count/elders.length*100)}%)</div></div></div>))}
+                    {[{label:'위험',count:rDanger,color:'#ef4444'},{label:'주의',count:rWarning,color:'#f59e0b'},{label:'정상',count:rNormal,color:'#22c55e'}].map(item=>(<div key={item.label} className="donut-legend-item"><div className="donut-dot" style={{background:item.color}}/><div><div className="donut-label">{item.label}</div><div className="donut-count" style={{color:item.color}}>{item.count}명 ({Math.round(item.count/elders.length*100)}%)</div></div></div>))}
                   </div>
                 </div>
+                  );
+                })()}
               </div>
             </div>
           )}
