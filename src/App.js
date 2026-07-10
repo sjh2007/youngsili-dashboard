@@ -1046,6 +1046,8 @@ export default function App() {
     etc:      { label: '기타', icon: '📄', color: '#64748b', bg: '#f1f5f9' },
   };
   const CASE_CAT_META = { safety:'안전', health:'건강', meal:'식사', emotional:'정서', welfare:'복지연계', etc:'기타' };
+  // 주간업무 보고서(공식 양식)의 업무 구분 체크박스: □사회 □신체 □가사 □기타
+  const CASE_TOPIC_META = { social:'사회', physical:'신체', housework:'가사', etc:'기타' };
 
   const loadCaseNotes = async (silent = false) => {
     if (!silent) setCaseLoading(true);
@@ -1104,6 +1106,7 @@ export default function App() {
       `어르신: ${n.elderName || ''}`,
       '', n.content || '',
     ];
+    if (n.topics && n.topics.length) lines.push('', `업무 구분: ${n.topics.map(t=>({social:'사회',physical:'신체',housework:'가사',etc:'기타'}[t])).filter(Boolean).join(', ')}`);
     if (n.action) lines.push('', `조치사항: ${n.action}`);
     if (n.followUp && n.followUp.needed) lines.push(`후속조치 필요${n.followUp.dueDate ? ` (기한: ${n.followUp.dueDate})` : ''}`);
     return lines.join('\n');
@@ -1133,6 +1136,83 @@ export default function App() {
     ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 60 }, { wch: 26 }, { wch: 8 }, { wch: 11 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, ws, '상담방문일지');
     XLSX.writeFile(wb, `영실이_상담방문일지_${new Date().toLocaleDateString('sv-SE')}.xlsx`);
+  };
+
+  // ── 주간업무 보고서 (공식 PDF 양식 재현) ──
+  // 월 단위 1장: 1~5주차 블록에 그 주의 일지를 자동 채움(일반돌봄 주2회·중점 주1회 통화라 주차당 한 칸에 충분).
+  // 각 주차 상단에 □사회 □신체 □가사 □기타 — 일지의 '업무 구분' 체크 합집합. 새 창에서 인쇄 → PDF 저장.
+  const [weeklyModal, setWeeklyModal] = useState(null);   // { phone, ym, benefit }
+  const openWeeklyReport = () => {
+    const first = elders[0];
+    setWeeklyModal({
+      phone: first ? String(first.phone||'').replace(/\D/g,'') : '',
+      ym: new Date().toISOString().slice(0,7),
+      benefit: '노인맞춤돌봄서비스',
+    });
+  };
+  const printWeeklyReport = () => {
+    if (!weeklyModal || !weeklyModal.phone) { window.alert('어르신을 선택해 주세요.'); return; }
+    const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === weeklyModal.phone) || {};
+    const [y, m] = weeklyModal.ym.split('-').map(Number);
+    const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
+    const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    const notes = caseNotes.filter(n => {
+      const ph = String(n.elderPhone||'').replace(/\D/g,'');
+      const d = n.visitedAt ? new Date(n.visitedAt) : null;
+      return ph === weeklyModal.phone && d && d.getFullYear() === y && (d.getMonth()+1) === m;
+    }).sort((a,b)=>(a.visitedAt||'').localeCompare(b.visitedAt||''));
+    const weeks = [[],[],[],[],[]];
+    notes.forEach(n => { const day = new Date(n.visitedAt).getDate(); weeks[Math.min(4, Math.floor((day-1)/7))].push(n); });
+    const weekRows = weeks.map((wNotes, i) => {
+      const tset = new Set(); wNotes.forEach(n => (n.topics||[]).forEach(t=>tset.add(t)));
+      const boxes = Object.entries(CASE_TOPIC_META).map(([k,l]) => `<span class="cb">${tset.has(k)?'&#9745;':'&#9744;'}${l}</span>`).join('');
+      const body = wNotes.map(n => {
+        const d = new Date(n.visitedAt);
+        return `${m}/${d.getDate()} [${TYPE_KO[n.type]||'기타'}] ${esc(n.content)}${n.action?`<br>&nbsp;&nbsp;→ 조치: ${esc(n.action)}`:''}`;
+      }).join('<br>');
+      return `<tr><td class="wkhead" colspan="2">${i+1}주차</td></tr>
+        <tr><td class="lbl">업무내용<br>특이사항</td><td class="cell"><div class="boxes" contenteditable="true">${boxes}</div><div contenteditable="true" class="body">${body||'&nbsp;'}</div></td></tr>`;
+    }).join('');
+    const today = new Date();
+    const author = (me && me.name) || ((authUser && authUser.email) || '').split('@')[0];
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${y}년 ${m}월 주간업무 보고서 — ${esc(el.name||'')}</title><style>
+      body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;margin:28px auto;max-width:760px;color:#111}
+      h1{text-align:center;font-size:24px;letter-spacing:2px;text-decoration:underline;text-underline-offset:6px;margin:10px 0 24px}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}
+      td{border:1.5px solid #333;padding:8px 10px;font-size:13.5px;vertical-align:top;word-break:break-all}
+      .hd td.k{background:#e8e8e8;font-weight:800;text-align:center;width:19%}
+      .hd td.v{width:31%}
+      .wkhead{background:#d9d9d9;font-weight:800;text-align:center;padding:5px}
+      .lbl{width:16%;font-weight:800;text-align:center;vertical-align:middle;background:#fff}
+      .cell{min-height:86px}
+      .boxes{margin-bottom:6px;font-weight:700}
+      .cb{margin-right:22px}
+      .body{min-height:64px;line-height:1.55}
+      .sign{margin-top:26px;text-align:center;font-size:15px;font-weight:700}
+      .sig2{text-align:right;margin-top:14px;font-size:14px}
+      .foot{text-align:right;margin-top:22px;font-size:13px;font-weight:700}
+      .noprint{position:fixed;top:12px;right:12px}
+      .noprint button{padding:10px 18px;font-size:14px;font-weight:800;border-radius:8px;border:0;background:#1d4ed8;color:#fff;cursor:pointer}
+      .hint{position:fixed;top:12px;left:12px;font-size:12px;color:#64748b;background:#f1f5f9;padding:6px 10px;border-radius:8px}
+      @media print{.noprint,.hint{display:none}body{margin:0 auto}}
+    </style></head><body>
+      <div class="hint">✏️ 칸을 클릭하면 인쇄 전에 내용을 고칠 수 있어요</div>
+      <div class="noprint"><button onclick="window.print()">🖨 인쇄 / PDF 저장</button></div>
+      <h1>${y}년 ${m}월 주간업무 보고서</h1>
+      <table class="hd">
+        <tr><td class="k">이용자 성명</td><td class="v" contenteditable="true">${esc(el.name||'')}</td><td class="k">이용자 생년월일</td><td class="v" contenteditable="true">${el.age?('만 '+el.age+'세'):''}</td></tr>
+        <tr><td class="k">급여종류</td><td class="v" contenteditable="true">${esc(weeklyModal.benefit)}</td><td class="k">생활지원사 성명</td><td class="v" contenteditable="true">${esc(author)}</td></tr>
+      </table>
+      <table style="margin-top:-1.5px">${weekRows}
+        <tr><td class="lbl">전담인력<br>지시사항</td><td class="cell"><div contenteditable="true" class="body">&nbsp;</div></td></tr>
+      </table>
+      <div class="sign">${today.getFullYear()}년 &nbsp; ${today.getMonth()+1}월 &nbsp; ${today.getDate()}일</div>
+      <div class="sig2">전담인력 : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (서명 또는 印)</div>
+    </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { window.alert('팝업이 차단됐습니다. 팝업을 허용해 주세요.'); return; }
+    w.document.write(html); w.document.close();
+    setWeeklyModal(null);
   };
 
   // 건강 알림 → 일지 작성: 알림 시각 근처(±3시간)의 통화를 찾아 초안(요약)까지 채워서 열기.
@@ -1189,6 +1269,7 @@ export default function App() {
       type: prefill.type || 'visit',
       category: prefill.category || 'safety',
       content: prefill.content || '', action: prefill.action || '',
+      topics: prefill.topics || [],
       visitedDate: dateStrOf(now), visitedTime: roundHalf(now),
       linkedAlertId: prefill.linkedAlertId || '',
       followUpNeeded: false, followUpDue: '',
@@ -1202,6 +1283,7 @@ export default function App() {
       elderPhone: n.elderPhone || '', elderName: n.elderName || '',
       type: n.type || 'visit', category: n.category || 'safety',
       content: n.content || '', action: n.action || '',
+      topics: n.topics || [],
       visitedDate: dateStrOf(d), visitedTime: timeStrOf(d),
       linkedAlertId: n.linkedAlertId || '',
       followUpNeeded: !!(n.followUp && n.followUp.needed), followUpDue: (n.followUp && n.followUp.dueDate) || '',
@@ -1216,6 +1298,7 @@ export default function App() {
       elderPhone: noteForm.elderPhone, elderName: noteForm.elderName,
       type: noteForm.type, category: noteForm.category,
       content: noteForm.content, action: noteForm.action,
+      topics: noteForm.topics || [],
       visitedAt: (noteForm.visitedDate && noteForm.visitedTime) ? new Date(`${noteForm.visitedDate}T${noteForm.visitedTime}`).toISOString() : new Date().toISOString(),
       linkedAlertId: noteForm.linkedAlertId,
       followUp: { needed: noteForm.followUpNeeded, dueDate: noteForm.followUpNeeded ? (noteForm.followUpDue || null) : null, done: false },
@@ -1225,6 +1308,7 @@ export default function App() {
       elderPhone: noteForm.elderPhone, elderName: noteForm.elderName,
       type: noteForm.type, category: noteForm.category,
       content: noteForm.content, action: noteForm.action,
+      topics: noteForm.topics || [],
       authorEmail: (authUser && authUser.email) || '',
       linkedAlertId: noteForm.linkedAlertId, visitedAt: body.visitedAt, followUp: body.followUp,
     };
@@ -1528,6 +1612,27 @@ export default function App() {
         </div>
       )}
 
+      {weeklyModal && (
+        <div className="modal-overlay" onClick={()=>setWeeklyModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:440,width:'94%',textAlign:'left'}}>
+            <h3 style={{margin:'0 0 6px'}}>📄 주간업무 보고서</h3>
+            <div style={{fontSize:13,color:'#64748b',marginBottom:14}}>선택한 달의 상담·방문 일지를 공식 양식(1~5주차)에 자동으로 채워 인쇄(PDF 저장)합니다.</div>
+            <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>어르신</label>
+            <select className="form-input" style={{width:'100%',marginBottom:12}} value={weeklyModal.phone} onChange={e=>setWeeklyModal(f=>({...f,phone:e.target.value}))}>
+              {elders.map(e=>(<option key={e.id} value={String(e.phone||'').replace(/\D/g,'')}>{e.name} ({e.phone})</option>))}
+            </select>
+            <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>대상 월</label>
+            <input type="month" className="form-input" style={{width:'100%',marginBottom:12}} value={weeklyModal.ym} onChange={e=>setWeeklyModal(f=>({...f,ym:e.target.value}))}/>
+            <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>급여종류</label>
+            <input className="form-input" style={{width:'100%',marginBottom:16}} value={weeklyModal.benefit} onChange={e=>setWeeklyModal(f=>({...f,benefit:e.target.value}))}/>
+            <div className="modal-btns" style={{justifyContent:'flex-end'}}>
+              <button className="btn-secondary" onClick={()=>setWeeklyModal(null)}>취소</button>
+              <button className="btn-primary" onClick={printWeeklyReport}>🖨 양식 열기 (인쇄·PDF)</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {noteModal && noteForm && (()=>{
         const L={display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5,textAlign:'left'};
         const I={width:'100%',display:'block',boxSizing:'border-box',margin:0};
@@ -1557,6 +1662,18 @@ export default function App() {
                 <select className="form-input" style={I} value={noteForm.category} onChange={e=>setNoteForm(f=>({...f,category:e.target.value}))}>
                   {Object.entries(CASE_CAT_META).map(([k,l])=>(<option key={k} value={k}>{l}</option>))}
                 </select>
+              </div>
+              <div>
+                <label style={L}>업무 구분 <span style={{fontWeight:500,color:'#94a3b8'}}>(주간업무 보고서 체크란 — 복수 선택)</span></label>
+                <div style={{display:'flex',gap:14,flexWrap:'wrap',padding:'6px 2px'}}>
+                  {Object.entries(CASE_TOPIC_META).map(([k,l])=>(
+                    <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:14,fontWeight:600,color:'#374151',cursor:'pointer'}}>
+                      <input type="checkbox" checked={(noteForm.topics||[]).includes(k)}
+                        onChange={e=>setNoteForm(f=>({...f,topics:e.target.checked?[...(f.topics||[]),k]:(f.topics||[]).filter(t=>t!==k)}))}/>
+                      {l}
+                    </label>
+                  ))}
+                </div>
               </div>
               <div>
                 <label style={L}>상담 일시</label>
@@ -2758,6 +2875,7 @@ export default function App() {
                   ))}
                   <span style={{width:1,height:20,background:'#e2e8f0',margin:'0 2px'}}/>
                   <button className="smart-btn" style={{fontSize:12,padding:'5px 10px',...(caseFollowUpOnly?{background:'#f59e0b',borderColor:'#f59e0b',color:'#fff'}:{})}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>🔔 후속 필요{caseFollowUpOnly?' ✕':''}</button>
+                  <button className="btn-secondary" onClick={openWeeklyReport} title="공식 양식(1~5주차·사회/신체/가사/기타)에 이번 달 일지를 자동으로 채워 인쇄(PDF)합니다">📄 주간업무 보고서</button>
                   <button className="btn-secondary" onClick={()=>exportNotesXlsx(caseNotes)} title="일지 전체(최근 90일)를 엑셀로 다운로드 — 기관 보관·결재용">📥 엑셀</button>
                   <button className="btn-primary" onClick={()=>openNewNote()}>＋ 새 일지</button>
                   <span style={{fontSize:12,color:'#94a3b8'}}>🔄 15초마다 자동 갱신됩니다</span>
@@ -2837,6 +2955,7 @@ export default function App() {
                               <span style={{fontSize:12,fontWeight:700,color:tmeta.color,background:tmeta.bg,padding:'2px 8px',borderRadius:20}}>{tmeta.icon} {tmeta.label}</span>
                               <span style={{fontWeight:700,fontSize:14}}>{nameByPhone(n.elderPhone,n.elderName)}</span>
                               <span style={{fontSize:12,color:'#64748b'}}>· {CASE_CAT_META[n.category]||'기타'}</span>
+                              {(n.topics||[]).length>0 && <span style={{fontSize:11.5,fontWeight:700,color:'#7c3aed',background:'#f5f3ff',border:'1px solid #ddd6fe',borderRadius:12,padding:'2px 8px'}}>{(n.topics||[]).map(t=>CASE_TOPIC_META[t]).filter(Boolean).join('·')}</span>}
                               {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>🔗 알림 대응</span>}
                               {fu&&<span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>🔔 후속{n.followUp.dueDate?` ~${n.followUp.dueDate}`:''}</span>}
                               <span style={{flex:1}}/>
