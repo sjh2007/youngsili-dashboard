@@ -1,5 +1,5 @@
-// 로그인 / 회원가입(이메일 인증) / 인증대기 / 기관설정 — 영실이 색상
-import { useState } from 'react';
+// 로그인 / 회원가입(이메일 인증) / 인증대기 / 기관설정 / 초대 가입 — 영실이 색상
+import { useState, useEffect } from 'react';
 import { auth } from './firebase';
 import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -32,6 +32,47 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   const [agree, setAgree] = useState({ tos: false, privacy: false, mkt: false });
   // 기관설정(안전망)
   const [orgName, setOrgName] = useState('');
+  // 초대 가입 (#invite=INV-XXXXXX): 링크로 들어온 구성원 — 기관·역할 자동 귀속
+  const ROLE_KO = { admin: '센터장(관리자)', staff: '전담직원', worker: '지원사' };
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteInfo, setInviteInfo] = useState(null);   // { valid, role, orgName, used, expired }
+  const [iv, setIv] = useState({ name: '', phone: '', email: '', pw: '', pw2: '' });
+  useEffect(() => {
+    const m = window.location.hash.match(/invite=([A-Za-z0-9-]+)/);
+    if (!m) return;
+    const code = m[1].toUpperCase();
+    setInviteCode(code);
+    fetch(`${serverUrl}/invites/${code}/info`).then(r => r.json()).then(setInviteInfo).catch(() => setInviteInfo({ valid: false }));
+  }, []); // eslint-disable-line
+  const acceptInvite = async () => {
+    const r = await authFetch(`${serverUrl}/invites/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: inviteCode, name: iv.name.trim(), phone: iv.phone }) });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || '초대 수락 실패');
+    window.location.hash = '';   // 초대 해시 제거 → 대시보드로
+    onProvisioned && onProvisioned();
+  };
+  const doInviteSignup = async () => {
+    setErr('');
+    if (!iv.name.trim()) return setErr('이름을 입력하세요.');
+    if (!iv.email.trim()) return setErr('이메일을 입력하세요.');
+    if (!PW_RE.test(iv.pw)) return setErr('비밀번호는 영문+숫자+특수문자 조합 8~20자여야 합니다.');
+    if (iv.pw !== iv.pw2) return setErr('비밀번호가 일치하지 않습니다.');
+    setBusy(true);
+    try {
+      try {
+        await createUserWithEmailAndPassword(auth, iv.email.trim(), iv.pw);
+      } catch (e) {
+        if (e.code === 'auth/email-already-in-use') await signInWithEmailAndPassword(auth, iv.email.trim(), iv.pw);
+        else throw e;
+      }
+      await acceptInvite();
+    } catch (e) {
+      setErr(e.code === 'auth/invalid-email' ? '이메일 형식이 올바르지 않습니다.'
+        : /wrong-password|invalid-credential/.test(e.code || '') ? '이미 가입된 이메일입니다. 기존 비밀번호로 입력해 주세요.'
+        : (e.message || '가입 실패. 잠시 후 다시 시도해 주세요.'));
+    }
+    setBusy(false);
+  };
 
   const Header = () => (
     <div style={{ textAlign: 'center', marginBottom: 22 }}>
@@ -42,6 +83,28 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   );
 
   // (이메일 인증은 더 이상 차단하지 않음 — 대시보드 상단 리마인더 배너로 안내)
+
+  // ── 초대 링크로 진입 + 이미 로그인됨(기관 미소속) → 초대 수락만 ──
+  if (authUser && needsProvision && inviteCode && inviteInfo && inviteInfo.valid) {
+    const accept = async () => {
+      setErr(''); setBusy(true);
+      try { await acceptInvite(); } catch (e) { setErr(e.message || '초대 수락 실패'); }
+      setBusy(false);
+    };
+    return (
+      <div style={wrap}><div style={card}>
+        <Header />
+        <div style={{ fontSize: 18, fontWeight: 800, color: NAVY, textAlign: 'center' }}>✉️ {inviteInfo.orgName || '기관'} 초대</div>
+        <div style={{ fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8 }}>{ROLE_KO[inviteInfo.role] || '구성원'} 역할로 초대되었어요. 이름을 입력하고 합류하세요.</div>
+        <div style={label}>이름</div>
+        <input style={input} value={iv.name} onChange={e => setIv(s => ({ ...s, name: e.target.value }))} placeholder="실명 입력" />
+        <div style={label}>휴대폰 번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택)</span></div>
+        <input style={input} value={iv.phone} onChange={e => setIv(s => ({ ...s, phone: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="숫자만 입력" inputMode="numeric" />
+        {err && <div style={errBox}>{err}</div>}
+        <button style={{ ...primaryBtn, background: GREEN }} disabled={busy || !iv.name.trim()} onClick={accept}>{busy ? '합류 중…' : '초대 수락하고 시작하기 →'}</button>
+      </div></div>
+    );
+  }
 
   // ── 기관 설정(가입 직후 provision 실패한 안전망) ──
   if (authUser && needsProvision) {
@@ -113,6 +176,47 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
 
   const allAgree = agree.tos && agree.privacy && agree.mkt;
   const toggleAll = () => { const v = !allAgree; setAgree({ tos: v, privacy: v, mkt: v }); };
+
+  // ── 초대 링크 가입 (#invite=…) — 기관 생성 없이 초대된 기관·역할로 합류 ──
+  if (inviteCode) {
+    return (
+      <div style={wrap}><div style={card}>
+        <Header />
+        {!inviteInfo ? (
+          <div style={{ textAlign: 'center', color: '#64748b', padding: 20 }}>초대 정보를 확인하는 중…</div>
+        ) : !inviteInfo.valid ? (
+          <div style={{ textAlign: 'center', padding: 10 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#dc2626' }}>{inviteInfo.used ? '이미 사용된 초대예요' : inviteInfo.expired ? '만료된 초대예요' : '유효하지 않은 초대예요'}</div>
+            <div style={{ fontSize: 14, color: '#475569', marginTop: 8 }}>관리자에게 새 초대 링크를 요청해 주세요.</div>
+            <button style={{ ...primaryBtn, marginTop: 20 }} onClick={() => { window.location.hash = ''; setInviteCode(''); }}>로그인 화면으로</button>
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: NAVY, textAlign: 'center' }}>✉️ {inviteInfo.orgName || '기관'} 초대</div>
+            <div style={{ fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 6 }}>
+              <b>{ROLE_KO[inviteInfo.role] || '구성원'}</b> 역할로 초대되었어요. 가입 정보를 입력해 주세요.
+            </div>
+            <div style={label}>이름</div>
+            <input style={input} value={iv.name} onChange={e => setIv(s => ({ ...s, name: e.target.value }))} placeholder="실명 입력" />
+            <div style={label}>휴대폰 번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택)</span></div>
+            <input style={input} value={iv.phone} onChange={e => setIv(s => ({ ...s, phone: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="숫자만 입력" inputMode="numeric" />
+            <div style={label}>아이디 (이메일)</div>
+            <input style={input} type="email" value={iv.email} onChange={e => setIv(s => ({ ...s, email: e.target.value }))} placeholder="example@example.com" autoComplete="off" />
+            <div style={label}>비밀번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>*영문+숫자+특수문자 8~20자</span></div>
+            <input style={input} type="password" value={iv.pw} onChange={e => setIv(s => ({ ...s, pw: e.target.value }))} autoComplete="new-password" placeholder="비밀번호 입력" />
+            <div style={label}>비밀번호 확인</div>
+            <input style={input} type="password" value={iv.pw2} onChange={e => setIv(s => ({ ...s, pw2: e.target.value }))} onKeyDown={e => e.key === 'Enter' && doInviteSignup()} autoComplete="new-password" placeholder="비밀번호 재입력" />
+            {err && <div style={errBox}>{err}</div>}
+            <button style={{ ...primaryBtn, background: GREEN }} disabled={busy} onClick={doInviteSignup}>{busy ? '합류 중…' : '가입하고 합류하기 →'}</button>
+            <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#64748b' }}>
+              이미 계정이 있으면 이메일·기존 비밀번호를 입력하면 바로 합류됩니다.
+            </div>
+          </div>
+        )}
+        <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#94a3b8' }}>© 2026 KRAFT · AI 영실이</div>
+      </div></div>
+    );
+  }
 
   return (
     <div style={wrap}><div style={card}>
