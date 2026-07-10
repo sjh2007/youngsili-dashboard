@@ -1325,7 +1325,12 @@ export default function App() {
   };
 
   // ── 급여제공 일정표 (스트림 C): 세로(날짜 리스트) 입력 → 저장 → 공식 달력 양식 인쇄 ──
-  const [schedModal, setSchedModal] = useState(null);   // { phone, ym, days:{}, categories:[], birth, residence, workerName, saving }
+  const [schedModal, setSchedModal] = useState(null);   // { phone, ym, days:{}, holidays:[], categories:[], birth, residence, workerName, saving }
+  // 급여 산정: 월 인정 한도 120시간, 주말·공휴일 1.5배 (입력 2h → 인정 3h)
+  const SCHED_CAP = 120, SCHED_RATE = 1.5;
+  // 2026년 법정 공휴일(대체 포함) — 자동 반영. 임시·대체 변경은 날짜 클릭으로 수동 지정/해제.
+  const KR_HOLIDAYS = ['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-06','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-09-28','2026-10-03','2026-10-05','2026-10-09','2026-12-25'];
+  const autoHolidays = (ym) => KR_HOLIDAYS.filter(d => d.startsWith(ym)).map(d => Number(d.slice(8)));
   // 반응형: PC(≥900px)=달력형(가로 7열, 공식 양식과 동일 배치·주 합계 열) / 모바일=세로 날짜 리스트(한 손 입력)
   const [winWide, setWinWide] = useState(typeof window !== 'undefined' && window.innerWidth >= 900);
   useEffect(() => {
@@ -1344,6 +1349,7 @@ export default function App() {
       setSchedModal(f => ({
         ...f, phone, ym, loaded: true,
         days: (minePh && minePh.days) || {},
+        holidays: (minePh && minePh.holidays) || autoHolidays(ym),
         categories: (minePh && minePh.categories) || [],
         birth: (minePh && minePh.birth) || '',
         residence: (minePh && minePh.residence) || el.region || '',
@@ -1355,7 +1361,7 @@ export default function App() {
     const first = elders[0];
     const phone = first ? String(first.phone||'').replace(/\D/g,'') : '';
     const ym = new Date().toISOString().slice(0,7);
-    setSchedModal({ phone, ym, days: {}, categories: [], birth: '', residence: '', workerName: '', loaded: false });
+    setSchedModal({ phone, ym, days: {}, holidays: autoHolidays(ym), categories: [], birth: '', residence: '', workerName: '', loaded: false });
     if (isStaffUp && accounts.length === 0) fetchAccounts();
     if (phone) loadSchedule(phone, ym);
   };
@@ -1364,7 +1370,7 @@ export default function App() {
     setSchedModal(f => ({ ...f, saving: true }));
     try {
       const r = await authFetch(`${SERVER_URL}/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        elderPhone: schedModal.phone, ym: schedModal.ym, days: schedModal.days,
+        elderPhone: schedModal.phone, ym: schedModal.ym, days: schedModal.days, holidays: schedModal.holidays || [],
         categories: schedModal.categories, birth: schedModal.birth, residence: schedModal.residence, workerName: schedModal.workerName,
       }) }).then(x => x.json());
       if (!r.success) window.alert(r.error || '저장 실패');
@@ -1380,7 +1386,11 @@ export default function App() {
     const days = sched.days || {};
     const lastDay = new Date(y, m, 0).getDate();
     const offset = new Date(y, m - 1, 1).getDay();   // 0=일
-    const total = Object.values(days).reduce((a, b) => a + Number(b), 0);
+    const hset = new Set((sched.holidays || []).map(Number));
+    const is15p = (d) => { const dw = new Date(y, m-1, d).getDay(); return dw === 0 || dw === 6 || hset.has(d); };
+    const recOfp = (d) => Number(days[String(d)] || 0) * (is15p(d) ? SCHED_RATE : 1);
+    const totalInputP = Object.values(days).reduce((a, b) => a + Number(b), 0);
+    const total = Math.round(Array.from({length:lastDay},(_,i)=>recOfp(i+1)).reduce((a,b)=>a+b,0)*100)/100;   // 인정시간
     const cats = new Set(sched.categories || []);
     const catStr = Object.entries(CASE_TOPIC_META).map(([k,l]) => `${cats.has(k)?'&#9745;':'&#9744;'}${l}`).join(' ');
     // 주(일~토) 단위 셀 구성
@@ -1391,13 +1401,14 @@ export default function App() {
     const weeks = [];
     for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
     const rows = weeks.map(w => {
-      const weekSum = w.reduce((a, d) => a + (d && days[String(d)] ? Number(days[String(d)]) : 0), 0);
+      const weekSum = Math.round(w.reduce((a, d) => a + (d ? recOfp(d) : 0), 0) * 100) / 100;   // 주 인정 합계
       const tds = w.map((d, col) => {
         if (!d) return '<td class="day"><div class="dnum">&nbsp;</div></td>';
         const h = days[String(d)];
-        const daily = `(1일 ${h ? h + '시간' : '&nbsp;&nbsp;&nbsp;시간'})`;
+        const holMark = (is15p(d) && new Date(y, m-1, d).getDay() % 6 !== 0) ? '<span class="hol">休</span>' : '';
+        const daily = `(1일 ${h ? h + '시간' : '&nbsp;&nbsp;&nbsp;시간'}${h && is15p(d) ? `&#8594;${recOfp(d)}` : ''})`;
         const weekly = col === 0 ? ` / (주 ${weekSum ? weekSum + '시간' : '&nbsp;&nbsp;&nbsp;시간'})` : '';
-        return `<td class="day"><div class="dnum">${m}/${d}</div><div class="hrs">${daily}${weekly}</div></td>`;
+        return `<td class="day"><div class="dnum">${m}/${d}${holMark}</div><div class="hrs">${daily}${weekly}</div></td>`;
       }).join('');
       return `<tr>${tds}</tr>`;
     }).join('');
@@ -1406,8 +1417,9 @@ export default function App() {
       <h1>급여제공 일정표( ${m}월 )</h1>
       <table class="hd">
         <tr><td class="k">수급자 성명</td><td class="v" contenteditable="true">${esc(el.name||sched.elderName||'')}</td><td class="k">수급자 생년월일</td><td class="v" contenteditable="true">${esc(sched.birth||'')}</td><td class="k">거주지</td><td class="v" contenteditable="true">${esc(sched.residence||'')}</td></tr>
-        <tr><td class="k">급여종류</td><td class="v">활동보조( ${catStr} )</td><td class="k">활동지원사성명</td><td class="v" contenteditable="true">${esc(sched.workerName||'')}</td><td class="k">월 근로시간</td><td class="v">${total ? total + '시간' : ''}</td></tr>
+        <tr><td class="k">급여종류</td><td class="v">활동보조( ${catStr} )</td><td class="k">활동지원사성명</td><td class="v" contenteditable="true">${esc(sched.workerName||'')}</td><td class="k">월 근로시간</td><td class="v">${total ? `${total}시간 (입력 ${totalInputP}시간)` : ''}</td></tr>
       </table>
+      <div class="legend">※ 주말·공휴일(休)은 1.5배 인정 · 월 인정시간 한도 120시간 · (주 __시간)은 인정 기준</div>
       <table class="cal">
         <tr>${['일','월','화','수','목','금','토'].map(d=>`<th>${d}</th>`).join('')}</tr>
         ${rows}
@@ -1430,7 +1442,9 @@ export default function App() {
       .cal th{background:#d9d9d9;padding:4px;font-weight:800}
       .cal .day{height:78px;padding:4px 6px;position:relative}
       .dnum{display:inline-block;border:1px solid #666;padding:1px 6px;font-weight:800;font-size:11.5px;background:#fff}
-      .hrs{position:absolute;bottom:4px;left:6px;font-size:11.5px;color:#333}
+      .hol{color:#c00;font-size:10px;margin-left:2px}
+      .legend{font-size:11px;color:#555;margin:4px 2px}
+      .hrs{position:absolute;bottom:4px;left:6px;font-size:11px;color:#333}
       .sign{margin-top:18px;text-align:center;font-size:14px;font-weight:700}
       .sig2{text-align:center;margin-top:10px;font-size:13.5px}
       .keep{margin-top:14px;font-size:12px}
@@ -1864,26 +1878,37 @@ export default function App() {
         const [y, m] = schedModal.ym.split('-').map(Number);
         const lastDay = new Date(y, m, 0).getDate();
         const DOW = ['일','월','화','수','목','금','토'];
-        const total = Object.values(schedModal.days||{}).reduce((a,b)=>a+Number(b),0);
+        const hset = new Set(schedModal.holidays || []);
+        const dowOf = (d) => new Date(y, m-1, d).getDay();
+        const is15 = (d) => dowOf(d) === 0 || dowOf(d) === 6 || hset.has(d);   // 주말·공휴일 = 1.5배
+        const recOf = (d) => Number((schedModal.days||{})[String(d)]||0) * (is15(d) ? SCHED_RATE : 1);
+        const totalInput = Object.values(schedModal.days||{}).reduce((a,b)=>a+Number(b),0);
+        const totalRec = Math.round(Array.from({length:lastDay},(_,i)=>recOf(i+1)).reduce((a,b)=>a+b,0)*100)/100;
+        const overCap = totalRec > SCHED_CAP;
         const setDay = (d, v) => setSchedModal(f=>{
           const days = { ...(f.days||{}) };
           const h = Math.round(Number(v)*2)/2;
           if (!v || h <= 0) delete days[String(d)]; else days[String(d)] = h;
           return { ...f, days };
         });
-        // 주간 소계(일~토): 각 토요일 뒤에 표시
-        const weekSumUpTo = (d) => { let s=0; for(let i=d; i>=1; i--){ s += Number((schedModal.days||{})[String(i)]||0); if(new Date(y,m-1,i).getDay()===0) break; } return s; };
+        // 평일을 공휴일로(대체·임시공휴일) 지정/해제 — 날짜 클릭. 주말은 이미 1.5배라 토글 불필요.
+        const toggleHoliday = (d) => { if (dowOf(d)===0||dowOf(d)===6) return; setSchedModal(f=>{ const hs = new Set(f.holidays||[]); hs.has(d)?hs.delete(d):hs.add(d); return { ...f, holidays: [...hs] }; }); };
+        // 주간 소계(일~토, 인정시간): 각 토요일 뒤에 표시
+        const weekSumUpTo = (d) => { let s=0; for(let i=d; i>=1; i--){ s += recOf(i); if(dowOf(i)===0) break; } return Math.round(s*100)/100; };
         // PC: 달력형 셀 데이터 (일~토, 오프셋 포함)
         const offset = new Date(y, m-1, 1).getDay();
         const cells = [...Array(offset).fill(null), ...Array.from({length:lastDay},(_,i)=>i+1)];
         while (cells.length % 7 !== 0) cells.push(null);
         const calWeeks = []; for (let i=0;i<cells.length;i+=7) calWeeks.push(cells.slice(i,i+7));
-        const rowSum = (w)=>w.reduce((a,d)=>a+(d?Number((schedModal.days||{})[String(d)]||0):0),0);
+        const rowSum = (w)=>Math.round(w.reduce((a,d)=>a+(d?recOf(d):0),0)*100)/100;
         return (
         <div className="modal-overlay" onClick={()=>setSchedModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:winWide?1000:520,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
             <h3 style={{margin:'0 0 6px'}}>📅 급여제공 일정표</h3>
-            <div style={{fontSize:13,color:'#64748b',marginBottom:12}}>날짜별 제공시간을 입력하고 저장하세요. 인쇄하면 공식 달력 양식(PDF)으로 출력됩니다.</div>
+            <div style={{fontSize:13,color:'#64748b',marginBottom:8}}>날짜별 제공시간을 입력하고 저장하세요. 인쇄하면 공식 달력 양식(PDF)으로 출력됩니다.</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:'#7c3aed',background:'#f5f3ff',border:'1px solid #ddd6fe',borderRadius:8,padding:'7px 10px',marginBottom:12}}>
+              💡 산정 규칙: 월 인정시간 <b>한도 120시간</b> · <b>주말·공휴일은 1.5배 인정</b> (2시간 근무 → 3시간 인정). 공휴일(<span style={{color:'#dc2626'}}>×1.5</span>)은 자동 표시되며, 평일 날짜를 클릭하면 공휴일로 지정/해제할 수 있어요.
+            </div>
             <div style={{display:'flex',gap:8,marginBottom:10}}>
               <select className="form-input" style={{flex:1,margin:0}} value={schedModal.phone} onChange={e=>{ const p=e.target.value; setSchedModal(f=>({...f,phone:p,loaded:false})); loadSchedule(p, schedModal.ym); }}>
                 {elders.map(e=>(<option key={e.id} value={String(e.phone||'').replace(/\D/g,'')}>{e.name} ({e.phone})</option>))}
@@ -1918,7 +1943,10 @@ export default function App() {
                   {w.map((d,ci)=>(
                     <div key={ci} style={{padding:'6px 6px 8px',borderLeft:ci>0?'1px solid #f1f5f9':'none',background:d?(ci===0?'#fef7f7':ci===6?'#f6f9ff':'#fff'):'#fafafa',minHeight:62}}>
                       {d && <>
-                        <div style={{fontSize:12.5,fontWeight:800,color:ci===0?'#dc2626':ci===6?'#2563eb':'#334155',marginBottom:4}}>{m}/{d}</div>
+                        <div onClick={()=>toggleHoliday(d)} title={(dowOf(d)!==0&&dowOf(d)!==6)?'클릭: 공휴일 지정/해제 (1.5배 인정)':''}
+                          style={{fontSize:12.5,fontWeight:800,color:is15(d)?'#dc2626':ci===6?'#2563eb':'#334155',marginBottom:4,cursor:(dowOf(d)!==0&&dowOf(d)!==6)?'pointer':'default'}}>
+                          {m}/{d}{is15(d)&&<span style={{fontSize:10,marginLeft:3,fontWeight:900,color:'#7c3aed'}}>×1.5</span>}
+                        </div>
                         <input type="number" min="0" max="24" step="0.5" className="form-input" style={{width:'100%',margin:0,padding:'5px 6px',fontSize:14,textAlign:'center'}}
                           value={(schedModal.days||{})[String(d)]??''} placeholder="시간" onChange={e=>setDay(d, e.target.value)}/>
                       </>}
@@ -1927,7 +1955,9 @@ export default function App() {
                   <div style={{display:'flex',alignItems:'center',justifyContent:'center',borderLeft:'2px solid #e2e8f0',background:'#f8fafc',fontSize:13.5,fontWeight:900,color:'#1e3a6e'}}>{rowSum(w)||''}{rowSum(w)?'시간':''}</div>
                 </div>
               ))}
-              <div style={{textAlign:'right',fontSize:15,fontWeight:900,color:'#1e3a6e',background:'#eff6ff',padding:'9px 14px',borderTop:'1px solid #e2e8f0'}}>월 근로시간 합계 {total}시간</div>
+              <div style={{textAlign:'right',fontSize:15,fontWeight:900,color:overCap?'#dc2626':'#1e3a6e',background:overCap?'#fef2f2':'#eff6ff',padding:'9px 14px',borderTop:'1px solid #e2e8f0'}}>
+                입력 {totalInput}시간 · <b>인정 {totalRec} / {SCHED_CAP}시간</b>{overCap && ' ⚠️ 한도 초과'}
+              </div>
             </div>
             ) : (
             /* 모바일: 세로 날짜 리스트 — 한 손 입력·큰 터치 영역 */
@@ -1937,17 +1967,20 @@ export default function App() {
                 const isSat = dow === 6, isSun = dow === 0;
                 return (
                 <div key={d}>
-                  <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',background:isSun?'#fef2f2':isSat?'#eff6ff':'#fff',borderTop:d>1?'1px solid #f1f5f9':'none'}}>
-                    <span style={{width:76,fontSize:13.5,fontWeight:700,color:isSun?'#dc2626':isSat?'#2563eb':'#334155'}}>{m}/{d} ({DOW[dow]})</span>
+                  <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',background:is15(d)?'#fef7f7':isSat?'#eff6ff':'#fff',borderTop:d>1?'1px solid #f1f5f9':'none'}}>
+                    <span onClick={()=>toggleHoliday(d)} style={{width:96,fontSize:13.5,fontWeight:700,color:is15(d)?'#dc2626':isSat?'#2563eb':'#334155',cursor:(!isSun&&!isSat)?'pointer':'default'}}
+                      title={(!isSun&&!isSat)?'클릭: 공휴일 지정/해제 (1.5배 인정)':''}>
+                      {m}/{d} ({DOW[dow]}){is15(d)&&<span style={{fontSize:10.5,marginLeft:3,fontWeight:900,color:'#7c3aed'}}>×1.5</span>}
+                    </span>
                     <input type="number" min="0" max="24" step="0.5" className="form-input" style={{width:110,margin:0,padding:'6px 10px'}}
                       value={(schedModal.days||{})[String(d)]??''} placeholder="시간" onChange={e=>setDay(d, e.target.value)}/>
-                    <span style={{fontSize:12.5,color:'#94a3b8'}}>시간</span>
+                    <span style={{fontSize:12.5,color:'#94a3b8'}}>시간{is15(d)&&(schedModal.days||{})[String(d)]?` → 인정 ${recOf(d)}시간`:''}</span>
                   </div>
-                  {isSat && <div style={{textAlign:'right',fontSize:12.5,fontWeight:800,color:'#1e3a6e',background:'#f8fafc',padding:'4px 14px',borderTop:'1px dashed #e2e8f0'}}>주간 합계 {weekSumUpTo(d)}시간</div>}
+                  {isSat && <div style={{textAlign:'right',fontSize:12.5,fontWeight:800,color:'#1e3a6e',background:'#f8fafc',padding:'4px 14px',borderTop:'1px dashed #e2e8f0'}}>주간 인정 합계 {weekSumUpTo(d)}시간</div>}
                 </div>
                 );
               })}
-              <div style={{textAlign:'right',fontSize:14,fontWeight:900,color:'#1e3a6e',background:'#eff6ff',padding:'8px 14px'}}>월 근로시간 합계 {total}시간</div>
+              <div style={{textAlign:'right',fontSize:14,fontWeight:900,color:overCap?'#dc2626':'#1e3a6e',background:overCap?'#fef2f2':'#eff6ff',padding:'8px 14px'}}>입력 {totalInput}시간 · <b>인정 {totalRec} / {SCHED_CAP}시간</b>{overCap && ' ⚠️ 한도 초과'}</div>
             </div>
             )}
             <div className="modal-btns" style={{justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
@@ -1955,7 +1988,7 @@ export default function App() {
               <div style={{display:'flex',gap:8}}>
                 <button className="btn-secondary" onClick={()=>setSchedModal(null)}>닫기</button>
                 <button className="btn-secondary" onClick={printSchedule}>🖨 양식 인쇄</button>
-                <button className="btn-primary" onClick={saveSchedule} disabled={schedModal.saving}>{schedModal.saving?'저장 중…':'💾 저장'}</button>
+                <button className="btn-primary" onClick={saveSchedule} disabled={schedModal.saving||overCap} title={overCap?'월 인정시간 한도(120시간)를 초과해 저장할 수 없습니다':''}>{schedModal.saving?'저장 중…':overCap?'⚠️ 한도 초과':'💾 저장'}</button>
               </div>
             </div>
           </div>
