@@ -1326,6 +1326,13 @@ export default function App() {
 
   // ── 급여제공 일정표 (스트림 C): 세로(날짜 리스트) 입력 → 저장 → 공식 달력 양식 인쇄 ──
   const [schedModal, setSchedModal] = useState(null);   // { phone, ym, days:{}, categories:[], birth, residence, workerName, saving }
+  // 반응형: PC(≥900px)=달력형(가로 7열, 공식 양식과 동일 배치·주 합계 열) / 모바일=세로 날짜 리스트(한 손 입력)
+  const [winWide, setWinWide] = useState(typeof window !== 'undefined' && window.innerWidth >= 900);
+  useEffect(() => {
+    const on = () => setWinWide(window.innerWidth >= 900);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
   const [schedMonthAll, setSchedMonthAll] = useState([]);   // 해당 월 전체 일정표(일괄 출력용)
   const loadSchedule = async (phone, ym) => {
     try {
@@ -1866,9 +1873,15 @@ export default function App() {
         });
         // 주간 소계(일~토): 각 토요일 뒤에 표시
         const weekSumUpTo = (d) => { let s=0; for(let i=d; i>=1; i--){ s += Number((schedModal.days||{})[String(i)]||0); if(new Date(y,m-1,i).getDay()===0) break; } return s; };
+        // PC: 달력형 셀 데이터 (일~토, 오프셋 포함)
+        const offset = new Date(y, m-1, 1).getDay();
+        const cells = [...Array(offset).fill(null), ...Array.from({length:lastDay},(_,i)=>i+1)];
+        while (cells.length % 7 !== 0) cells.push(null);
+        const calWeeks = []; for (let i=0;i<cells.length;i+=7) calWeeks.push(cells.slice(i,i+7));
+        const rowSum = (w)=>w.reduce((a,d)=>a+(d?Number((schedModal.days||{})[String(d)]||0):0),0);
         return (
         <div className="modal-overlay" onClick={()=>setSchedModal(null)}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520,width:'94%',textAlign:'left',maxHeight:'88vh',overflowY:'auto'}}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:winWide?1000:520,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
             <h3 style={{margin:'0 0 6px'}}>📅 급여제공 일정표</h3>
             <div style={{fontSize:13,color:'#64748b',marginBottom:12}}>날짜별 제공시간을 입력하고 저장하세요. 인쇄하면 공식 달력 양식(PDF)으로 출력됩니다.</div>
             <div style={{display:'flex',gap:8,marginBottom:10}}>
@@ -1894,7 +1907,30 @@ export default function App() {
             <input className="form-input" style={{marginBottom:12,width:'100%'}} placeholder="활동지원사 성명" value={schedModal.workerName} onChange={e=>setSchedModal(f=>({...f,workerName:e.target.value}))}/>
             {!schedModal.loaded ? (
               <div style={{textAlign:'center',color:'#94a3b8',padding:20}}>불러오는 중…</div>
+            ) : winWide ? (
+            /* PC: 공식 양식과 같은 달력형 그리드 (일~토 + 주 합계 열) — 한 달이 한 화면에 */
+            <div style={{border:'1px solid #e2e8f0',borderRadius:10,overflow:'hidden',marginBottom:12}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr) 96px',background:'#1e3a6e'}}>
+                {[...DOW,'주 합계'].map((d,i)=>(<div key={d} style={{padding:'7px 4px',textAlign:'center',fontSize:13,fontWeight:800,color:i===0?'#fca5a5':i===6?'#93c5fd':'#fff'}}>{d}</div>))}
+              </div>
+              {calWeeks.map((w,wi)=>(
+                <div key={wi} style={{display:'grid',gridTemplateColumns:'repeat(7,1fr) 96px',borderTop:'1px solid #e2e8f0'}}>
+                  {w.map((d,ci)=>(
+                    <div key={ci} style={{padding:'6px 6px 8px',borderLeft:ci>0?'1px solid #f1f5f9':'none',background:d?(ci===0?'#fef7f7':ci===6?'#f6f9ff':'#fff'):'#fafafa',minHeight:62}}>
+                      {d && <>
+                        <div style={{fontSize:12.5,fontWeight:800,color:ci===0?'#dc2626':ci===6?'#2563eb':'#334155',marginBottom:4}}>{m}/{d}</div>
+                        <input type="number" min="0" max="24" step="0.5" className="form-input" style={{width:'100%',margin:0,padding:'5px 6px',fontSize:14,textAlign:'center'}}
+                          value={(schedModal.days||{})[String(d)]??''} placeholder="시간" onChange={e=>setDay(d, e.target.value)}/>
+                      </>}
+                    </div>
+                  ))}
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',borderLeft:'2px solid #e2e8f0',background:'#f8fafc',fontSize:13.5,fontWeight:900,color:'#1e3a6e'}}>{rowSum(w)||''}{rowSum(w)?'시간':''}</div>
+                </div>
+              ))}
+              <div style={{textAlign:'right',fontSize:15,fontWeight:900,color:'#1e3a6e',background:'#eff6ff',padding:'9px 14px',borderTop:'1px solid #e2e8f0'}}>월 근로시간 합계 {total}시간</div>
+            </div>
             ) : (
+            /* 모바일: 세로 날짜 리스트 — 한 손 입력·큰 터치 영역 */
             <div style={{border:'1px solid #e2e8f0',borderRadius:10,overflow:'hidden',marginBottom:12}}>
               {Array.from({length:lastDay},(_,i)=>i+1).map(d=>{
                 const dow = new Date(y, m-1, d).getDay();
