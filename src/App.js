@@ -1231,19 +1231,41 @@ export default function App() {
     if (isStaffUp && accounts.length === 0) fetchAccounts();   // 작성자 이름 표시용
     if (phone) loadWeekly(phone, new Date().toISOString().slice(0,7));
   };
+  // 주간업무 보고서를 엑셀 파일로 — '다른 이름으로 저장' 대화상자
+  const exportWeeklyXlsx = async () => {
+    if (!weeklyModal || !weeklyDoc) return;
+    const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === weeklyModal.phone) || {};
+    const [y, m] = weeklyModal.ym.split('-').map(Number);
+    const topicsKo = (t) => (t||[]).map(k=>CASE_TOPIC_META[k]).filter(Boolean).join(', ');
+    const aoa = [
+      [`${y}년 ${m}월 주간업무 보고서`],
+      ['이용자 성명', el.name||'', '이용자 생년월일', weeklyDoc.birth||'', '지원사 성명', weeklyDoc.workerName||''],
+      ['급여종류', weeklyModal.benefit||''],
+      [],
+      ['주차', '업무 구분', '업무내용 · 특이사항'],
+    ];
+    for (let i = 1; i <= 5; i++) {
+      const w = weeklyDoc.weeks[i] || {};
+      aoa.push([`${i}주차`, topicsKo(w.topics), w.content || '']);
+    }
+    aoa.push([], ['전담인력 지시사항', '', weeklyDoc.note || '']);
+    aoa.push([], [`작성일: ${new Date().toLocaleDateString('ko-KR')}`, '', '전담인력:            (서명 또는 印)']);
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 12 }, { wch: 22 }, { wch: 80 }, { wch: 16 }, { wch: 12 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws, '주간업무보고서');
+    const data = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    await saveBlobAs(new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `주간업무보고서_${el.name||'이용자'}_${weeklyModal.ym}.xlsx`);
+  };
   const saveWeekly = async () => {
     if (!weeklyModal || !weeklyDoc) return;
-    setWeeklyDoc(f => ({ ...f, saving: true }));
-    try {
-      const r = await authFetch(`${SERVER_URL}/weekly-reports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        elderPhone: weeklyModal.phone, ym: weeklyModal.ym,
-        weeks: weeklyDoc.weeks, note: weeklyDoc.note, benefit: weeklyModal.benefit,
-        workerName: weeklyDoc.workerName, birth: weeklyDoc.birth,
-      }) }).then(x => x.json());
-      if (!r.success) window.alert(r.error || '저장 실패');
-      else loadWeekly(weeklyModal.phone, weeklyModal.ym);
-    } catch { window.alert('네트워크 오류'); }
-    setWeeklyDoc(f => f ? ({ ...f, saving: false }) : f);
+    // 저장 = 로컬 파일 저장이 주 동작 (즉시 대화상자). 서버 동기화는 백그라운드(앱↔대시보드 연동 유지).
+    authFetch(`${SERVER_URL}/weekly-reports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      elderPhone: weeklyModal.phone, ym: weeklyModal.ym,
+      weeks: weeklyDoc.weeks, note: weeklyDoc.note, benefit: weeklyModal.benefit,
+      workerName: weeklyDoc.workerName, birth: weeklyDoc.birth,
+    }) }).then(x => x.json()).then(r => { if (r && !r.success && r.error) window.alert('동기화 실패: ' + r.error); }).catch(() => {});
+    await exportWeeklyXlsx();
   };
   // 보고서 1장(폼) HTML — 저장본(weeklyReports 문서) 기반. report={elderPhone,elderName,ym,weeks,note,benefit,workerName,birth}
   const buildWeeklyForm = (report) => {
@@ -1409,33 +1431,28 @@ export default function App() {
     XLSX.utils.book_append_sheet(wb, ws, '급여제공일정표');
     const fname = `급여제공일정표_${el.name||'이용자'}_${schedModal.ym}.xlsx`;
     const data = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-    const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    if (window.showSaveFilePicker) {   // 크롬·엣지: OS '다른 이름으로 저장' 대화상자(위치 선택)
+    await saveBlobAs(new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
+  };
+  // 공용: '다른 이름으로 저장' 대화상자(크롬·엣지 위치 선택) → 미지원 브라우저는 다운로드 폴더 폴백
+  const saveBlobAs = async (blob, fname) => {
+    if (window.showSaveFilePicker) {
       try {
         const handle = await window.showSaveFilePicker({ suggestedName: fname, types: [{ description: 'Excel 파일', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
         const w = await handle.createWritable(); await w.write(blob); await w.close();
         return;
       } catch (e) { if (e && e.name === 'AbortError') return; /* 취소 시 조용히 */ }
     }
-    // 미지원 브라우저 폴백: 기본 다운로드 폴더로
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname; a.click(); URL.revokeObjectURL(a.href);
   };
   const saveSchedule = async () => {
     if (!schedModal || !schedModal.phone) return;
-    setSchedModal(f => ({ ...f, saving: true }));
-    try {
-      const r = await authFetch(`${SERVER_URL}/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        elderPhone: schedModal.phone, ym: schedModal.ym, days: schedModal.days, holidays: schedModal.holidays || [],
-        categories: schedModal.categories, birth: schedModal.birth, residence: schedModal.residence, workerName: schedModal.workerName,
-      }) }).then(x => x.json());
-      if (!r.success) window.alert(r.error || '저장 실패');
-      else {
-        // 서버 저장 성공 → 파일 저장 위치 선택 대화상자 (엑셀). PDF는 '양식 인쇄'에서.
-        await exportScheduleXlsx();
-        loadSchedule(schedModal.phone, schedModal.ym);
-      }
-    } catch { window.alert('네트워크 오류'); }
-    setSchedModal(f => f ? ({ ...f, saving: false }) : f);
+    // 저장 = 로컬 파일 저장이 주 동작: 즉시 '다른 이름으로 저장' 대화상자.
+    // 서버 동기화(수 KB — 앱↔대시보드 연동·일괄 출력용)는 화면을 막지 않게 백그라운드로.
+    authFetch(`${SERVER_URL}/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      elderPhone: schedModal.phone, ym: schedModal.ym, days: schedModal.days, holidays: schedModal.holidays || [],
+      categories: schedModal.categories, birth: schedModal.birth, residence: schedModal.residence, workerName: schedModal.workerName,
+    }) }).then(x => x.json()).then(r => { if (r && !r.success && r.error) window.alert('동기화 실패: ' + r.error); }).catch(() => {});
+    await exportScheduleXlsx();
   };
   // 공식 달력 양식 1장 HTML (일~토, 일요일 칸에 주 합계, 하단 서명·보관 문구)
   const buildScheduleForm = (sched) => {
