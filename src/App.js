@@ -1282,6 +1282,138 @@ export default function App() {
     openReportWindow(pages, `${y}년 ${m}월 주간업무 보고서 일괄 (${pages.length}명)`);
   };
 
+  // ── 급여제공 일정표 (스트림 C): 세로(날짜 리스트) 입력 → 저장 → 공식 달력 양식 인쇄 ──
+  const [schedModal, setSchedModal] = useState(null);   // { phone, ym, days:{}, categories:[], birth, residence, workerName, saving }
+  const [schedMonthAll, setSchedMonthAll] = useState([]);   // 해당 월 전체 일정표(일괄 출력용)
+  const loadSchedule = async (phone, ym) => {
+    try {
+      const r = await authFetch(`${SERVER_URL}/schedules?ym=${ym}`).then(x => x.json());
+      const all = (r && r.schedules) || [];
+      setSchedMonthAll(all);
+      const minePh = all.find(s => String(s.elderPhone||'').replace(/\D/g,'') === phone);
+      const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === phone) || {};
+      setSchedModal(f => ({
+        ...f, phone, ym, loaded: true,
+        days: (minePh && minePh.days) || {},
+        categories: (minePh && minePh.categories) || [],
+        birth: (minePh && minePh.birth) || '',
+        residence: (minePh && minePh.residence) || el.region || '',
+        workerName: (minePh && minePh.workerName) || (accounts.find(u=>u.email===el.assignedTo)||{}).name || '',
+      }));
+    } catch { setSchedModal(f => ({ ...f, loaded: true })); }
+  };
+  const openSchedule = () => {
+    const first = elders[0];
+    const phone = first ? String(first.phone||'').replace(/\D/g,'') : '';
+    const ym = new Date().toISOString().slice(0,7);
+    setSchedModal({ phone, ym, days: {}, categories: [], birth: '', residence: '', workerName: '', loaded: false });
+    if (isStaffUp && accounts.length === 0) fetchAccounts();
+    if (phone) loadSchedule(phone, ym);
+  };
+  const saveSchedule = async () => {
+    if (!schedModal || !schedModal.phone) return;
+    setSchedModal(f => ({ ...f, saving: true }));
+    try {
+      const r = await authFetch(`${SERVER_URL}/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        elderPhone: schedModal.phone, ym: schedModal.ym, days: schedModal.days,
+        categories: schedModal.categories, birth: schedModal.birth, residence: schedModal.residence, workerName: schedModal.workerName,
+      }) }).then(x => x.json());
+      if (!r.success) window.alert(r.error || '저장 실패');
+      else loadSchedule(schedModal.phone, schedModal.ym);
+    } catch { window.alert('네트워크 오류'); }
+    setSchedModal(f => f ? ({ ...f, saving: false }) : f);
+  };
+  // 공식 달력 양식 1장 HTML (일~토, 일요일 칸에 주 합계, 하단 서명·보관 문구)
+  const buildScheduleForm = (sched) => {
+    const [y, m] = sched.ym.split('-').map(Number);
+    const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === String(sched.elderPhone||sched.phone||'').replace(/\D/g,'')) || {};
+    const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const days = sched.days || {};
+    const lastDay = new Date(y, m, 0).getDate();
+    const offset = new Date(y, m - 1, 1).getDay();   // 0=일
+    const total = Object.values(days).reduce((a, b) => a + Number(b), 0);
+    const cats = new Set(sched.categories || []);
+    const catStr = Object.entries(CASE_TOPIC_META).map(([k,l]) => `${cats.has(k)?'&#9745;':'&#9744;'}${l}`).join(' ');
+    // 주(일~토) 단위 셀 구성
+    const cells = [];
+    for (let i = 0; i < offset; i++) cells.push(null);
+    for (let d = 1; d <= lastDay; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    const weeks = [];
+    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+    const rows = weeks.map(w => {
+      const weekSum = w.reduce((a, d) => a + (d && days[String(d)] ? Number(days[String(d)]) : 0), 0);
+      const tds = w.map((d, col) => {
+        if (!d) return '<td class="day"><div class="dnum">&nbsp;</div></td>';
+        const h = days[String(d)];
+        const daily = `(1일 ${h ? h + '시간' : '&nbsp;&nbsp;&nbsp;시간'})`;
+        const weekly = col === 0 ? ` / (주 ${weekSum ? weekSum + '시간' : '&nbsp;&nbsp;&nbsp;시간'})` : '';
+        return `<td class="day"><div class="dnum">${m}/${d}</div><div class="hrs">${daily}${weekly}</div></td>`;
+      }).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    const today = new Date();
+    return `
+      <h1>급여제공 일정표( ${m}월 )</h1>
+      <table class="hd">
+        <tr><td class="k">수급자 성명</td><td class="v" contenteditable="true">${esc(el.name||sched.elderName||'')}</td><td class="k">수급자 생년월일</td><td class="v" contenteditable="true">${esc(sched.birth||'')}</td><td class="k">거주지</td><td class="v" contenteditable="true">${esc(sched.residence||'')}</td></tr>
+        <tr><td class="k">급여종류</td><td class="v">활동보조( ${catStr} )</td><td class="k">활동지원사성명</td><td class="v" contenteditable="true">${esc(sched.workerName||'')}</td><td class="k">월 근로시간</td><td class="v">${total ? total + '시간' : ''}</td></tr>
+      </table>
+      <table class="cal">
+        <tr>${['일','월','화','수','목','금','토'].map(d=>`<th>${d}</th>`).join('')}</tr>
+        ${rows}
+      </table>
+      <div class="sign">${today.getFullYear()}년 &nbsp; ${today.getMonth()+1}월 &nbsp; ${today.getDate()}일</div>
+      <div class="sig2">담당자 : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (서명 또는 인) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 수급자 : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (서명 또는 인)</div>
+      <div class="keep">※ 매월 작성하여 기관보관. (보관기간: 작성일로부터 3년)</div>
+      <div class="orgn">${esc(me?.orgName||'')}</div>`;
+  };
+  const openSchedPrint = (pages, title) => {
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
+      body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;margin:24px auto;max-width:900px;color:#111}
+      h1{text-align:center;font-size:22px;letter-spacing:2px;margin:8px 0 16px;font-weight:900}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}
+      td,th{border:1.5px solid #333;font-size:12.5px;vertical-align:top;word-break:break-all}
+      .hd td{padding:7px 8px}
+      .hd .k{background:#e8e8e8;font-weight:800;text-align:center;width:12%}
+      .hd .v{width:21.3%}
+      .cal{margin-top:-1.5px}
+      .cal th{background:#d9d9d9;padding:4px;font-weight:800}
+      .cal .day{height:78px;padding:4px 6px;position:relative}
+      .dnum{display:inline-block;border:1px solid #666;padding:1px 6px;font-weight:800;font-size:11.5px;background:#fff}
+      .hrs{position:absolute;bottom:4px;left:6px;font-size:11.5px;color:#333}
+      .sign{margin-top:18px;text-align:center;font-size:14px;font-weight:700}
+      .sig2{text-align:center;margin-top:10px;font-size:13.5px}
+      .keep{margin-top:14px;font-size:12px}
+      .orgn{text-align:right;font-size:13px;font-weight:800;margin-top:4px}
+      .pgbrk{page-break-after:always;border-top:2px dashed #cbd5e1;margin:36px 0}
+      .noprint{position:fixed;top:12px;right:12px}
+      .noprint button{padding:10px 18px;font-size:14px;font-weight:800;border-radius:8px;border:0;background:#1d4ed8;color:#fff;cursor:pointer}
+      .hint{position:fixed;top:12px;left:12px;font-size:12px;color:#64748b;background:#f1f5f9;padding:6px 10px;border-radius:8px}
+      @media print{.noprint,.hint{display:none}body{margin:0 auto}.pgbrk{border:0;margin:0}}
+    </style></head><body>
+      <div class="hint">✏️ 칸을 클릭하면 인쇄 전에 내용을 고칠 수 있어요</div>
+      <div class="noprint"><button onclick="window.print()">🖨 인쇄 / PDF 저장</button></div>
+      ${pages.join('<div class="pgbrk"></div>')}
+    </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { window.alert('팝업이 차단됐습니다. 팝업을 허용해 주세요.'); return; }
+    w.document.write(html); w.document.close();
+  };
+  const printSchedule = () => {
+    if (!schedModal) return;
+    if (!Object.keys(schedModal.days||{}).length) { window.alert('입력된 제공시간이 없습니다. 먼저 시간을 입력·저장해 주세요.'); return; }
+    const [y, m] = schedModal.ym.split('-').map(Number);
+    openSchedPrint([buildScheduleForm({ ...schedModal, elderPhone: schedModal.phone })], `${y}년 ${m}월 급여제공 일정표`);
+  };
+  const printScheduleBatch = () => {
+    if (!schedModal) return;
+    const pages = schedMonthAll.filter(s => Object.keys(s.days||{}).length).map(s => buildScheduleForm(s));
+    if (!pages.length) { window.alert('이 달에 저장된 일정표가 없습니다.'); return; }
+    const [y, m] = schedModal.ym.split('-').map(Number);
+    openSchedPrint(pages, `${y}년 ${m}월 급여제공 일정표 일괄 (${pages.length}명)`);
+  };
+
   // 건강 알림 → 일지 작성: 알림 시각 근처(±3시간)의 통화를 찾아 초안(요약)까지 채워서 열기.
   // 통화를 못 찾으면 감지 신호 문구만이라도 채움(빈 내용란 방지 — 담당자는 추가 작성만).
   const [draftingAlertId, setDraftingAlertId] = useState(null);
@@ -1678,6 +1810,80 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {schedModal && (()=>{
+        const [y, m] = schedModal.ym.split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        const DOW = ['일','월','화','수','목','금','토'];
+        const total = Object.values(schedModal.days||{}).reduce((a,b)=>a+Number(b),0);
+        const setDay = (d, v) => setSchedModal(f=>{
+          const days = { ...(f.days||{}) };
+          const h = Math.round(Number(v)*2)/2;
+          if (!v || h <= 0) delete days[String(d)]; else days[String(d)] = h;
+          return { ...f, days };
+        });
+        // 주간 소계(일~토): 각 토요일 뒤에 표시
+        const weekSumUpTo = (d) => { let s=0; for(let i=d; i>=1; i--){ s += Number((schedModal.days||{})[String(i)]||0); if(new Date(y,m-1,i).getDay()===0) break; } return s; };
+        return (
+        <div className="modal-overlay" onClick={()=>setSchedModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520,width:'94%',textAlign:'left',maxHeight:'88vh',overflowY:'auto'}}>
+            <h3 style={{margin:'0 0 6px'}}>📅 급여제공 일정표</h3>
+            <div style={{fontSize:13,color:'#64748b',marginBottom:12}}>날짜별 제공시간을 입력하고 저장하세요. 인쇄하면 공식 달력 양식(PDF)으로 출력됩니다.</div>
+            <div style={{display:'flex',gap:8,marginBottom:10}}>
+              <select className="form-input" style={{flex:1,margin:0}} value={schedModal.phone} onChange={e=>{ const p=e.target.value; setSchedModal(f=>({...f,phone:p,loaded:false})); loadSchedule(p, schedModal.ym); }}>
+                {elders.map(e=>(<option key={e.id} value={String(e.phone||'').replace(/\D/g,'')}>{e.name} ({e.phone})</option>))}
+              </select>
+              <input type="month" className="form-input" style={{width:150,margin:0}} value={schedModal.ym} onChange={e=>{ const ym=e.target.value; setSchedModal(f=>({...f,ym,loaded:false})); loadSchedule(schedModal.phone, ym); }}/>
+            </div>
+            <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>
+              <span style={{fontSize:13,fontWeight:700,color:'#334155'}}>급여종류(활동보조):</span>
+              {Object.entries(CASE_TOPIC_META).map(([k,l])=>(
+                <label key={k} style={{display:'flex',alignItems:'center',gap:5,fontSize:13.5,fontWeight:600,cursor:'pointer'}}>
+                  <input type="checkbox" checked={(schedModal.categories||[]).includes(k)}
+                    onChange={e=>setSchedModal(f=>({...f,categories:e.target.checked?[...(f.categories||[]),k]:(f.categories||[]).filter(t=>t!==k)}))}/>
+                  {l}
+                </label>
+              ))}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+              <input className="form-input" style={{margin:0}} placeholder="수급자 생년월일 (예: 1948.05.12)" value={schedModal.birth} onChange={e=>setSchedModal(f=>({...f,birth:e.target.value}))}/>
+              <input className="form-input" style={{margin:0}} placeholder="거주지 (시·군·구)" value={schedModal.residence} onChange={e=>setSchedModal(f=>({...f,residence:e.target.value}))}/>
+            </div>
+            <input className="form-input" style={{marginBottom:12,width:'100%'}} placeholder="활동지원사 성명" value={schedModal.workerName} onChange={e=>setSchedModal(f=>({...f,workerName:e.target.value}))}/>
+            {!schedModal.loaded ? (
+              <div style={{textAlign:'center',color:'#94a3b8',padding:20}}>불러오는 중…</div>
+            ) : (
+            <div style={{border:'1px solid #e2e8f0',borderRadius:10,overflow:'hidden',marginBottom:12}}>
+              {Array.from({length:lastDay},(_,i)=>i+1).map(d=>{
+                const dow = new Date(y, m-1, d).getDay();
+                const isSat = dow === 6, isSun = dow === 0;
+                return (
+                <div key={d}>
+                  <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',background:isSun?'#fef2f2':isSat?'#eff6ff':'#fff',borderTop:d>1?'1px solid #f1f5f9':'none'}}>
+                    <span style={{width:76,fontSize:13.5,fontWeight:700,color:isSun?'#dc2626':isSat?'#2563eb':'#334155'}}>{m}/{d} ({DOW[dow]})</span>
+                    <input type="number" min="0" max="24" step="0.5" className="form-input" style={{width:110,margin:0,padding:'6px 10px'}}
+                      value={(schedModal.days||{})[String(d)]??''} placeholder="시간" onChange={e=>setDay(d, e.target.value)}/>
+                    <span style={{fontSize:12.5,color:'#94a3b8'}}>시간</span>
+                  </div>
+                  {isSat && <div style={{textAlign:'right',fontSize:12.5,fontWeight:800,color:'#1e3a6e',background:'#f8fafc',padding:'4px 14px',borderTop:'1px dashed #e2e8f0'}}>주간 합계 {weekSumUpTo(d)}시간</div>}
+                </div>
+                );
+              })}
+              <div style={{textAlign:'right',fontSize:14,fontWeight:900,color:'#1e3a6e',background:'#eff6ff',padding:'8px 14px'}}>월 근로시간 합계 {total}시간</div>
+            </div>
+            )}
+            <div className="modal-btns" style={{justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+              {isStaffUp ? <button className="btn-secondary" onClick={printScheduleBatch} title="이 달에 저장된 모든 이용자의 일정표를 한 번에 인쇄(PDF 한 파일)">🖨 일괄 출력</button> : <span/>}
+              <div style={{display:'flex',gap:8}}>
+                <button className="btn-secondary" onClick={()=>setSchedModal(null)}>닫기</button>
+                <button className="btn-secondary" onClick={printSchedule}>🖨 양식 인쇄</button>
+                <button className="btn-primary" onClick={saveSchedule} disabled={schedModal.saving}>{schedModal.saving?'저장 중…':'💾 저장'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
 
       {weeklyModal && (
         <div className="modal-overlay" onClick={()=>setWeeklyModal(null)}>
@@ -2957,6 +3163,7 @@ export default function App() {
                   ))}
                   <span style={{width:1,height:20,background:'#e2e8f0',margin:'0 2px'}}/>
                   <button className="smart-btn" style={{fontSize:12,padding:'5px 10px',...(caseFollowUpOnly?{background:'#f59e0b',borderColor:'#f59e0b',color:'#fff'}:{})}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>🔔 후속 필요{caseFollowUpOnly?' ✕':''}</button>
+                  <button className="btn-secondary" onClick={openSchedule} title="이용자별 월 급여제공 일정표 — 날짜별 제공시간 입력·저장 후 공식 달력 양식으로 인쇄(PDF)">📅 급여제공 일정표</button>
                   <button className="btn-secondary" onClick={openWeeklyReport} title="공식 양식(1~5주차·사회/신체/가사/기타)에 이번 달 일지를 자동으로 채워 인쇄(PDF)합니다">📄 주간업무 보고서</button>
                   <button className="btn-secondary" onClick={()=>exportNotesXlsx(caseNotes)} title="일지 전체(최근 90일)를 엑셀로 다운로드 — 기관 보관·결재용">📥 엑셀</button>
                   <button className="btn-primary" onClick={()=>openNewNote()}>＋ 새 일지</button>
