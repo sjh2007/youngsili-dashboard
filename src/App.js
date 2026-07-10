@@ -1259,12 +1259,7 @@ export default function App() {
   };
   const saveWeekly = async () => {
     if (!weeklyModal || !weeklyDoc) return;
-    // 저장 = 로컬 파일 저장이 주 동작 (즉시 대화상자). 서버 동기화는 백그라운드(앱↔대시보드 연동 유지).
-    authFetch(`${SERVER_URL}/weekly-reports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      elderPhone: weeklyModal.phone, ym: weeklyModal.ym,
-      weeks: weeklyDoc.weeks, note: weeklyDoc.note, benefit: weeklyModal.benefit,
-      workerName: weeklyDoc.workerName, birth: weeklyDoc.birth,
-    }) }).then(x => x.json()).then(r => { if (r && !r.success && r.error) window.alert('동기화 실패: ' + r.error); }).catch(() => {});
+    // 서버에 저장하지 않음(사용자 결정) — 로컬 '다른 이름으로 저장'만. 앱이 저장한 내용의 열람은 유지.
     await exportWeeklyXlsx();
   };
   // 보고서 1장(폼) HTML — 저장본(weeklyReports 문서) 기반. report={elderPhone,elderName,ym,weeks,note,benefit,workerName,birth}
@@ -1446,12 +1441,7 @@ export default function App() {
   };
   const saveSchedule = async () => {
     if (!schedModal || !schedModal.phone) return;
-    // 저장 = 로컬 파일 저장이 주 동작: 즉시 '다른 이름으로 저장' 대화상자.
-    // 서버 동기화(수 KB — 앱↔대시보드 연동·일괄 출력용)는 화면을 막지 않게 백그라운드로.
-    authFetch(`${SERVER_URL}/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      elderPhone: schedModal.phone, ym: schedModal.ym, days: schedModal.days, holidays: schedModal.holidays || [],
-      categories: schedModal.categories, birth: schedModal.birth, residence: schedModal.residence, workerName: schedModal.workerName,
-    }) }).then(x => x.json()).then(r => { if (r && !r.success && r.error) window.alert('동기화 실패: ' + r.error); }).catch(() => {});
+    // 서버에 저장하지 않음(사용자 결정) — 로컬 '다른 이름으로 저장'만. 앱이 저장한 내용의 열람은 유지.
     await exportScheduleXlsx();
   };
   // 공식 달력 양식 1장 HTML (일~토, 일요일 칸에 주 합계, 하단 서명·보관 문구)
@@ -2060,7 +2050,7 @@ export default function App() {
               <div style={{display:'flex',gap:8}}>
                 <button className="btn-secondary" onClick={()=>setSchedModal(null)}>닫기</button>
                 <button className="btn-secondary" onClick={printSchedule}>🖨 양식 인쇄</button>
-                <button className="btn-primary" onClick={saveSchedule} disabled={schedModal.saving||overCap} title={overCap?'월 인정시간 한도(120시간)를 초과해 저장할 수 없습니다':''}>{schedModal.saving?'저장 중…':overCap?'⚠️ 한도 초과':'💾 저장'}</button>
+                <button className="btn-primary" onClick={saveSchedule} disabled={schedModal.saving||overCap} title={overCap?'월 인정시간 한도(120시간)를 초과해 저장할 수 없습니다':''}>{schedModal.saving?'저장 중…':overCap?'⚠️ 한도 초과':'💾 파일로 저장'}</button>
               </div>
             </div>
           </div>
@@ -2138,7 +2128,7 @@ export default function App() {
             <div className="modal-btns" style={{justifyContent:'flex-end',gap:8}}>
               <button className="btn-secondary" onClick={()=>{setWeeklyModal(null);setWeeklyDoc(null);}}>닫기</button>
               <button className="btn-secondary" onClick={printWeeklyReport}>🖨 양식 출력</button>
-              <button className="btn-primary" onClick={saveWeekly} disabled={!!(weeklyDoc&&weeklyDoc.saving)}>{weeklyDoc&&weeklyDoc.saving?'저장 중…':'💾 저장'}</button>
+              <button className="btn-primary" onClick={saveWeekly} disabled={!!(weeklyDoc&&weeklyDoc.saving)}>{weeklyDoc&&weeklyDoc.saving?'저장 중…':'💾 파일로 저장'}</button>
             </div>
           </div>
         </div>
