@@ -1174,54 +1174,95 @@ export default function App() {
   // ── 주간업무 보고서 (공식 PDF 양식 재현) ──
   // 월 단위 1장: 1~5주차 블록에 그 주의 일지를 자동 채움(일반돌봄 주2회·중점 주1회 통화라 주차당 한 칸에 충분).
   // 각 주차 상단에 □사회 □신체 □가사 □기타 — 일지의 '업무 구분' 체크 합집합. 새 창에서 인쇄 → PDF 저장.
-  const [weeklyModal, setWeeklyModal] = useState(null);   // { phone, ym, benefit }
+  const [weeklyModal, setWeeklyModal] = useState(null);   // { phone, ym, benefit, author } — 선택
+  const [weeklyDoc, setWeeklyDoc] = useState(null);       // { weeks:{1..5:{content,topics}}, note, workerName, birth, loaded } — 편집본
+  const [weeklyAll, setWeeklyAll] = useState([]);         // 해당 월 전체(일괄 출력용)
+  // 앱(지원사)이 주차별로 저장한 보고서를 불러옴. 문서가 없거나 빈 주차는 상담일지에서 자동 프리필(참고용).
+  const loadWeekly = async (phone, ym) => {
+    setWeeklyDoc({ weeks: {}, note: '', workerName: '', birth: '', loaded: false });
+    try {
+      const r = await authFetch(`${SERVER_URL}/weekly-reports?ym=${ym}`).then(x => x.json());
+      const all = (r && r.reports) || [];
+      setWeeklyAll(all);
+      const mine = all.find(w => String(w.elderPhone||'').replace(/\D/g,'') === phone) || {};
+      const weeks = {};
+      for (let i = 1; i <= 5; i++) {
+        const w = (mine.weeks || {})[String(i)] || {};
+        weeks[i] = { content: w.content || '', topics: w.topics || [] };
+      }
+      // 빈 주차는 그 주의 상담일지로 프리필 (지원사가 일지로만 남긴 경우 대비 — 저장 전까지는 참고 초안)
+      const [y, m] = ym.split('-').map(Number);
+      const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
+      caseNotes.filter(n => {
+        const ph = String(n.elderPhone||'').replace(/\D/g,'');
+        const d = n.visitedAt ? new Date(n.visitedAt) : null;
+        return ph === phone && d && d.getFullYear() === y && (d.getMonth()+1) === m;
+      }).sort((a,b)=>(a.visitedAt||'').localeCompare(b.visitedAt||'')).forEach(n => {
+        const d = new Date(n.visitedAt);
+        const wk = Math.min(5, Math.floor((d.getDate()-1)/7) + 1);
+        if (weeks[wk].content) return;   // 앱에서 작성한 주차는 건드리지 않음
+        weeks[wk]._fromNotes = true;
+        weeks[wk].content = `${weeks[wk].content ? weeks[wk].content + '\n' : ''}${m}/${d.getDate()} [${TYPE_KO[n.type]||'기타'}] ${n.content}${n.action ? `\n  → 조치: ${n.action}` : ''}`;
+        weeks[wk].topics = [...new Set([...(weeks[wk].topics||[]), ...(n.topics||[])])];
+      });
+      const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === phone) || {};
+      setWeeklyDoc({
+        weeks, note: mine.note || '', birth: mine.birth || '',
+        workerName: mine.workerName || (accounts.find(u=>u.email===el.assignedTo)||{}).name || '',
+        loaded: true,
+      });
+    } catch { setWeeklyDoc(f => ({ ...(f||{}), weeks: {}, loaded: true })); }
+  };
   const openWeeklyReport = () => {
     const first = elders[0];
+    const phone = first ? String(first.phone||'').replace(/\D/g,'') : '';
     setWeeklyModal({
-      phone: first ? String(first.phone||'').replace(/\D/g,'') : '',
-      ym: new Date().toISOString().slice(0,7),
+      phone, ym: new Date().toISOString().slice(0,7),
       benefit: '노인맞춤돌봄서비스',
-      author: '',   // 관리자: 활동지원사(작성자)별 필터. ''=전체
+      author: '',   // 관리자: 지원사(작성자)별 필터. ''=전체
     });
-    if (isAdmin && accounts.length === 0) fetchAccounts();   // 작성자 이름 표시용
+    if (isStaffUp && accounts.length === 0) fetchAccounts();   // 작성자 이름 표시용
+    if (phone) loadWeekly(phone, new Date().toISOString().slice(0,7));
   };
-  // 보고서 1장(폼) HTML — 단건·일괄(관리자) 공용. authorEmail 주어지면 그 작성자의 일지만.
-  const buildWeeklyForm = (phoneKey, y, m, benefit, authorEmail) => {
+  const saveWeekly = async () => {
+    if (!weeklyModal || !weeklyDoc) return;
+    setWeeklyDoc(f => ({ ...f, saving: true }));
+    try {
+      const r = await authFetch(`${SERVER_URL}/weekly-reports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        elderPhone: weeklyModal.phone, ym: weeklyModal.ym,
+        weeks: weeklyDoc.weeks, note: weeklyDoc.note, benefit: weeklyModal.benefit,
+        workerName: weeklyDoc.workerName, birth: weeklyDoc.birth,
+      }) }).then(x => x.json());
+      if (!r.success) window.alert(r.error || '저장 실패');
+      else loadWeekly(weeklyModal.phone, weeklyModal.ym);
+    } catch { window.alert('네트워크 오류'); }
+    setWeeklyDoc(f => f ? ({ ...f, saving: false }) : f);
+  };
+  // 보고서 1장(폼) HTML — 저장본(weeklyReports 문서) 기반. report={elderPhone,elderName,ym,weeks,note,benefit,workerName,birth}
+  const buildWeeklyForm = (report) => {
+    const phoneKey = String(report.elderPhone||'').replace(/\D/g,'');
     const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === phoneKey) || {};
-    const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
     const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-    const notes = caseNotes.filter(n => {
-      const ph = String(n.elderPhone||'').replace(/\D/g,'');
-      const d = n.visitedAt ? new Date(n.visitedAt) : null;
-      return ph === phoneKey && d && d.getFullYear() === y && (d.getMonth()+1) === m
-        && (!authorEmail || (n.authorEmail||'') === authorEmail);
-    }).sort((a,b)=>(a.visitedAt||'').localeCompare(b.visitedAt||''));
-    if (!notes.length) return null;   // 그 달 일지 없는 어르신은 일괄 출력에서 제외
-    const weeks = [[],[],[],[],[]];
-    notes.forEach(n => { const day = new Date(n.visitedAt).getDate(); weeks[Math.min(4, Math.floor((day-1)/7))].push(n); });
-    const weekRows = weeks.map((wNotes, i) => {
-      const tset = new Set(); wNotes.forEach(n => (n.topics||[]).forEach(t=>tset.add(t)));
+    const [y, m] = report.ym.split('-').map(Number);
+    const weeks = report.weeks || {};
+    const hasAny = [1,2,3,4,5].some(i => ((weeks[i]||weeks[String(i)]||{}).content||'').trim());
+    if (!hasAny) return null;
+    const weekRows = [1,2,3,4,5].map(i => {
+      const w = weeks[i] || weeks[String(i)] || {};
+      const tset = new Set(w.topics || []);
       const boxes = Object.entries(CASE_TOPIC_META).map(([k,l]) => `<span class="cb">${tset.has(k)?'&#9745;':'&#9744;'}${l}</span>`).join('');
-      const body = wNotes.map(n => {
-        const d = new Date(n.visitedAt);
-        return `${m}/${d.getDate()} [${TYPE_KO[n.type]||'기타'}] ${esc(n.content)}${n.action?`<br>&nbsp;&nbsp;→ 조치: ${esc(n.action)}`:''}`;
-      }).join('<br>');
-      return `<tr><td class="wkhead" colspan="2">${i+1}주차</td></tr>
-        <tr><td class="lbl">업무내용<br>특이사항</td><td class="cell"><div class="boxes" contenteditable="true">${boxes}</div><div contenteditable="true" class="body">${body||'&nbsp;'}</div></td></tr>`;
+      return `<tr><td class="wkhead" colspan="2">${i}주차</td></tr>
+        <tr><td class="lbl">업무내용<br>특이사항</td><td class="cell"><div class="boxes" contenteditable="true">${boxes}</div><div contenteditable="true" class="body">${esc(w.content)||'&nbsp;'}</div></td></tr>`;
     }).join('');
     const today = new Date();
-    // 생활지원사 성명: 작성자 필터가 있으면 그 계정 이름, 없으면 일지 작성자(최다) → 로그인 사용자 순
-    const authorOf = (email) => { const a = accounts.find(u => u.email === email); return (a && a.name) || (email||'').split('@')[0]; };
-    const mainAuthor = authorEmail || (notes.map(n=>n.authorEmail).filter(Boolean)[0] || (authUser && authUser.email) || '');
-    const author = authorOf(mainAuthor) || (me && me.name) || '';
     return `
       <h1>${y}년 ${m}월 주간업무 보고서</h1>
       <table class="hd">
-        <tr><td class="k">이용자 성명</td><td class="v" contenteditable="true">${esc(el.name||'')}</td><td class="k">이용자 생년월일</td><td class="v" contenteditable="true">${el.age?('만 '+el.age+'세'):''}</td></tr>
-        <tr><td class="k">급여종류</td><td class="v" contenteditable="true">${esc(benefit)}</td><td class="k">생활지원사 성명</td><td class="v" contenteditable="true">${esc(author)}</td></tr>
+        <tr><td class="k">이용자 성명</td><td class="v" contenteditable="true">${esc(report.elderName||el.name||'')}</td><td class="k">이용자 생년월일</td><td class="v" contenteditable="true">${esc(report.birth) || (el.age?('만 '+el.age+'세'):'')}</td></tr>
+        <tr><td class="k">급여종류</td><td class="v" contenteditable="true">${esc(report.benefit||'노인맞춤돌봄서비스')}</td><td class="k">생활지원사 성명</td><td class="v" contenteditable="true">${esc(report.workerName||'')}</td></tr>
       </table>
       <table style="margin-top:-1.5px">${weekRows}
-        <tr><td class="lbl">전담인력<br>지시사항</td><td class="cell"><div contenteditable="true" class="body">&nbsp;</div></td></tr>
+        <tr><td class="lbl">전담인력<br>지시사항</td><td class="cell"><div contenteditable="true" class="body">${esc(report.note)||'&nbsp;'}</div></td></tr>
       </table>
       <div class="sign">${today.getFullYear()}년 &nbsp; ${today.getMonth()+1}월 &nbsp; ${today.getDate()}일</div>
       <div class="sig2">전담인력 : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (서명 또는 印)</div>`;
@@ -1258,27 +1299,28 @@ export default function App() {
     w.document.write(html); w.document.close();
     setWeeklyModal(null);
   };
-  // 단건 출력 (어르신 1명)
+  // 단건 출력 — 현재 편집 중인 내용 그대로 (저장 안 한 수정도 반영)
   const printWeeklyReport = () => {
-    if (!weeklyModal || !weeklyModal.phone) { window.alert('어르신을 선택해 주세요.'); return; }
+    if (!weeklyModal || !weeklyModal.phone || !weeklyDoc) { window.alert('이용자를 선택해 주세요.'); return; }
+    const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === weeklyModal.phone) || {};
     const [y, m] = weeklyModal.ym.split('-').map(Number);
-    const page = buildWeeklyForm(weeklyModal.phone, y, m, weeklyModal.benefit, weeklyModal.author || '');
-    if (!page) { window.alert('선택한 달에 이 어르신의 일지가 없습니다.'); return; }
+    const page = buildWeeklyForm({
+      elderPhone: weeklyModal.phone, elderName: el.name, ym: weeklyModal.ym,
+      weeks: weeklyDoc.weeks, note: weeklyDoc.note, benefit: weeklyModal.benefit,
+      workerName: weeklyDoc.workerName, birth: weeklyDoc.birth,
+    });
+    if (!page) { window.alert('작성된 주차가 없습니다. 지원사 앱에서 작성하거나 여기서 입력해 주세요.'); return; }
     openReportWindow([page], `${y}년 ${m}월 주간업무 보고서`);
   };
-  // 관리자 일괄 출력: 그 달에 일지가 있는 어르신 전원(작성자 필터 가능) — 한 창에 여러 장(장마다 인쇄 페이지 분리)
+  // 관리자 일괄 출력: 그 달에 저장된 보고서 전체(작성자 필터 가능) — 한 창에 여러 장(장마다 인쇄 페이지 분리)
   const printWeeklyBatch = () => {
     if (!weeklyModal) return;
     const [y, m] = weeklyModal.ym.split('-').map(Number);
-    const phones = [...new Set(caseNotes.filter(n => {
-      const d = n.visitedAt ? new Date(n.visitedAt) : null;
-      return d && d.getFullYear() === y && (d.getMonth()+1) === m
-        && (!weeklyModal.author || (n.authorEmail||'') === weeklyModal.author);
-    }).map(n => String(n.elderPhone||'').replace(/\D/g,'')))].filter(Boolean);
-    const pages = phones
-      .map(p => buildWeeklyForm(p, y, m, weeklyModal.benefit, weeklyModal.author || ''))
+    const pages = weeklyAll
+      .filter(w => !weeklyModal.author || (w.authorEmail||'') === weeklyModal.author)
+      .map(w => buildWeeklyForm({ ...w, benefit: w.benefit || weeklyModal.benefit }))
       .filter(Boolean);
-    if (!pages.length) { window.alert('선택한 조건(월·작성자)에 해당하는 일지가 없습니다.'); return; }
+    if (!pages.length) { window.alert('선택한 조건(월·작성자)에 저장된 보고서가 없습니다. 지원사 앱에서 주차별로 저장하면 여기에 모입니다.'); return; }
     openReportWindow(pages, `${y}년 ${m}월 주간업무 보고서 일괄 (${pages.length}명)`);
   };
 
@@ -1886,36 +1928,73 @@ export default function App() {
       })()}
 
       {weeklyModal && (
-        <div className="modal-overlay" onClick={()=>setWeeklyModal(null)}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:440,width:'94%',textAlign:'left'}}>
-            <h3 style={{margin:'0 0 6px'}}>📄 주간업무 보고서</h3>
-            <div style={{fontSize:13,color:'#64748b',marginBottom:14}}>선택한 달의 상담·방문 일지를 공식 양식(1~5주차)에 자동으로 채워 인쇄(PDF 저장)합니다.</div>
-            <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>어르신</label>
-            <select className="form-input" style={{width:'100%',marginBottom:12}} value={weeklyModal.phone} onChange={e=>setWeeklyModal(f=>({...f,phone:e.target.value}))}>
-              {elders.map(e=>(<option key={e.id} value={String(e.phone||'').replace(/\D/g,'')}>{e.name} ({e.phone})</option>))}
-            </select>
-            <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>대상 월</label>
-            <input type="month" className="form-input" style={{width:'100%',marginBottom:12}} value={weeklyModal.ym} onChange={e=>setWeeklyModal(f=>({...f,ym:e.target.value}))}/>
-            <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>급여종류</label>
-            <input className="form-input" style={{width:'100%',marginBottom:12}} value={weeklyModal.benefit} onChange={e=>setWeeklyModal(f=>({...f,benefit:e.target.value}))}/>
-            {isAdmin && (()=>{
+        <div className="modal-overlay" onClick={()=>{setWeeklyModal(null);setWeeklyDoc(null);}}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:640,width:'94%',textAlign:'left',maxHeight:'88vh',overflowY:'auto'}}>
+            <h3 style={{margin:'0 0 6px'}}>📄 주간업무 보고서 — 확인·수정·출력</h3>
+            <div style={{fontSize:13,color:'#64748b',marginBottom:12}}>지원사가 앱에서 주차별로 작성(음성→텍스트)한 내용입니다. 오타를 고치고 지시사항을 적은 뒤 저장·출력하세요.</div>
+            <div style={{display:'flex',gap:8,marginBottom:10}}>
+              <select className="form-input" style={{flex:1,margin:0}} value={weeklyModal.phone} onChange={e=>{const p=e.target.value;setWeeklyModal(f=>({...f,phone:p}));loadWeekly(p,weeklyModal.ym);}}>
+                {elders.map(e=>(<option key={e.id} value={String(e.phone||'').replace(/\D/g,'')}>{e.name} ({e.phone})</option>))}
+              </select>
+              <input type="month" className="form-input" style={{width:150,margin:0}} value={weeklyModal.ym} onChange={e=>{const ym=e.target.value;setWeeklyModal(f=>({...f,ym}));loadWeekly(weeklyModal.phone,ym);}}/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
+              <input className="form-input" style={{margin:0}} placeholder="급여종류" value={weeklyModal.benefit} onChange={e=>setWeeklyModal(f=>({...f,benefit:e.target.value}))}/>
+              <input className="form-input" style={{margin:0}} placeholder="이용자 생년월일" value={(weeklyDoc&&weeklyDoc.birth)||''} onChange={e=>setWeeklyDoc(f=>({...f,birth:e.target.value}))}/>
+              <input className="form-input" style={{margin:0}} placeholder="지원사 성명" value={(weeklyDoc&&weeklyDoc.workerName)||''} onChange={e=>setWeeklyDoc(f=>({...f,workerName:e.target.value}))}/>
+            </div>
+            {(!weeklyDoc || !weeklyDoc.loaded) ? (
+              <div style={{textAlign:'center',color:'#94a3b8',padding:24}}>불러오는 중…</div>
+            ) : (
+              <>
+                {[1,2,3,4,5].map(i=>{
+                  const w = weeklyDoc.weeks[i] || { content:'', topics:[] };
+                  const setW = (patch)=>setWeeklyDoc(f=>({...f,weeks:{...f.weeks,[i]:{...(f.weeks[i]||{content:'',topics:[]}),...patch, _fromNotes:false}}}));
+                  return (
+                  <div key={i} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',marginBottom:10,background:w._fromNotes?'#fffbeb':'#fff'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:6}}>
+                      <span style={{fontWeight:900,color:'#1e3a6e'}}>{i}주차</span>
+                      {w._fromNotes && <span style={{fontSize:11.5,fontWeight:700,color:'#b45309',background:'#fef3c7',padding:'2px 8px',borderRadius:12}}>상담일지에서 자동 채움 — 저장 시 확정</span>}
+                      <div style={{display:'flex',gap:10,marginLeft:'auto'}}>
+                        {Object.entries(CASE_TOPIC_META).map(([k,l])=>(
+                          <label key={k} style={{display:'flex',alignItems:'center',gap:4,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+                            <input type="checkbox" checked={(w.topics||[]).includes(k)}
+                              onChange={e=>setW({topics:e.target.checked?[...(w.topics||[]),k]:(w.topics||[]).filter(t=>t!==k)})}/>
+                            {l}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <textarea className="form-input" style={{width:'100%',minHeight:64,margin:0,fontSize:13.5,lineHeight:1.5}} value={w.content}
+                      placeholder="이 주차 업무내용·특이사항 (지원사 앱에서 녹음하면 자동으로 채워집니다)"
+                      onChange={e=>setW({content:e.target.value})}/>
+                  </div>
+                  );
+                })}
+                <div style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',marginBottom:12}}>
+                  <div style={{fontWeight:900,color:'#1e3a6e',marginBottom:6}}>전담인력 지시사항</div>
+                  <textarea className="form-input" style={{width:'100%',minHeight:48,margin:0,fontSize:13.5}} value={weeklyDoc.note}
+                    placeholder="검토 후 지원사에게 전달할 지시사항" onChange={e=>setWeeklyDoc(f=>({...f,note:e.target.value}))}/>
+                </div>
+              </>
+            )}
+            {isStaffUp && (()=>{
               const authorName = (em)=>{ const a=accounts.find(u=>u.email===em); return (a&&a.name)?`${a.name} (${em.split('@')[0]})`:em; };
-              const authorsInNotes = [...new Set(caseNotes.map(n=>n.authorEmail).filter(Boolean))];
+              const authors = [...new Set(weeklyAll.map(w=>w.authorEmail).filter(Boolean))];
               return (
-              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',marginBottom:16}}>
-                <div style={{fontSize:12.5,fontWeight:800,color:'#1e3a6e',marginBottom:6}}>👥 관리자 — 활동지원사별 일괄 출력</div>
-                <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>작성자 (활동지원사)</label>
-                <select className="form-input" style={{width:'100%',marginBottom:8}} value={weeklyModal.author} onChange={e=>setWeeklyModal(f=>({...f,author:e.target.value}))}>
+              <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:12,background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'8px 10px'}}>
+                <select className="form-input" style={{flex:1,margin:0}} value={weeklyModal.author} onChange={e=>setWeeklyModal(f=>({...f,author:e.target.value}))}>
                   <option value="">전체 작성자</option>
-                  {authorsInNotes.map(em=>(<option key={em} value={em}>{authorName(em)}</option>))}
+                  {authors.map(em=>(<option key={em} value={em}>{authorName(em)}</option>))}
                 </select>
-                <button className="btn-secondary" style={{width:'100%'}} onClick={printWeeklyBatch} title="그 달에 일지가 있는 어르신 전원의 보고서를 한 번에 — 인쇄하면 장마다 한 페이지, PDF 한 파일로 저장됩니다">🖨 일괄 출력 (해당 월 전체 어르신)</button>
+                <button className="btn-secondary" style={{whiteSpace:'nowrap'}} onClick={printWeeklyBatch} title="그 달에 저장된 보고서 전체를 한 번에 — PDF 한 파일">🖨 일괄 출력</button>
               </div>
               );
             })()}
-            <div className="modal-btns" style={{justifyContent:'flex-end'}}>
-              <button className="btn-secondary" onClick={()=>setWeeklyModal(null)}>취소</button>
-              <button className="btn-primary" onClick={printWeeklyReport}>🖨 양식 열기 (인쇄·PDF)</button>
+            <div className="modal-btns" style={{justifyContent:'flex-end',gap:8}}>
+              <button className="btn-secondary" onClick={()=>{setWeeklyModal(null);setWeeklyDoc(null);}}>닫기</button>
+              <button className="btn-secondary" onClick={printWeeklyReport}>🖨 양식 출력</button>
+              <button className="btn-primary" onClick={saveWeekly} disabled={!!(weeklyDoc&&weeklyDoc.saving)}>{weeklyDoc&&weeklyDoc.saving?'저장 중…':'💾 저장'}</button>
             </div>
           </div>
         </div>
