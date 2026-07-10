@@ -1148,19 +1148,22 @@ export default function App() {
       phone: first ? String(first.phone||'').replace(/\D/g,'') : '',
       ym: new Date().toISOString().slice(0,7),
       benefit: '노인맞춤돌봄서비스',
+      author: '',   // 관리자: 활동지원사(작성자)별 필터. ''=전체
     });
+    if (isAdmin && accounts.length === 0) fetchAccounts();   // 작성자 이름 표시용
   };
-  const printWeeklyReport = () => {
-    if (!weeklyModal || !weeklyModal.phone) { window.alert('어르신을 선택해 주세요.'); return; }
-    const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === weeklyModal.phone) || {};
-    const [y, m] = weeklyModal.ym.split('-').map(Number);
+  // 보고서 1장(폼) HTML — 단건·일괄(관리자) 공용. authorEmail 주어지면 그 작성자의 일지만.
+  const buildWeeklyForm = (phoneKey, y, m, benefit, authorEmail) => {
+    const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === phoneKey) || {};
     const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
     const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
     const notes = caseNotes.filter(n => {
       const ph = String(n.elderPhone||'').replace(/\D/g,'');
       const d = n.visitedAt ? new Date(n.visitedAt) : null;
-      return ph === weeklyModal.phone && d && d.getFullYear() === y && (d.getMonth()+1) === m;
+      return ph === phoneKey && d && d.getFullYear() === y && (d.getMonth()+1) === m
+        && (!authorEmail || (n.authorEmail||'') === authorEmail);
     }).sort((a,b)=>(a.visitedAt||'').localeCompare(b.visitedAt||''));
+    if (!notes.length) return null;   // 그 달 일지 없는 어르신은 일괄 출력에서 제외
     const weeks = [[],[],[],[],[]];
     notes.forEach(n => { const day = new Date(n.visitedAt).getDate(); weeks[Math.min(4, Math.floor((day-1)/7))].push(n); });
     const weekRows = weeks.map((wNotes, i) => {
@@ -1174,8 +1177,24 @@ export default function App() {
         <tr><td class="lbl">업무내용<br>특이사항</td><td class="cell"><div class="boxes" contenteditable="true">${boxes}</div><div contenteditable="true" class="body">${body||'&nbsp;'}</div></td></tr>`;
     }).join('');
     const today = new Date();
-    const author = (me && me.name) || ((authUser && authUser.email) || '').split('@')[0];
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${y}년 ${m}월 주간업무 보고서 — ${esc(el.name||'')}</title><style>
+    // 생활지원사 성명: 작성자 필터가 있으면 그 계정 이름, 없으면 일지 작성자(최다) → 로그인 사용자 순
+    const authorOf = (email) => { const a = accounts.find(u => u.email === email); return (a && a.name) || (email||'').split('@')[0]; };
+    const mainAuthor = authorEmail || (notes.map(n=>n.authorEmail).filter(Boolean)[0] || (authUser && authUser.email) || '');
+    const author = authorOf(mainAuthor) || (me && me.name) || '';
+    return `
+      <h1>${y}년 ${m}월 주간업무 보고서</h1>
+      <table class="hd">
+        <tr><td class="k">이용자 성명</td><td class="v" contenteditable="true">${esc(el.name||'')}</td><td class="k">이용자 생년월일</td><td class="v" contenteditable="true">${el.age?('만 '+el.age+'세'):''}</td></tr>
+        <tr><td class="k">급여종류</td><td class="v" contenteditable="true">${esc(benefit)}</td><td class="k">생활지원사 성명</td><td class="v" contenteditable="true">${esc(author)}</td></tr>
+      </table>
+      <table style="margin-top:-1.5px">${weekRows}
+        <tr><td class="lbl">전담인력<br>지시사항</td><td class="cell"><div contenteditable="true" class="body">&nbsp;</div></td></tr>
+      </table>
+      <div class="sign">${today.getFullYear()}년 &nbsp; ${today.getMonth()+1}월 &nbsp; ${today.getDate()}일</div>
+      <div class="sig2">전담인력 : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (서명 또는 印)</div>`;
+  };
+  const openReportWindow = (pages, title) => {
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
       body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;margin:28px auto;max-width:760px;color:#111}
       h1{text-align:center;font-size:24px;letter-spacing:2px;text-decoration:underline;text-underline-offset:6px;margin:10px 0 24px}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
@@ -1194,25 +1213,40 @@ export default function App() {
       .noprint{position:fixed;top:12px;right:12px}
       .noprint button{padding:10px 18px;font-size:14px;font-weight:800;border-radius:8px;border:0;background:#1d4ed8;color:#fff;cursor:pointer}
       .hint{position:fixed;top:12px;left:12px;font-size:12px;color:#64748b;background:#f1f5f9;padding:6px 10px;border-radius:8px}
-      @media print{.noprint,.hint{display:none}body{margin:0 auto}}
+      .pgbrk{page-break-after:always;border-top:2px dashed #cbd5e1;margin:40px 0}
+      @media print{.noprint,.hint{display:none}body{margin:0 auto}.pgbrk{border:0;margin:0}}
     </style></head><body>
       <div class="hint">✏️ 칸을 클릭하면 인쇄 전에 내용을 고칠 수 있어요</div>
       <div class="noprint"><button onclick="window.print()">🖨 인쇄 / PDF 저장</button></div>
-      <h1>${y}년 ${m}월 주간업무 보고서</h1>
-      <table class="hd">
-        <tr><td class="k">이용자 성명</td><td class="v" contenteditable="true">${esc(el.name||'')}</td><td class="k">이용자 생년월일</td><td class="v" contenteditable="true">${el.age?('만 '+el.age+'세'):''}</td></tr>
-        <tr><td class="k">급여종류</td><td class="v" contenteditable="true">${esc(weeklyModal.benefit)}</td><td class="k">생활지원사 성명</td><td class="v" contenteditable="true">${esc(author)}</td></tr>
-      </table>
-      <table style="margin-top:-1.5px">${weekRows}
-        <tr><td class="lbl">전담인력<br>지시사항</td><td class="cell"><div contenteditable="true" class="body">&nbsp;</div></td></tr>
-      </table>
-      <div class="sign">${today.getFullYear()}년 &nbsp; ${today.getMonth()+1}월 &nbsp; ${today.getDate()}일</div>
-      <div class="sig2">전담인력 : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (서명 또는 印)</div>
+      ${pages.join('<div class="pgbrk"></div>')}
     </body></html>`;
     const w = window.open('', '_blank');
     if (!w) { window.alert('팝업이 차단됐습니다. 팝업을 허용해 주세요.'); return; }
     w.document.write(html); w.document.close();
     setWeeklyModal(null);
+  };
+  // 단건 출력 (어르신 1명)
+  const printWeeklyReport = () => {
+    if (!weeklyModal || !weeklyModal.phone) { window.alert('어르신을 선택해 주세요.'); return; }
+    const [y, m] = weeklyModal.ym.split('-').map(Number);
+    const page = buildWeeklyForm(weeklyModal.phone, y, m, weeklyModal.benefit, weeklyModal.author || '');
+    if (!page) { window.alert('선택한 달에 이 어르신의 일지가 없습니다.'); return; }
+    openReportWindow([page], `${y}년 ${m}월 주간업무 보고서`);
+  };
+  // 관리자 일괄 출력: 그 달에 일지가 있는 어르신 전원(작성자 필터 가능) — 한 창에 여러 장(장마다 인쇄 페이지 분리)
+  const printWeeklyBatch = () => {
+    if (!weeklyModal) return;
+    const [y, m] = weeklyModal.ym.split('-').map(Number);
+    const phones = [...new Set(caseNotes.filter(n => {
+      const d = n.visitedAt ? new Date(n.visitedAt) : null;
+      return d && d.getFullYear() === y && (d.getMonth()+1) === m
+        && (!weeklyModal.author || (n.authorEmail||'') === weeklyModal.author);
+    }).map(n => String(n.elderPhone||'').replace(/\D/g,'')))].filter(Boolean);
+    const pages = phones
+      .map(p => buildWeeklyForm(p, y, m, weeklyModal.benefit, weeklyModal.author || ''))
+      .filter(Boolean);
+    if (!pages.length) { window.alert('선택한 조건(월·작성자)에 해당하는 일지가 없습니다.'); return; }
+    openReportWindow(pages, `${y}년 ${m}월 주간업무 보고서 일괄 (${pages.length}명)`);
   };
 
   // 건강 알림 → 일지 작성: 알림 시각 근처(±3시간)의 통화를 찾아 초안(요약)까지 채워서 열기.
@@ -1624,7 +1658,22 @@ export default function App() {
             <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>대상 월</label>
             <input type="month" className="form-input" style={{width:'100%',marginBottom:12}} value={weeklyModal.ym} onChange={e=>setWeeklyModal(f=>({...f,ym:e.target.value}))}/>
             <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>급여종류</label>
-            <input className="form-input" style={{width:'100%',marginBottom:16}} value={weeklyModal.benefit} onChange={e=>setWeeklyModal(f=>({...f,benefit:e.target.value}))}/>
+            <input className="form-input" style={{width:'100%',marginBottom:12}} value={weeklyModal.benefit} onChange={e=>setWeeklyModal(f=>({...f,benefit:e.target.value}))}/>
+            {isAdmin && (()=>{
+              const authorName = (em)=>{ const a=accounts.find(u=>u.email===em); return (a&&a.name)?`${a.name} (${em.split('@')[0]})`:em; };
+              const authorsInNotes = [...new Set(caseNotes.map(n=>n.authorEmail).filter(Boolean))];
+              return (
+              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',marginBottom:16}}>
+                <div style={{fontSize:12.5,fontWeight:800,color:'#1e3a6e',marginBottom:6}}>👥 관리자 — 활동지원사별 일괄 출력</div>
+                <label style={{display:'block',fontSize:13,fontWeight:700,color:'#334155',marginBottom:5}}>작성자 (활동지원사)</label>
+                <select className="form-input" style={{width:'100%',marginBottom:8}} value={weeklyModal.author} onChange={e=>setWeeklyModal(f=>({...f,author:e.target.value}))}>
+                  <option value="">전체 작성자</option>
+                  {authorsInNotes.map(em=>(<option key={em} value={em}>{authorName(em)}</option>))}
+                </select>
+                <button className="btn-secondary" style={{width:'100%'}} onClick={printWeeklyBatch} title="그 달에 일지가 있는 어르신 전원의 보고서를 한 번에 — 인쇄하면 장마다 한 페이지, PDF 한 파일로 저장됩니다">🖨 일괄 출력 (해당 월 전체 어르신)</button>
+              </div>
+              );
+            })()}
             <div className="modal-btns" style={{justifyContent:'flex-end'}}>
               <button className="btn-secondary" onClick={()=>setWeeklyModal(null)}>취소</button>
               <button className="btn-primary" onClick={printWeeklyReport}>🖨 양식 열기 (인쇄·PDF)</button>
