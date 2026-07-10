@@ -1391,8 +1391,6 @@ export default function App() {
     const recOfp = (d) => Number(days[String(d)] || 0) * (is15p(d) ? SCHED_RATE : 1);
     const totalInputP = Object.values(days).reduce((a, b) => a + Number(b), 0);
     const total = Math.round(Array.from({length:lastDay},(_,i)=>recOfp(i+1)).reduce((a,b)=>a+b,0)*100)/100;   // 인정시간
-    const cats = new Set(sched.categories || []);
-    const catStr = Object.entries(CASE_TOPIC_META).map(([k,l]) => `${cats.has(k)?'&#9745;':'&#9744;'}${l}`).join(' ');
     // 주(일~토) 단위 셀 구성
     const cells = [];
     for (let i = 0; i < offset; i++) cells.push(null);
@@ -1416,8 +1414,8 @@ export default function App() {
     return `
       <h1>급여제공 일정표( ${m}월 )</h1>
       <table class="hd">
-        <tr><td class="k">수급자 성명</td><td class="v" contenteditable="true">${esc(el.name||sched.elderName||'')}</td><td class="k">수급자 생년월일</td><td class="v" contenteditable="true">${esc(sched.birth||'')}</td><td class="k">거주지</td><td class="v" contenteditable="true">${esc(sched.residence||'')}</td></tr>
-        <tr><td class="k">급여종류</td><td class="v">활동보조( ${catStr} )</td><td class="k">활동지원사성명</td><td class="v" contenteditable="true">${esc(sched.workerName||'')}</td><td class="k">월 근로시간</td><td class="v">${total ? `${total}시간 (입력 ${totalInputP}시간)` : ''}</td></tr>
+        <tr><td class="k">수급자 성명</td><td class="v" contenteditable="true">${esc(el.name||sched.elderName||'')}</td><td class="k">수급자 생년월일</td><td class="v" contenteditable="true">${esc(sched.birth||'')}</td><td class="k">활동지원사성명</td><td class="v" contenteditable="true">${esc(sched.workerName||'')}</td></tr>
+        <tr><td class="k">급여종류</td><td class="v" contenteditable="true">활동지원서비스</td><td class="k">월 근로시간</td><td class="v" colspan="3">${total ? `${total}시간 (입력 ${totalInputP}시간)` : ''}</td></tr>
       </table>
       <div class="legend">※ 주말·공휴일(休)은 1.5배 인정 · 월 인정시간 한도 120시간 · (주 __시간)은 인정 기준</div>
       <table class="cal">
@@ -1915,21 +1913,10 @@ export default function App() {
               </select>
               <input type="month" className="form-input" style={{width:150,margin:0}} value={schedModal.ym} onChange={e=>{ const ym=e.target.value; setSchedModal(f=>({...f,ym,loaded:false})); loadSchedule(schedModal.phone, ym); }}/>
             </div>
-            <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>
-              <span style={{fontSize:13,fontWeight:700,color:'#334155'}}>급여종류(활동보조):</span>
-              {Object.entries(CASE_TOPIC_META).map(([k,l])=>(
-                <label key={k} style={{display:'flex',alignItems:'center',gap:5,fontSize:13.5,fontWeight:600,cursor:'pointer'}}>
-                  <input type="checkbox" checked={(schedModal.categories||[]).includes(k)}
-                    onChange={e=>setSchedModal(f=>({...f,categories:e.target.checked?[...(f.categories||[]),k]:(f.categories||[]).filter(t=>t!==k)}))}/>
-                  {l}
-                </label>
-              ))}
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
               <input className="form-input" style={{margin:0}} placeholder="수급자 생년월일 (예: 1948.05.12)" value={schedModal.birth} onChange={e=>setSchedModal(f=>({...f,birth:e.target.value}))}/>
-              <input className="form-input" style={{margin:0}} placeholder="거주지 (시·군·구)" value={schedModal.residence} onChange={e=>setSchedModal(f=>({...f,residence:e.target.value}))}/>
+              <input className="form-input" style={{margin:0}} placeholder="활동지원사 성명" value={schedModal.workerName} onChange={e=>setSchedModal(f=>({...f,workerName:e.target.value}))}/>
             </div>
-            <input className="form-input" style={{marginBottom:12,width:'100%'}} placeholder="활동지원사 성명" value={schedModal.workerName} onChange={e=>setSchedModal(f=>({...f,workerName:e.target.value}))}/>
             {!schedModal.loaded ? (
               <div style={{textAlign:'center',color:'#94a3b8',padding:20}}>불러오는 중…</div>
             ) : winWide ? (
