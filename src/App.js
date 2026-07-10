@@ -1336,7 +1336,7 @@ export default function App() {
   // 급여 산정: 월 인정 한도 120시간, 주말·공휴일 1.5배 (입력 2h → 인정 3h)
   const SCHED_CAP = 120, SCHED_RATE = 1.5;
   // 2026년 법정 공휴일(대체 포함) — 자동 반영. 임시·대체 변경은 날짜 클릭으로 수동 지정/해제.
-  const KR_HOLIDAYS = ['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-06','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-09-28','2026-10-03','2026-10-05','2026-10-09','2026-12-25'];
+  const KR_HOLIDAYS = ['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-06','2026-07-17','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-09-28','2026-10-03','2026-10-05','2026-10-09','2026-12-25'];
   const autoHolidays = (ym) => KR_HOLIDAYS.filter(d => d.startsWith(ym)).map(d => Number(d.slice(8)));
   // 반응형: PC(≥900px)=달력형(가로 7열, 공식 양식과 동일 배치·주 합계 열) / 모바일=세로 날짜 리스트(한 손 입력)
   const [winWide, setWinWide] = useState(typeof window !== 'undefined' && window.innerWidth >= 900);
@@ -1994,7 +1994,7 @@ export default function App() {
 
       {weeklyModal && (
         <div className="modal-overlay" onClick={()=>{setWeeklyModal(null);setWeeklyDoc(null);}}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:640,width:'94%',textAlign:'left',maxHeight:'88vh',overflowY:'auto'}}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:winWide?1020:640,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
             <h3 style={{margin:'0 0 6px'}}>📄 주간업무 보고서 — 확인·수정·출력</h3>
             <div style={{fontSize:13,color:'#64748b',marginBottom:12}}>지원사가 앱에서 주차별로 작성(음성→텍스트)한 내용입니다. 오타를 고치고 지시사항을 적은 뒤 저장·출력하세요.</div>
             <div style={{display:'flex',gap:8,marginBottom:10}}>
@@ -2012,11 +2012,13 @@ export default function App() {
               <div style={{textAlign:'center',color:'#94a3b8',padding:24}}>불러오는 중…</div>
             ) : (
               <>
+                {/* PC(와이드): 주차 2열 그리드로 모니터 폭 활용 (5주차는 전체 폭), 모바일: 세로 1열 */}
+                <div style={{display:'grid',gridTemplateColumns:winWide?'1fr 1fr':'1fr',gap:10,marginBottom:10}}>
                 {[1,2,3,4,5].map(i=>{
                   const w = weeklyDoc.weeks[i] || { content:'', topics:[] };
                   const setW = (patch)=>setWeeklyDoc(f=>({...f,weeks:{...f.weeks,[i]:{...(f.weeks[i]||{content:'',topics:[]}),...patch, _fromNotes:false}}}));
                   return (
-                  <div key={i} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',marginBottom:10,background:w._fromNotes?'#fffbeb':'#fff'}}>
+                  <div key={i} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',background:w._fromNotes?'#fffbeb':'#fff',...(winWide&&i===5?{gridColumn:'1 / -1'}:{})}}>
                     <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:6}}>
                       <span style={{fontWeight:900,color:'#1e3a6e'}}>{i}주차</span>
                       {w._fromNotes && <span style={{fontSize:11.5,fontWeight:700,color:'#b45309',background:'#fef3c7',padding:'2px 8px',borderRadius:12}}>상담일지에서 자동 채움 — 저장 시 확정</span>}
@@ -2030,12 +2032,13 @@ export default function App() {
                         ))}
                       </div>
                     </div>
-                    <textarea className="form-input" style={{width:'100%',minHeight:64,margin:0,fontSize:13.5,lineHeight:1.5}} value={w.content}
+                    <textarea className="form-input" style={{width:'100%',minHeight:winWide?96:64,margin:0,fontSize:13.5,lineHeight:1.5}} value={w.content}
                       placeholder="이 주차 업무내용·특이사항 (지원사 앱에서 녹음하면 자동으로 채워집니다)"
                       onChange={e=>setW({content:e.target.value})}/>
                   </div>
                   );
                 })}
+                </div>
                 <div style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',marginBottom:12}}>
                   <div style={{fontWeight:900,color:'#1e3a6e',marginBottom:6}}>전담인력 지시사항</div>
                   <textarea className="form-input" style={{width:'100%',minHeight:48,margin:0,fontSize:13.5}} value={weeklyDoc.note}
