@@ -1214,7 +1214,7 @@ export default function App() {
       });
       const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === phone) || {};
       setWeeklyDoc({
-        weeks, note: mine.note || '', birth: mine.birth || '',
+        weeks, note: mine.note || '', birth: mine.birth || juminToBirth(el.jumin) || '',
         workerName: mine.workerName || (accounts.find(u=>u.email===el.assignedTo)||{}).name || '',
         loaded: true,
       });
