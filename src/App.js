@@ -88,7 +88,14 @@ class PageErrorBoundary extends Component {
     return this.props.children;
   }
 }
-const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', caregiver:'', caregiverPhone:'', assignedTo:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', careGroup:'', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
+const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', jumin:'', caregiver:'', caregiverPhone:'', assignedTo:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', careGroup:'', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
+// 주민등록번호 앞 6자리 → 생년월일 (7번째 자리로 세기 판정: 1·2=1900년대, 3·4=2000년대)
+const juminToBirth = (jumin) => {
+  const d = String(jumin||'').replace(/[^0-9]/g,'');
+  if (d.length < 7) return '';
+  const century = ['1','2','5','6'].includes(d[6]) ? '19' : '20';
+  return `${century}${d.slice(0,2)}.${d.slice(2,4)}.${d.slice(4,6)}`;
+};
 
 // 노인맞춤돌봄서비스 돌봄군 — 전화 안전확인 권장 주기(제도 기준): 일반돌봄군 주 2회, 중점돌봄군 주 1회(방문이 주 2회라 전화는 1회)
 const CARE_GROUPS = {
@@ -1351,9 +1358,11 @@ export default function App() {
         days: (minePh && minePh.days) || {},
         holidays: (minePh && minePh.holidays) || autoHolidays(ym),
         categories: (minePh && minePh.categories) || [],
-        birth: (minePh && minePh.birth) || '',
+        // 생년월일: 저장값 → 어르신 주민등록번호에서 자동 변환 순
+        birth: (minePh && minePh.birth) || juminToBirth(el.jumin) || '',
         residence: (minePh && minePh.residence) || el.region || '',
-        workerName: (minePh && minePh.workerName) || (accounts.find(u=>u.email===el.assignedTo)||{}).name || '',
+        // 활동지원사 성명: 저장값 → 담당 지원사 계정 이름 → 내 계정 이름 순 (자동 입력)
+        workerName: (minePh && minePh.workerName) || (accounts.find(u=>u.email===el.assignedTo)||{}).name || (me && me.name) || '',
       }));
     } catch { setSchedModal(f => ({ ...f, loaded: true })); }
   };
@@ -3700,6 +3709,7 @@ export default function App() {
                   <div className="form-field"><label className="form-label">이름 <span className="required">*</span></label><input {...inp('name')} placeholder="예: 김순자"/>{formErrors.name&&<div className="error-msg">{formErrors.name}</div>}</div>
                   <div className="form-field"><label className="form-label">나이 <span className="required">*</span></label><input {...inp('age')} type="number" placeholder="예: 78"/>{formErrors.age&&<div className="error-msg">{formErrors.age}</div>}</div>
                   <div className="form-field"><label className="form-label">전화번호 <span className="required">*</span></label><input {...inp('phone')} placeholder="예: 010-1234-5678"/>{formErrors.phone&&<div className="error-msg">{formErrors.phone}</div>}</div>
+                  <div className="form-field"><label className="form-label">주민등록번호 <span style={{fontSize:11,color:'#94a3b8'}}>(급여제공 일정표의 생년월일에 사용)</span></label><input className="form-input" value={form.jumin||''} inputMode="numeric" maxLength={14} placeholder="000000-0000000" onChange={e=>{const d=e.target.value.replace(/[^0-9]/g,'').slice(0,13);setForm(f=>({...f,jumin:d.length>6?`${d.slice(0,6)}-${d.slice(6)}`:d}));}}/></div>
                   <div className="form-field"><label className="form-label">관할 구역 <span style={{fontSize:11,color:'#94a3b8'}}>(주소에서 자동)</span></label><input className="form-input" value={form.region||''} readOnly placeholder="주소 검색 시 자동 입력" style={{background:'#f8fafc'}}/></div>
                   <div className="form-field full-width"><label className="form-label">주소 <span className="required">*</span></label><div style={{display:'flex',gap:8}}><input {...inp('address')} placeholder="🔍 주소 검색을 눌러 선택" style={{flex:1}}/><button type="button" className="btn-secondary" onClick={openAddressSearch} style={{whiteSpace:'nowrap',padding:'0 18px',fontWeight:700}}>🔍 주소 검색</button></div>{formErrors.address&&<div className="error-msg">{formErrors.address}</div>}</div>
                   <div className="form-field full-width"><label className="form-label">상세 주소 <span style={{fontSize:11,color:'#94a3b8'}}>(아파트 동/호수 등)</span></label><input {...inp('addressDetail')} placeholder="예: 101동 1202호"/></div>
