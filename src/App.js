@@ -1374,6 +1374,52 @@ export default function App() {
     if (isStaffUp && accounts.length === 0) fetchAccounts();
     if (phone) loadSchedule(phone, ym);
   };
+  // 일정표를 엑셀 파일로 — "다른 이름으로 저장" 대화상자(지원 브라우저)로 저장 위치 선택
+  const exportScheduleXlsx = async () => {
+    if (!schedModal) return;
+    const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === schedModal.phone) || {};
+    const [y, m] = schedModal.ym.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const hset = new Set(schedModal.holidays || []);
+    const is15x = (d) => { const dw = new Date(y, m-1, d).getDay(); return dw === 0 || dw === 6 || hset.has(d); };
+    const recX = (d) => Number((schedModal.days||{})[String(d)]||0) * (is15x(d) ? SCHED_RATE : 1);
+    const totalIn = Object.values(schedModal.days||{}).reduce((a,b)=>a+Number(b),0);
+    const totalRc = Math.round(Array.from({length:lastDay},(_,i)=>recX(i+1)).reduce((a,b)=>a+b,0)*100)/100;
+    // 달력형 시트: 주별 2행(날짜 / 시간) + 주합계 열
+    const offset = new Date(y, m-1, 1).getDay();
+    const cells = [...Array(offset).fill(null), ...Array.from({length:lastDay},(_,i)=>i+1)];
+    while (cells.length % 7 !== 0) cells.push(null);
+    const aoa = [
+      [`급여제공 일정표 ( ${y}년 ${m}월 )`],
+      ['수급자 성명', el.name||'', '수급자 생년월일', schedModal.birth||'', '활동지원사성명', schedModal.workerName||''],
+      ['급여종류', '활동지원서비스', '월 근로시간(인정)', `${totalRc}시간 / 120시간`, '입력 시간', `${totalIn}시간`],
+      [],
+      ['일','월','화','수','목','금','토','주 합계(인정)'],
+    ];
+    for (let i = 0; i < cells.length; i += 7) {
+      const w = cells.slice(i, i+7);
+      aoa.push(w.map(d => d ? `${m}/${d}${is15x(d)?' (休×1.5)':''}` : ''));
+      const wkSum = Math.round(w.reduce((a,d)=>a+(d?recX(d):0),0)*100)/100;
+      aoa.push([...w.map(d => { const h = d && (schedModal.days||{})[String(d)]; return h ? `${h}시간${is15x(d)?` → 인정 ${recX(d)}`:''}` : ''; }), wkSum ? `${wkSum}시간` : '']);
+    }
+    aoa.push([], ['※ 주말·공휴일(休)은 1.5배 인정 · 월 인정시간 한도 120시간'], ['※ 매월 작성하여 기관보관 (보관기간: 작성일로부터 3년)']);
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = Array(8).fill({ wch: 15 });
+    XLSX.utils.book_append_sheet(wb, ws, '급여제공일정표');
+    const fname = `급여제공일정표_${el.name||'이용자'}_${schedModal.ym}.xlsx`;
+    const data = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    if (window.showSaveFilePicker) {   // 크롬·엣지: OS '다른 이름으로 저장' 대화상자(위치 선택)
+      try {
+        const handle = await window.showSaveFilePicker({ suggestedName: fname, types: [{ description: 'Excel 파일', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
+        const w = await handle.createWritable(); await w.write(blob); await w.close();
+        return;
+      } catch (e) { if (e && e.name === 'AbortError') return; /* 취소 시 조용히 */ }
+    }
+    // 미지원 브라우저 폴백: 기본 다운로드 폴더로
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname; a.click(); URL.revokeObjectURL(a.href);
+  };
   const saveSchedule = async () => {
     if (!schedModal || !schedModal.phone) return;
     setSchedModal(f => ({ ...f, saving: true }));
@@ -1383,7 +1429,11 @@ export default function App() {
         categories: schedModal.categories, birth: schedModal.birth, residence: schedModal.residence, workerName: schedModal.workerName,
       }) }).then(x => x.json());
       if (!r.success) window.alert(r.error || '저장 실패');
-      else loadSchedule(schedModal.phone, schedModal.ym);
+      else {
+        // 서버 저장 성공 → 파일 저장 위치 선택 대화상자 (엑셀). PDF는 '양식 인쇄'에서.
+        await exportScheduleXlsx();
+        loadSchedule(schedModal.phone, schedModal.ym);
+      }
     } catch { window.alert('네트워크 오류'); }
     setSchedModal(f => f ? ({ ...f, saving: false }) : f);
   };
@@ -1407,17 +1457,17 @@ export default function App() {
     while (cells.length % 7 !== 0) cells.push(null);
     const weeks = [];
     for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+    // 입력 화면과 동일한 배치: 날짜(×1.5 표시) + 시간 박스, 행 끝 '주 합계' 열
     const rows = weeks.map(w => {
       const weekSum = Math.round(w.reduce((a, d) => a + (d ? recOfp(d) : 0), 0) * 100) / 100;   // 주 인정 합계
       const tds = w.map((d, col) => {
-        if (!d) return '<td class="day"><div class="dnum">&nbsp;</div></td>';
+        if (!d) return '<td class="day empty"></td>';
         const h = days[String(d)];
-        const holMark = (is15p(d) && new Date(y, m-1, d).getDay() % 6 !== 0) ? '<span class="hol">休</span>' : '';
-        const daily = `(1일 ${h ? h + '시간' : '&nbsp;&nbsp;&nbsp;시간'}${h && is15p(d) ? `&#8594;${recOfp(d)}` : ''})`;
-        const weekly = col === 0 ? ` / (주 ${weekSum ? weekSum + '시간' : '&nbsp;&nbsp;&nbsp;시간'})` : '';
-        return `<td class="day"><div class="dnum">${m}/${d}${holMark}</div><div class="hrs">${daily}${weekly}</div></td>`;
+        const cls = is15p(d) ? 'red' : (col === 6 ? 'blue' : '');
+        const badge = is15p(d) ? '<span class="x15">&times;1.5</span>' : '';
+        return `<td class="day${is15p(d) ? ' holbg' : ''}"><div class="dnum ${cls}">${m}/${d}${badge}</div><div class="val">${h ? h : '&nbsp;'}</div></td>`;
       }).join('');
-      return `<tr>${tds}</tr>`;
+      return `<tr>${tds}<td class="wksum">${weekSum ? weekSum + '시간' : ''}</td></tr>`;
     }).join('');
     const today = new Date();
     return `
@@ -1426,10 +1476,11 @@ export default function App() {
         <tr><td class="k">수급자 성명</td><td class="v" contenteditable="true">${esc(el.name||sched.elderName||'')}</td><td class="k">수급자 생년월일</td><td class="v" contenteditable="true">${esc(sched.birth||'')}</td><td class="k">활동지원사성명</td><td class="v" contenteditable="true">${esc(sched.workerName||'')}</td></tr>
         <tr><td class="k">급여종류</td><td class="v" contenteditable="true">활동지원서비스</td><td class="k">월 근로시간</td><td class="v" colspan="3">${total ? `${total}시간 (입력 ${totalInputP}시간)` : ''}</td></tr>
       </table>
-      <div class="legend">※ 주말·공휴일(休)은 1.5배 인정 · 월 인정시간 한도 120시간 · (주 __시간)은 인정 기준</div>
+      <div class="legend">※ 주말·공휴일(&times;1.5)은 1.5배 인정 · 월 인정시간 한도 120시간 · 주 합계는 인정 기준</div>
       <table class="cal">
-        <tr>${['일','월','화','수','목','금','토'].map(d=>`<th>${d}</th>`).join('')}</tr>
+        <tr>${['일','월','화','수','목','금','토'].map((d,i)=>`<th class="${i===0?'sun':i===6?'sat':''}">${d}</th>`).join('')}<th class="wkh">주 합계</th></tr>
         ${rows}
+        <tr><td class="total" colspan="8">입력 ${totalInputP}시간 · <b>인정 ${total} / 120시간</b></td></tr>
       </table>
       <div class="sign">${today.getFullYear()}년 &nbsp; ${today.getMonth()+1}월 &nbsp; ${today.getDate()}일</div>
       <div class="sig2">담당자 : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (서명 또는 인) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 수급자 : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (서명 또는 인)</div>
@@ -1442,16 +1493,24 @@ export default function App() {
       h1{text-align:center;font-size:22px;letter-spacing:2px;margin:8px 0 16px;font-weight:900}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
       td,th{border:1.5px solid #333;font-size:12.5px;vertical-align:top;word-break:break-all}
-      .hd td{padding:7px 8px}
-      .hd .k{background:#e8e8e8;font-weight:800;text-align:center;width:12%}
+      .hd td{padding:8px 10px;border:1px solid #cbd5e1}
+      .hd .k{background:#f1f5f9;color:#334155;font-weight:800;text-align:center;width:12%}
       .hd .v{width:21.3%}
-      .cal{margin-top:-1.5px}
-      .cal th{background:#d9d9d9;padding:4px;font-weight:800}
-      .cal .day{height:78px;padding:4px 6px;position:relative}
-      .dnum{display:inline-block;border:1px solid #666;padding:1px 6px;font-weight:800;font-size:11.5px;background:#fff}
-      .hol{color:#c00;font-size:10px;margin-left:2px}
-      .legend{font-size:11px;color:#555;margin:4px 2px}
-      .hrs{position:absolute;bottom:4px;left:6px;font-size:11px;color:#333}
+      *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .cal{margin-top:8px;border-radius:10px;overflow:hidden}
+      .cal th{background:#1e3a6e;color:#fff;padding:8px 4px;font-weight:800;font-size:13px;border:1px solid #1e3a6e}
+      .cal th.sun{color:#fca5a5}.cal th.sat{color:#93c5fd}.cal th.wkh{border-left:2px solid #3b5488}
+      .cal td{border:1px solid #e2e8f0}
+      .day{padding:6px 6px 8px;vertical-align:top;background:#fff;min-height:56px}
+      .day.holbg{background:#fef7f7}
+      .day.empty{background:#fafafa}
+      .dnum{font-size:12px;font-weight:800;color:#334155;margin-bottom:5px}
+      .dnum.red{color:#dc2626}.dnum.blue{color:#2563eb}
+      .x15{font-size:9.5px;font-weight:900;color:#7c3aed;margin-left:3px}
+      .val{border:1px solid #cbd5e1;border-radius:8px;padding:6px 4px;text-align:center;font-size:14px;font-weight:700;color:#0f172a;background:#fff;min-height:18px}
+      .wksum{background:#f8fafc;border-left:2px solid #e2e8f0;text-align:center;vertical-align:middle;font-weight:900;font-size:13px;color:#1e3a6e;width:88px}
+      .total{background:#eff6ff;text-align:right;font-weight:700;font-size:13.5px;color:#1e3a6e;padding:9px 12px}
+      .legend{font-size:11px;color:#555;margin:6px 2px}
       .sign{margin-top:18px;text-align:center;font-size:14px;font-weight:700}
       .sig2{text-align:center;margin-top:10px;font-size:13.5px}
       .keep{margin-top:14px;font-size:12px}
