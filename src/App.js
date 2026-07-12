@@ -571,7 +571,6 @@ export default function App() {
   // authUser 의존 추가: 새로고침으로 #report 직행 시 로그인 복원 전 무토큰 401로 통계가 0건 고정되던 버그
   // (elders 등은 로그인 시 재로드되는데 stats만 빠져 있었음 — 로그인 복원되면 자동 재조회)
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo, authUser]); // eslint-disable-line
-  useEffect(() => { if (page === 'forms') { loadFormsCounts(formsYm); if (caseNotes.length === 0) loadCaseNotes(true); if (isStaffUp && accounts.length === 0) fetchAccounts(); } }, [page, formsYm]); // eslint-disable-line
   useEffect(() => {
     if (page !== 'calls' && page !== 'elders' && page !== 'dashboard' && page !== 'safety') return;   // safety=안전확인 관리(주기 준수율)
     fetchCalls();
@@ -1576,6 +1575,8 @@ export default function App() {
       });
     } catch {}
   };
+  // ⚠️ 이 효과는 formsYm·loadFormsCounts 선언 뒤에 있어야 함 (앞에 두면 선언 전 참조로 앱 전체 크래시)
+  useEffect(() => { if (page === 'forms') { loadFormsCounts(formsYm); if (caseNotes.length === 0) loadCaseNotes(true); if (isStaffUp && accounts.length === 0) fetchAccounts(); } }, [page, formsYm]); // eslint-disable-line
   // 모달 없이 곧바로 일괄 출력 (서식 메뉴 카드용)
   const printWeeklyBatchFor = async (ym) => {
     const r = await authFetch(`${SERVER_URL}/weekly-reports?ym=${ym}`).then(x=>x.json()).catch(()=>null);
