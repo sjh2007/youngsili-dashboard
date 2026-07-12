@@ -209,6 +209,7 @@ export default function App() {
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
+  const [newOrgType, setNewOrgType] = useState('senior');   // 기관 유형 (화면 분기 기준)
   const [newOrgName, setNewOrgName] = useState('');
   const [newAcct, setNewAcct]     = useState({ email:'', password:'', name:'', phone:'', orgId:'', role:'worker' });
   const [adminMsg, setAdminMsg]   = useState('');
@@ -219,6 +220,13 @@ export default function App() {
   const ROLE_KO = { superadmin: '운영자', admin: '센터장(관리자)', staff: '전담직원', worker: '지원사' };
   // 내가 초대·생성으로 부여할 수 있는 역할 (서버 GRANTABLE과 일치)
   const grantableRoles = isSuper ? ['admin','staff','worker'] : isAdmin ? ['admin','staff','worker'] : ['worker'];
+  // ── 기관 유형별 화면 분기 (orgType): senior=노인맞춤돌봄(기본) / disability=장애인활동지원 ──
+  // 용어·메뉴·서식 기본값이 기관 유형을 따라감. 데이터 구조는 동일(하나의 플랫폼).
+  const isDisability = me?.orgType === 'disability';
+  const T = isDisability
+    ? { elder: '이용자', worker: '활동지원사', benefit: '활동지원서비스' }
+    : { elder: '어르신', worker: '생활지원사', benefit: '노인맞춤돌봄서비스' };
+  const ORG_TYPE_KO = { senior: '노인맞춤돌봄', disability: '장애인활동지원' };
   // 도움말 '업데이트 소식' 읽음 추적 → 새 소식 있으면 메뉴에 🔴
   const [helpSeen, setHelpSeen] = useState(() => { try { return Number(localStorage.getItem('youngsili_help_seen') || 0); } catch { return 0; } });
   const hasNewNotice = LATEST_NOTICE > helpSeen;
@@ -460,7 +468,7 @@ export default function App() {
     if (!name) { setAdminMsg('기관명을 입력하세요'); return; }
     setAdminMsg('생성 중…');
     try {
-      const r = await authFetch(`${SERVER_URL}/admin/orgs`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+      const r = await authFetch(`${SERVER_URL}/admin/orgs`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, orgType: newOrgType }) });
       const d = await r.json();
       if (d.success) { setAdminMsg(`✅ "${name}" 생성됨 · 기관코드: ${d.code}`); setNewOrgName(''); fetchOrgs(); }
       else setAdminMsg('❌ ' + (d.error || '생성 실패'));
@@ -1225,7 +1233,7 @@ export default function App() {
     const phone = first ? String(first.phone||'').replace(/\D/g,'') : '';
     setWeeklyModal({
       phone, ym: new Date().toISOString().slice(0,7),
-      benefit: '노인맞춤돌봄서비스',
+      benefit: T.benefit,
       author: '',   // 관리자: 지원사(작성자)별 필터. ''=전체
     });
     if (isStaffUp && accounts.length === 0) fetchAccounts();   // 작성자 이름 표시용
@@ -2218,15 +2226,25 @@ export default function App() {
         <nav className="nav">
           {[
             {id:'dashboard', icon:'⊞', label:'대시보드'},
-            {id:'elders',    icon:'👥', label:'어르신 관리'},
-            {id:'safety',    icon:'✅', label:'안전확인 관리'},
-            {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
-            {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
-            {id:'calls',     icon:'📞', label:'통화 기록'},
-            {id:'health', icon:'💊', label: alertCount > 0 ? `건강 상태 🔴${alertCount}` : '건강 상태'},
-            {id:'casenotes', icon:'📝', label:'상담·방문 일지'},
-            {id:'report',    icon:'📊', label:'리포트 / 통계'},
-            {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
+            {id:'elders',    icon:'👥', label:`${T.elder} 관리`},
+            // 활동지원 기관: 일지·서식이 주 업무 → 상단 배치, 노인돌봄 전용(안전확인·건강·공공데이터)은 숨김.
+            // AI 안부전화는 보조 기능으로 유지(발신·멘트·통화기록).
+            ...(isDisability ? [
+              {id:'casenotes', icon:'📝', label:'상담·방문 일지'},
+              {id:'report',    icon:'📊', label:'리포트 / 통계'},
+              {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
+              {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
+              {id:'calls',     icon:'📞', label:'통화 기록'},
+            ] : [
+              {id:'safety',    icon:'✅', label:'안전확인 관리'},
+              {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
+              {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
+              {id:'calls',     icon:'📞', label:'통화 기록'},
+              {id:'health', icon:'💊', label: alertCount > 0 ? `건강 상태 🔴${alertCount}` : '건강 상태'},
+              {id:'casenotes', icon:'📝', label:'상담·방문 일지'},
+              {id:'report',    icon:'📊', label:'리포트 / 통계'},
+              {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
+            ]),
             ...(isStaffUp ? [{id:'admin', icon: isSuper?'🏢':'👥', label: isSuper?'기관 관리':'구성원 관리'}] : []),
             {id:'help',      icon:'📖', label: hasNewNotice ? '도움말 보기 🔴' : '도움말 보기'},
           ].map(item=>(
@@ -2240,7 +2258,7 @@ export default function App() {
         <div className="sidebar-footer">
           <div className="worker-info">
             <div className="worker-avatar">복</div>
-            <div><div className="worker-name">{me?.orgName || (isSuper ? '운영자' : '복지사 관리')}</div><div className="worker-region">{authEnabled&&authUser?authUser.email:'대구광역시'}{isSuper?' · 운영자':''}</div></div>
+            <div><div className="worker-name">{me?.orgName || (isSuper ? '운영자' : `${T.worker} 관리`)}</div><div className="worker-region">{authEnabled&&authUser?authUser.email:'대구광역시'}{isSuper?' · 운영자':''}</div></div>
           </div>
           {me?.orgCode && (
             <div onClick={copyOrgCode} title="클릭하면 복사 · 어르신 앱 등록 시 입력" style={{marginTop:10,padding:'8px 10px',borderRadius:8,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
@@ -2266,9 +2284,9 @@ export default function App() {
         )}
         <header className="header">
           <div className="header-title">
-            {page==='dashboard'&&'대시보드'}{page==='elders'&&'어르신 관리'}{page==='schedule'&&'전화 발신 관리'}
+            {page==='dashboard'&&'대시보드'}{page==='elders'&&`${T.elder} 관리`}{page==='schedule'&&'전화 발신 관리'}
             {page==='safety'&&'✅ 안전확인 관리'}{page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='admin'&&(isSuper?'🏢 기관 관리 (운영자)':'👥 구성원 관리')}{page==='help'&&'📖 도움말 보기'}
-            {page==='detail'&&'어르신 상세 정보'}{page==='register'&&(editMode?'어르신 정보 수정':'어르신 신규 등록')}
+            {page==='detail'&&`${T.elder} 상세 정보`}{page==='register'&&(editMode?`${T.elder} 정보 수정`:`${T.elder} 신규 등록`)}
           </div>
           <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
         </header>
@@ -2768,7 +2786,7 @@ export default function App() {
                 </div>
               )}
               <div className="elder-toolbar">
-                <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="어르신 이름 검색..." value={searchName} onChange={e => setSearchName(e.target.value)}/>{searchName && <button className="search-clear" onClick={() => setSearchName('')}>✕</button>}</div>
+                <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder={`${T.elder} 이름 검색...`} value={searchName} onChange={e => setSearchName(e.target.value)}/>{searchName && <button className="search-clear" onClick={() => setSearchName('')}>✕</button>}</div>
                 <select className="form-input region-select" value={regionFilter} onChange={e => setRegionFilter(e.target.value)}>{REGIONS.map(r => <option key={r} value={r}>{r}</option>)}</select>
                 <div className="filter-bar">{['all','danger','warning','normal'].map(f=>(<button key={f} className={`filter-btn ${filter===f?'filter-active':''}`} onClick={()=>setFilter(f)}>{f==='all'?'전체':STATUS_CONFIG[f].label}<span className="filter-count">{f==='all'?elders.length:elders.filter(e=>e.status===f).length}</span></button>))}</div>
               </div>
@@ -3369,7 +3387,7 @@ export default function App() {
           {page==='casenotes' && (
             <div className="fade-in">
               <div className="elder-toolbar" style={{marginBottom:12,flexWrap:'wrap',gap:10}}>
-                <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="어르신 이름 검색..." value={caseSearch} onChange={e=>setCaseSearch(e.target.value)}/>{caseSearch&&<button className="search-clear" onClick={()=>setCaseSearch('')}>✕</button>}</div>
+                <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder={`${T.elder} 이름 검색...`} value={caseSearch} onChange={e=>setCaseSearch(e.target.value)}/>{caseSearch&&<button className="search-clear" onClick={()=>setCaseSearch('')}>✕</button>}</div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
                   {[['all','전체'],['visit','🏠 방문'],['phone','📞 전화'],['office','🏢 내소'],['guardian','👪 보호자'],['etc','기타']].map(([v,l])=>(
                     <button key={v} className={`smart-btn ${caseType===v?'smart-active':''}`} style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setCaseType(v)}>{l}</button>
@@ -3690,8 +3708,12 @@ export default function App() {
                 <div className="section" style={{marginBottom:16}}>
                   <div className="section-title">🏢 새 기관(복지관) 만들기</div>
                   <div style={{fontSize:13,color:'#64748b',marginBottom:10}}>기관을 만들면 <b>기관코드</b>가 자동 발급됩니다. 이 코드를 복지사에게 전달하면, 복지사가 어르신 폰 앱에 입력해 해당 기관으로 등록됩니다.</div>
-                  <div style={{display:'flex',gap:8,maxWidth:520}}>
-                    <input className="form-input" style={{flex:1}} value={newOrgName} onChange={e=>setNewOrgName(e.target.value)} placeholder="예) ○○구 노인복지관" onKeyDown={e=>e.key==='Enter'&&createOrg()}/>
+                  <div style={{display:'flex',gap:8,maxWidth:680}}>
+                    <input className="form-input" style={{flex:1}} value={newOrgName} onChange={e=>setNewOrgName(e.target.value)} placeholder="예) ○○구 노인복지관 / ○○장애인자립센터" onKeyDown={e=>e.key==='Enter'&&createOrg()}/>
+                    <select className="form-input" style={{width:170}} value={newOrgType} onChange={e=>setNewOrgType(e.target.value)}>
+                      <option value="senior">노인맞춤돌봄</option>
+                      <option value="disability">장애인활동지원</option>
+                    </select>
                     <button className="btn-primary" style={{whiteSpace:'nowrap',padding:'0 20px'}} onClick={createOrg}>+ 기관 생성</button>
                   </div>
                 </div>
@@ -3700,12 +3722,13 @@ export default function App() {
                 <div className="section" style={{marginBottom:16}}>
                   <div className="section-title">📋 기관 목록 ({orgs.length})</div>
                   <table className="table">
-                    <thead><tr><th>기관명</th><th>기관코드</th><th>어르신</th><th>계정</th></tr></thead>
+                    <thead><tr><th>기관명</th><th>유형</th><th>기관코드</th><th>대상자</th><th>계정</th></tr></thead>
                     <tbody>
-                      {orgs.length===0 && <tr><td colSpan={4} style={{textAlign:'center',color:'#94a3b8',padding:24}}>기관이 없습니다</td></tr>}
+                      {orgs.length===0 && <tr><td colSpan={5} style={{textAlign:'center',color:'#94a3b8',padding:24}}>기관이 없습니다</td></tr>}
                       {orgs.map(o=>(
                         <tr key={o.orgId}>
                           <td><strong>{o.name}</strong></td>
+                          <td><span className="status-badge badge-normal">{ORG_TYPE_KO[o.orgType]||'노인맞춤돌봄'}</span></td>
                           <td><span className="cycle-badge" style={{fontFamily:'monospace',fontWeight:800,letterSpacing:1,color:'#1d4ed8',background:'#eff6ff'}}>{o.code}</span></td>
                           <td>{o.elderCount}명</td>
                           <td>{o.userCount}개</td>
@@ -3795,7 +3818,7 @@ export default function App() {
                   </div>
                 </div><div className="form-footer"><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
                 {formStep===2&&(<div className="fade-in"><div className="form-section-title">👨‍👩‍👧 보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">💡 위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
-                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid"><div className="form-field full-width"><label className="form-label">돌봄군 (노인맞춤돌봄서비스)</label><div className="radio-group">{[{value:'',label:'미지정'},{value:'general',label:'일반돌봄군'},{value:'intensive',label:'중점돌봄군'}].map(opt=><label key={opt.value} className={`radio-option ${form.careGroup===opt.value?'radio-selected':''}`}><input type="radio" name="careGroup" value={opt.value} checked={(form.careGroup||'')===opt.value} onChange={()=>{const g=CARE_GROUPS[opt.value];setForm(f=>({...f,careGroup:opt.value,...(g?{callCycle:'custom',callDays:[...g.days]}:{})}));}} style={{display:'none'}}/>{opt.label}</label>)}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>선택하면 전화 안전확인 권장 주기가 자동 적용됩니다 (일반 주 2회 · 중점 주 1회, 아래에서 수정 가능). 미지정은 기존 주기 그대로.</div></div><div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #2563eb':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#1d4ed8':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['담당 지원사',(accounts.find(u=>u.email===form.assignedTo)||{}).name||form.assignedTo||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
+                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid">{!isDisability&&<div className="form-field full-width"><label className="form-label">돌봄군 (노인맞춤돌봄서비스)</label><div className="radio-group">{[{value:'',label:'미지정'},{value:'general',label:'일반돌봄군'},{value:'intensive',label:'중점돌봄군'}].map(opt=><label key={opt.value} className={`radio-option ${form.careGroup===opt.value?'radio-selected':''}`}><input type="radio" name="careGroup" value={opt.value} checked={(form.careGroup||'')===opt.value} onChange={()=>{const g=CARE_GROUPS[opt.value];setForm(f=>({...f,careGroup:opt.value,...(g?{callCycle:'custom',callDays:[...g.days]}:{})}));}} style={{display:'none'}}/>{opt.label}</label>)}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>선택하면 전화 안전확인 권장 주기가 자동 적용됩니다 (일반 주 2회 · 중점 주 1회, 아래에서 수정 가능). 미지정은 기존 주기 그대로.</div></div>}<div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #2563eb':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#1d4ed8':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['담당 지원사',(accounts.find(u=>u.email===form.assignedTo)||{}).name||form.assignedTo||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
               </div>
             </div>
           )}
