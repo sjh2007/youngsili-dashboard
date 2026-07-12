@@ -164,7 +164,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
       await createUserWithEmailAndPassword(auth, su.email.trim(), su.pw);
       // 기관 자동 생성 (운영자 승인 없이)
       try {
-        await authFetch(`${serverUrl}/signup/provision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgName: su.org.trim(), orgType: su.orgType, phone: su.phone, referral: su.referral }) });
+        await authFetch(`${serverUrl}/signup/provision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgName: su.org.trim(), orgType: su.orgType === 'etc' ? 'senior' : su.orgType, orgTypeEtc: su.orgType === 'etc' ? (su.orgTypeEtc || '기타') : '', phone: su.phone, referral: su.referral }) });
       } catch { /* 실패 시 인증 후 기관설정 안전망에서 재시도 */ }
       await sendEmailVerification(auth.currentUser);
       // authUser가 생기고 emailVerified=false → 위 '인증 대기' 화면으로 전환됨
@@ -258,13 +258,17 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
           <input style={input} value={su.org} onChange={e => setSu(s => ({ ...s, org: e.target.value }))} placeholder="예) ○○구 노인복지관 / ○○장애인자립센터" />
           <div style={label}>기관 유형 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(화면 구성이 유형에 맞게 바뀝니다)</span></div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {[['senior', '노인맞춤돌봄 (생활지원사)'], ['disability', '장애인활동지원 (활동지원사)']].map(([k, t]) => (
+            {[['senior', '노인맞춤돌봄'], ['disability', '장애인활동지원'], ['etc', '기타 돌봄기관']].map(([k, t]) => (
               <button key={k} type="button" onClick={() => setSu(s => ({ ...s, orgType: k }))}
-                style={{ flex: 1, padding: '11px 6px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13.5,
+                style={{ flex: 1, padding: '11px 4px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
                   border: su.orgType === k ? `2px solid ${BLUE}` : '1px solid #cbd5e1',
                   background: su.orgType === k ? '#eff6ff' : '#fff', color: su.orgType === k ? BLUE : '#475569' }}>{t}</button>
             ))}
           </div>
+          {su.orgType === 'etc' && (
+            <input style={{ ...input, marginTop: 8 }} value={su.orgTypeEtc || ''} onChange={e => setSu(s => ({ ...s, orgTypeEtc: e.target.value }))}
+              placeholder="기관 유형을 적어 주세요 (예: 방문요양센터, 주야간보호)" />
+          )}
           <div style={label}>휴대폰 번호</div>
           <input style={input} value={su.phone} onChange={e => setSu(s => ({ ...s, phone: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="숫자만 입력" inputMode="numeric" />
           <div style={label}>추천인 코드 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택)</span></div>
