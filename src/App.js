@@ -70,7 +70,7 @@ const RISK_CONFIG = {
   normal:   { label: '정상', color: '#22c55e' },
 };
 // SPA 페이지 목록 (URL 해시 라우팅 — F5 시 현재 페이지 유지)
-const PAGES = ['dashboard','elders','safety','schedule','script','calls','health','casenotes','report','data','admin','help'];
+const PAGES = ['dashboard','elders','safety','schedule','script','calls','health','casenotes','forms','report','data','admin','help'];
 
 // 페이지 렌더 오류가 앱 전체를 흰 화면으로 만들지 않게 방어. 오류 시 메시지 표시 + 메뉴 이동(resetKey) 시 복구.
 class PageErrorBoundary extends Component {
@@ -329,11 +329,12 @@ export default function App() {
   };
 
   // ── 월간 실적 보고서(엑셀 4시트: 요약/어르신별/일별/위험감지) — 지자체 안전확인 실적 보고용 ──
-  const downloadMonthlyReport = async () => {
+  const downloadMonthlyReport = async (monthArg) => {
+    const targetMonth = (typeof monthArg === 'string' && /^\d{4}-\d{2}$/.test(monthArg)) ? monthArg : reportMonth;
     if (monthlyBusy) return;
     setMonthlyBusy(true);
     try {
-      const [y, m] = reportMonth.split('-').map(Number);
+      const [y, m] = targetMonth.split('-').map(Number);
       const from = new Date(y, m - 1, 1);
       const to = new Date(y, m, 0, 23, 59, 59);
       const fi = from.toISOString(), ti = to.toISOString();
@@ -423,7 +424,7 @@ export default function App() {
       add(aoaE, '어르신별 실적', [{ wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 11 }, { wch: 7 }, { wch: 7 }, { wch: 13 }]);
       add(aoaD, '일별 현황', [{ wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }]);
       add(aoaR, '위험 감지', [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }]);
-      XLSX.writeFile(wb, `영실이_월간실적_${reportMonth}.xlsx`);
+      XLSX.writeFile(wb, `영실이_월간실적_${targetMonth}.xlsx`);
     } catch (e) { window.alert('보고서 생성에 실패했습니다: ' + e.message); }
     setMonthlyBusy(false);
   };
@@ -570,6 +571,7 @@ export default function App() {
   // authUser 의존 추가: 새로고침으로 #report 직행 시 로그인 복원 전 무토큰 401로 통계가 0건 고정되던 버그
   // (elders 등은 로그인 시 재로드되는데 stats만 빠져 있었음 — 로그인 복원되면 자동 재조회)
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo, authUser]); // eslint-disable-line
+  useEffect(() => { if (page === 'forms') { loadFormsCounts(formsYm); if (caseNotes.length === 0) loadCaseNotes(true); if (isStaffUp && accounts.length === 0) fetchAccounts(); } }, [page, formsYm]); // eslint-disable-line
   useEffect(() => {
     if (page !== 'calls' && page !== 'elders' && page !== 'dashboard' && page !== 'safety') return;   // safety=안전확인 관리(주기 준수율)
     fetchCalls();
@@ -1228,16 +1230,17 @@ export default function App() {
       });
     } catch { setWeeklyDoc(f => ({ ...(f||{}), weeks: {}, loaded: true })); }
   };
-  const openWeeklyReport = () => {
+  const openWeeklyReport = (ymArg) => {
     const first = elders[0];
     const phone = first ? String(first.phone||'').replace(/\D/g,'') : '';
+    const ym0 = (typeof ymArg === 'string' && /^\d{4}-\d{2}$/.test(ymArg)) ? ymArg : new Date().toISOString().slice(0,7);
     setWeeklyModal({
-      phone, ym: new Date().toISOString().slice(0,7),
+      phone, ym: ym0,
       benefit: T.benefit,
       author: '',   // 관리자: 지원사(작성자)별 필터. ''=전체
     });
     if (isStaffUp && accounts.length === 0) fetchAccounts();   // 작성자 이름 표시용
-    if (phone) loadWeekly(phone, new Date().toISOString().slice(0,7));
+    if (phone) loadWeekly(phone, ym0);
   };
   // 주간업무 보고서를 엑셀 파일로 — '다른 이름으로 저장' 대화상자
   const exportWeeklyXlsx = async () => {
@@ -1391,10 +1394,10 @@ export default function App() {
       }));
     } catch { setSchedModal(f => ({ ...f, loaded: true })); }
   };
-  const openSchedule = () => {
+  const openSchedule = (ymArg) => {
     const first = elders[0];
     const phone = first ? String(first.phone||'').replace(/\D/g,'') : '';
-    const ym = new Date().toISOString().slice(0,7);
+    const ym = (typeof ymArg === 'string' && /^\d{4}-\d{2}$/.test(ymArg)) ? ymArg : new Date().toISOString().slice(0,7);
     setSchedModal({ phone, ym, days: {}, holidays: autoHolidays(ym), categories: [], birth: '', residence: '', workerName: '', loaded: false });
     if (isStaffUp && accounts.length === 0) fetchAccounts();
     if (phone) loadSchedule(phone, ym);
@@ -1555,6 +1558,37 @@ export default function App() {
     const pages = schedMonthAll.filter(s => Object.keys(s.days||{}).length).map(s => buildScheduleForm(s));
     if (!pages.length) { window.alert('이 달에 저장된 일정표가 없습니다.'); return; }
     const [y, m] = schedModal.ym.split('-').map(Number);
+    openSchedPrint(pages, `${y}년 ${m}월 급여제공 일정표 일괄 (${pages.length}명)`);
+  };
+
+  // ── 📥 보고서·서식 통합 메뉴: 월 선택 → 서식별 작성 현황·열람·일괄 다운로드 ──
+  const [formsYm, setFormsYm] = useState(new Date().toISOString().slice(0,7));
+  const [formsCounts, setFormsCounts] = useState({ weekly: 0, sched: 0 });
+  const loadFormsCounts = async (ym) => {
+    try {
+      const [w, sc] = await Promise.all([
+        authFetch(`${SERVER_URL}/weekly-reports?ym=${ym}`).then(r=>r.json()).catch(()=>null),
+        authFetch(`${SERVER_URL}/schedules?ym=${ym}`).then(r=>r.json()).catch(()=>null),
+      ]);
+      setFormsCounts({
+        weekly: ((w && w.reports) || []).filter(x => Object.values(x.weeks||{}).some(v=>((v&&v.content)||'').trim())).length,
+        sched: ((sc && sc.schedules) || []).filter(x => Object.keys(x.days||{}).length).length,
+      });
+    } catch {}
+  };
+  // 모달 없이 곧바로 일괄 출력 (서식 메뉴 카드용)
+  const printWeeklyBatchFor = async (ym) => {
+    const r = await authFetch(`${SERVER_URL}/weekly-reports?ym=${ym}`).then(x=>x.json()).catch(()=>null);
+    const pages = ((r && r.reports) || []).map(w => buildWeeklyForm({ ...w, benefit: w.benefit || T.benefit })).filter(Boolean);
+    if (!pages.length) { window.alert('이 달에 저장된 주간업무 보고서가 없습니다. 지원사 앱에서 주차별로 저장하면 여기에 모입니다.'); return; }
+    const [y, m] = ym.split('-').map(Number);
+    openReportWindow(pages, `${y}년 ${m}월 주간업무 보고서 일괄 (${pages.length}명)`);
+  };
+  const printScheduleBatchFor = async (ym) => {
+    const r = await authFetch(`${SERVER_URL}/schedules?ym=${ym}`).then(x=>x.json()).catch(()=>null);
+    const pages = ((r && r.schedules) || []).filter(s2 => Object.keys(s2.days||{}).length).map(s2 => buildScheduleForm(s2)).filter(Boolean);
+    if (!pages.length) { window.alert('이 달에 저장된 일정표가 없습니다.'); return; }
+    const [y, m] = ym.split('-').map(Number);
     openSchedPrint(pages, `${y}년 ${m}월 급여제공 일정표 일괄 (${pages.length}명)`);
   };
 
@@ -2231,6 +2265,7 @@ export default function App() {
             // AI 안부전화는 보조 기능으로 유지(발신·멘트·통화기록).
             ...(isDisability ? [
               {id:'casenotes', icon:'📝', label:'상담·방문 일지'},
+              {id:'forms',     icon:'📥', label:'보고서·서식'},
               {id:'report',    icon:'📊', label:'리포트 / 통계'},
               {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
               {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
@@ -2242,6 +2277,7 @@ export default function App() {
               {id:'calls',     icon:'📞', label:'통화 기록'},
               {id:'health', icon:'💊', label: alertCount > 0 ? `건강 상태 🔴${alertCount}` : '건강 상태'},
               {id:'casenotes', icon:'📝', label:'상담·방문 일지'},
+              {id:'forms',     icon:'📥', label:'보고서·서식'},
               {id:'report',    icon:'📊', label:'리포트 / 통계'},
               {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
             ]),
@@ -2285,7 +2321,7 @@ export default function App() {
         <header className="header">
           <div className="header-title">
             {page==='dashboard'&&'대시보드'}{page==='elders'&&`${T.elder} 관리`}{page==='schedule'&&'전화 발신 관리'}
-            {page==='safety'&&'✅ 안전확인 관리'}{page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='admin'&&(isSuper?'🏢 기관 관리 (운영자)':'👥 구성원 관리')}{page==='help'&&'📖 도움말 보기'}
+            {page==='safety'&&'✅ 안전확인 관리'}{page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='forms'&&'📥 보고서·서식'}{page==='admin'&&(isSuper?'🏢 기관 관리 (운영자)':'👥 구성원 관리')}{page==='help'&&'📖 도움말 보기'}
             {page==='detail'&&`${T.elder} 상세 정보`}{page==='register'&&(editMode?`${T.elder} 정보 수정`:`${T.elder} 신규 등록`)}
           </div>
           <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
@@ -3663,6 +3699,44 @@ export default function App() {
           )}
 
           {page==='help' && <HelpGuide orgCode={me?.orgCode} />}
+
+          {page==='forms' && (
+            <div className="fade-in">
+              <div className="data-banner" style={{marginBottom:20}}>
+                <div><div className="data-banner-title">📥 보고서·서식</div><div className="data-banner-sub">제출·보관용 서식을 한곳에서 확인하고 내려받으세요 · 월을 바꾸면 현황이 갱신됩니다</div></div>
+                <input type="month" className="form-input" style={{width:170,margin:0}} value={formsYm} onChange={e=>{setFormsYm(e.target.value);setReportMonth(e.target.value);}}/>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:14}}>
+                {[
+                  { icon:'📄', title:'주간업무 보고서', desc:'지원사가 주차별 작성(음성→텍스트)한 보고서 — 검토·오타 수정 후 출력', badge:`${formsYm.split('-')[1]}월 ${formsCounts.weekly}명 작성`,
+                    btns:[ {label:'열람·수정·출력', primary:true, on:()=>openWeeklyReport(formsYm)}, {label:'🖨 일괄 출력', on:()=>printWeeklyBatchFor(formsYm)} ] },
+                  { icon:'📅', title:'급여제공 일정표', desc:'일별 제공시간(주말·공휴일 1.5배, 월 120시간 한도) — 공식 달력 양식 출력', badge:`${formsYm.split('-')[1]}월 ${formsCounts.sched}명 작성`,
+                    btns:[ {label:'입력·출력', primary:true, on:()=>openSchedule(formsYm)}, {label:'🖨 일괄 출력', on:()=>printScheduleBatchFor(formsYm)} ] },
+                  { icon:'📝', title:'상담·방문일지 엑셀', desc:'일지 전체를 엑셀로 — 기관 보관·결재용', badge:`최근 90일 ${caseNotes.length}건`,
+                    btns:[ {label:'📥 엑셀 다운로드', primary:true, on:()=>exportNotesXlsx(caseNotes)} ] },
+                  { icon:'📊', title:'월간 실적 보고서', desc:'통화·안전확인·위험감지·일지 실적 종합 — 지자체 보고용 엑셀', badge:`${formsYm.split('-')[1]}월 기준`,
+                    btns:[ {label: monthlyBusy?'⏳ 생성 중…':'📥 엑셀 다운로드', primary:true, on:()=>downloadMonthlyReport(formsYm)} ] },
+                ].map(card=>(
+                  <div key={card.title} className="section" style={{display:'flex',flexDirection:'column',gap:10,margin:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <span style={{fontSize:26}}>{card.icon}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:16,fontWeight:900,color:'#1e3a6e'}}>{card.title}</div>
+                        <div style={{fontSize:12.5,color:'#64748b',marginTop:2}}>{card.desc}</div>
+                      </div>
+                    </div>
+                    <div><span style={{fontSize:12.5,fontWeight:800,color:'#1d4ed8',background:'#eff6ff',border:'1px solid #bfdbfe',padding:'3px 10px',borderRadius:20}}>{card.badge}</span></div>
+                    <div style={{display:'flex',gap:8,marginTop:'auto',flexWrap:'wrap'}}>
+                      {card.btns.map(b=>(
+                        <button key={b.label} className={b.primary?'btn-primary':'btn-secondary'} style={{padding:'9px 16px',fontSize:13.5}} onClick={b.on}>{b.label}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:12.5,color:'#94a3b8',marginTop:14}}>💡 주간업무 보고서·급여제공 일정표의 '저장'은 로컬 파일(엑셀)로 저장됩니다. 인쇄(PDF)는 각 화면의 양식 인쇄 버튼을 사용하세요.</div>
+            </div>
+          )}
 
           {page==='admin' && (
             <div className="fade-in">
