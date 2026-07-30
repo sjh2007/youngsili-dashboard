@@ -79,8 +79,7 @@ class PageErrorBoundary extends Component {
   render() {
     if (this.state.error) return (
       <div style={{padding:40,textAlign:'center'}}>
-        <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
-        <h3 style={{color:'#dc2626',margin:'0 0 8px'}}>이 페이지를 표시하는 중 오류가 발생했습니다</h3>
+                <h3 style={{color:'#dc2626',margin:'0 0 8px'}}>이 페이지를 표시하는 중 오류가 발생했습니다</h3>
         <pre style={{whiteSpace:'pre-wrap',fontSize:12,color:'#64748b',background:'#f8fafc',padding:12,borderRadius:8,textAlign:'left',overflow:'auto'}}>{String((this.state.error && this.state.error.message) || this.state.error)}</pre>
         <p style={{color:'#64748b',fontSize:14}}>다른 메뉴를 누르거나 새로고침(F5) 해주세요.</p>
       </div>
@@ -161,6 +160,33 @@ const getWeatherIcon = (c = '') => {
   return '☀️';
 };
 
+// 사이드바용 라인 아이콘 (이모지 대체 — V2 디자인 언어)
+const NavIcon = ({ name }) => {
+  const paths = {
+    dashboard: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
+    health:    <path d="M3 12h4l2-7 4 14 2-7h6"/>,
+    elders:    <><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16 14.5c3 .3 5.5 2.4 5.5 5.5"/></>,
+    calls:     <path d="M21 16.5v3a2 2 0 0 1-2.2 2A19.5 19.5 0 0 1 2.5 5.2 2 2 0 0 1 4.5 3h3a2 2 0 0 1 2 1.7c.13.96.36 1.9.7 2.8a2 2 0 0 1-.45 2.1L8.6 10.7a16 16 0 0 0 4.7 4.7l1.1-1.15a2 2 0 0 1 2.1-.45c.9.34 1.84.57 2.8.7a2 2 0 0 1 1.7 2z"/>,
+    report:    <><path d="M3 21h18"/><rect x="5" y="12" width="3.5" height="6" rx="1"/><rect x="10.5" y="7" width="3.5" height="11" rx="1"/><rect x="16" y="3" width="3.5" height="15" rx="1"/></>,
+    schedule:  <><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></>,
+    script:    <><path d="M21 14a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></>,
+    data:      <><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6M4 11.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></>,
+    safety:    <><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 5-5"/></>,
+    casenotes: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
+    forms:     <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 13h6M9 17h6"/></>,
+    admin:     <><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/></>,
+    help:      <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 4.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></>,
+  };
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.dashboard}</svg>;
+};
+
+// 새로고침 아이콘 (헤더)
+const RefreshIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+  </svg>
+);
+
 export default function App() {
   const [page, setPage]         = useState(() => { try { const h = (window.location.hash || '').replace('#',''); return PAGES.includes(h) ? h : 'dashboard'; } catch { return 'dashboard'; } });
   const [authUser, setAuthUser] = useState(null);
@@ -183,7 +209,7 @@ export default function App() {
   const resendVerify = async () => {
     if (verifyCooldown > 0 || !auth.currentUser) return;
     setVerifyNote('');
-    try { await sendEmailVerification(auth.currentUser); setVerifyNote('✅ 인증 메일을 보냈습니다. 메일함(스팸함 포함)을 확인해 주세요.'); setVerifyCooldown(60); }
+    try { await sendEmailVerification(auth.currentUser); setVerifyNote('인증 메일을 보냈습니다. 메일함(스팸함 포함)을 확인해 주세요.'); setVerifyCooldown(60); }
     catch (e) { setVerifyNote(e.code === 'auth/too-many-requests' ? '⏳ 잠시 후 다시 시도해 주세요 (발송 한도).' : '발송에 실패했습니다. 잠시 후 다시 시도해 주세요.'); setVerifyCooldown(30); }
   };
   // 기관코드 복사 (어르신 앱 등록 시 사용)
@@ -200,6 +226,8 @@ export default function App() {
   const [viewMode, setViewMode]       = useState('card');
   const [memoText, setMemoText]       = useState('');
   const [memos, setMemos]             = useState(() => { try { return JSON.parse(localStorage.getItem('youngsili_memos')) || []; } catch { return []; } });
+  const [lastSync, setLastSync]       = useState(null);   // 마지막 데이터 갱신 시각 (헤더 표시)
+  const [todoDone, setTodoDone]       = useState({});     // 대시보드 "오늘 할 일" 체크 상태
   const [healthData, setHealthData]     = useState([]);
   const [caregivers, setCaregivers]     = useState(CAREGIVERS);
   const [alertsData, setAlertsData]     = useState([]);
@@ -264,6 +292,16 @@ export default function App() {
     return 'warning';
   };
   const LV_COLOR = { critical: { c:'#dc2626', bg:'#fef2f2' }, urgent: { c:'#d97706', bg:'#fffbeb' }, warning: { c:'#ca8a04', bg:'#fefce8' } };
+  // 통화 기록 목록용 — 대화 전문에서 감지 키워드만 추출해 강조 (V2: 목록은 스캔용)
+  const kwFromTranscript = (t) => {
+    const s = t || '';
+    const hit = KW_LEVEL.critical.find(k => s.includes(k)) || KW_LEVEL.urgent.find(k => s.includes(k));
+    if (!hit) return null;
+    const idx = s.indexOf(hit);
+    const from = Math.max(0, s.lastIndexOf(' ', idx) + 1);
+    let to = s.indexOf(' ', idx + hit.length); if (to < 0) to = Math.min(s.length, idx + hit.length + 4);
+    return s.slice(from, to).replace(/[.,~!?]+$/, '');
+  };
 
   const rangeToDates = (range) => {
     const to = new Date();
@@ -471,9 +509,9 @@ export default function App() {
     try {
       const r = await authFetch(`${SERVER_URL}/admin/orgs`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, orgType: newOrgType }) });
       const d = await r.json();
-      if (d.success) { setAdminMsg(`✅ "${name}" 생성됨 · 기관코드: ${d.code}`); setNewOrgName(''); fetchOrgs(); }
-      else setAdminMsg('❌ ' + (d.error || '생성 실패'));
-    } catch { setAdminMsg('❌ 네트워크 오류'); }
+      if (d.success) { setAdminMsg(`"${name}" 생성됨 · 기관코드: ${d.code}`); setNewOrgName(''); fetchOrgs(); }
+      else setAdminMsg((d.error || '생성 실패'));
+    } catch { setAdminMsg('네트워크 오류'); }
   };
   const createAccount = async () => {
     const { email, password, name, phone, orgId, role } = newAcct;
@@ -483,9 +521,9 @@ export default function App() {
     try {
       const r = await authFetch(`${SERVER_URL}/admin/users`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, password, name, phone, orgId, role }) });
       const d = await r.json();
-      if (d.success) { setAdminMsg(`✅ 계정 생성됨: ${name} (${email})`); setNewAcct({ email:'', password:'', name:'', phone:'', orgId:'', role:'worker' }); fetchAccounts(); }
-      else setAdminMsg('❌ ' + (d.error || '생성 실패'));
-    } catch { setAdminMsg('❌ 네트워크 오류'); }
+      if (d.success) { setAdminMsg(`계정 생성됨: ${name} (${email})`); setNewAcct({ email:'', password:'', name:'', phone:'', orgId:'', role:'worker' }); fetchAccounts(); }
+      else setAdminMsg((d.error || '생성 실패'));
+    } catch { setAdminMsg('네트워크 오류'); }
   };
   // ── 구성원 초대 링크: 생성 → 링크 복사 → 초대받은 사람이 링크로 가입하면 기관·역할 자동 귀속 ──
   const [invites, setInvites] = useState([]);
@@ -501,11 +539,11 @@ export default function App() {
       const r = await authFetch(`${SERVER_URL}/invites`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ role: inviteRole }) });
       const d = await r.json();
       if (d.success) {
-        setAdminMsg('✅ 초대 링크가 생성됐어요. 복사해서 전달하세요.');
+        setAdminMsg('초대 링크가 생성됐어요. 복사해서 전달하세요.');
         fetchInvites();
         try { await navigator.clipboard.writeText(inviteLink(d.code)); setCopiedInvite(d.code); setTimeout(()=>setCopiedInvite(''), 2500); } catch {}
-      } else setAdminMsg('❌ ' + (d.error || '생성 실패'));
-    } catch { setAdminMsg('❌ 네트워크 오류'); }
+      } else setAdminMsg((d.error || '생성 실패'));
+    } catch { setAdminMsg('네트워크 오류'); }
   };
   const copyInvite = async (code) => {
     try { await navigator.clipboard.writeText(inviteLink(code)); setCopiedInvite(code); setTimeout(()=>setCopiedInvite(''), 2500); } catch {}
@@ -518,9 +556,9 @@ export default function App() {
     try {
       const r = await authFetch(`${SERVER_URL}/admin/users/${uid}`, { method:'DELETE' });
       const d = await r.json();
-      if (d.success) { setAdminMsg(`🗑️ 삭제됨: ${email}`); fetchAccounts(); }
-      else setAdminMsg('❌ ' + (d.error || '삭제 실패'));
-    } catch { setAdminMsg('❌ 네트워크 오류'); }
+      if (d.success) { setAdminMsg(`삭제됨: ${email}`); fetchAccounts(); }
+      else setAdminMsg((d.error || '삭제 실패'));
+    } catch { setAdminMsg('네트워크 오류'); }
   };
 
   // silent=true면 로딩 표시 없이 조용히 갱신(자동 폴링용)
@@ -621,7 +659,7 @@ export default function App() {
       label = e.lastCall || '통화 없음';
     }
     const danger = ds != null && ds >= 3;
-    return <span style={{color: danger ? '#dc2626' : '#64748b', fontWeight: danger ? 800 : 600}}>{label}{danger ? ` · ${ds}일째 무응답 ⚠️` : ''}</span>;
+    return <span style={{color: danger ? '#dc2626' : '#64748b', fontWeight: danger ? 800 : 600}}>{label}{danger ? ` · ${ds}일째 무응답` : ''}</span>;
   };
   // 통화기록 날짜 그룹 헤더: 'YYYY-MM-DD' → '6/23(월) · 오늘'
   const formatDateHeader = (dateStr) => {
@@ -665,6 +703,7 @@ export default function App() {
   useEffect(() => {
     const pollAlerts = () => authFetch(`${SERVER_URL}/alerts`).then(r=>r.json()).then(raw => {
       const data = Array.isArray(raw) ? raw : [];   // 401/에러 응답(객체) 방어 → .filter 크래시 차단
+      setLastSync(new Date());
       setAlertsData(data);
       const unread = data.filter(a=>a.status ? a.status === 'new' : !a.read);   // 폐루프: 미확인(new)만 배지
       setAlertCount(unread.length);
@@ -809,9 +848,9 @@ export default function App() {
     if (!elder.callActive) score += 15;
     if (elder.mobility === '거동 불가') score += 10;
     if (elder.age >= 80) score += 5;
-    if (score >= 50) return { level: 'high',   label: '🔴 고위험', color: '#ef4444', bg: '#fef2f2' };
-    if (score >= 25) return { level: 'medium', label: '🟡 주의',   color: '#f59e0b', bg: '#fffbeb' };
-    return               { level: 'low',    label: '🟢 안전',   color: '#22c55e', bg: '#f0fdf4' };
+    if (score >= 50) return { level: 'high',   label: '고위험', color: '#ef4444', bg: '#fef2f2' };
+    if (score >= 25) return { level: 'medium', label: '주의',   color: '#f59e0b', bg: '#fffbeb' };
+    return               { level: 'low',    label: '안전',   color: '#22c55e', bg: '#f0fdf4' };
   };
 
   const REGIONS = ['전체', '대구 북구', '대구 달서구', '대구 수성구', '대구 중구', '대구 동구', '대구 서구', '대구 남구', '대구 달성군'];
@@ -887,12 +926,23 @@ export default function App() {
   const resetScript = () => { setEditScript(DEFAULT_SCRIPT); setMainScript(DEFAULT_SCRIPT); };
 
   const goPage  = p => { setPage(p); setSelected(null); setCallResult(null); };
+  // 헤더 새로고침 — 현재 페이지에 필요한 데이터만 다시 불러오기
+  const refreshPage = () => {
+    setLastSync(new Date());
+    fetchElders();
+    if (page === 'health') { fetchHealth(); fetchHealthHistory(); }
+    if (page === 'report') fetchStats();
+    if (page === 'calls' || page === 'dashboard' || page === 'elders' || page === 'detail') fetchCalls();
+    if (page === 'data') fetchPopulation();
+    if (page === 'script') fetchWeather();
+    if (page === 'casenotes') loadCaseNotes();
+  };
   // 실시간 위험 알림: 등록된 어르신 것만 표시 (테스트/더미 이름 제외)
   const _normPhone = s => String(s||'').replace(/[^0-9]/g,'');
   const alertIsReal = a => elders.some(e => e.name === a.name || (_normPhone(a.phone) && _normPhone(e.phone) === _normPhone(a.phone)));
   // 서버 내부 코드값(영문)은 화면에 그대로 노출하지 않고 사람이 읽는 한글로 변환.
   // 원칙: 대시보드에 영문 원문값 노출 금지 — 새 코드값이 생기면 EN_ALERT_KO에 추가.
-  const EN_ALERT_KO = { missed: '⚠️ 전화 미응답', help: '🚨 도와줘 (구조 요청)', safe: '✅ 괜찮아 (안전 확인)', sos: '🚨 긴급 호출(SOS)' };
+  const EN_ALERT_KO = { missed: '전화 미응답', help: '도와줘 (구조 요청)', safe: '괜찮아 (안전 확인)', sos: '긴급 호출(SOS)' };
   const alertIsMissed = a => a.category === 'missed' || a.keyword === 'missed';
   const alertEnCode = a => EN_ALERT_KO[a.keyword] ? a.keyword : (EN_ALERT_KO[a.category] ? a.category : null);
   const alertKw = a => {
@@ -1755,7 +1805,7 @@ export default function App() {
       if (data.success) {
         setElders(prev => prev.map(e => e.id===elder.id?{...e,lastCall:`오늘 ${timeStr}`}:e));
         if (selected?.id===elder.id) setSelected(prev=>({...prev,lastCall:`오늘 ${timeStr}`}));
-        setCallResult({elderId:elder.id, status:'success', message:`📱 ${elder.name} ${elder.title||'어르신'} 앱으로 수신 알림 전송 완료!`});
+        setCallResult({elderId:elder.id, status:'success', message:`${elder.name} ${elder.title||'어르신'} 앱으로 수신 알림 전송 완료`});
       } else {
         setCallResult({elderId:elder.id, status:'error', message:`앱 알림 전송 실패: ${data.error}`});
       }
@@ -1927,12 +1977,11 @@ export default function App() {
       {callModal && (
         <div className="modal-overlay" onClick={()=>setCallModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-icon">📱</div>
-            <div className="modal-title">{callModal.name} 어르신 앱으로<br/>수신 알림을 보내시겠습니까?</div>
-            <div className="modal-sub">📱 영실이 앱 → 수신화면 표시 → 받기 클릭 → AI 영실이 대화</div>
+                        <div className="modal-title">{callModal.name} 어르신 앱으로<br/>수신 알림을 보내시겠습니까?</div>
+            <div className="modal-sub">영실이 앱 → 수신화면 표시 → 받기 클릭 → AI 영실이 대화</div>
             <div className="modal-btns">
               <button className="btn-secondary" onClick={()=>setCallModal(null)}>취소</button>
-              <button className="btn-call" onClick={()=>makeCall(callModal)}>📱 앱으로 알림 보내기</button>
+              <button className="btn-call" onClick={()=>makeCall(callModal)}>앱으로 알림 보내기</button>
             </div>
           </div>
         </div>
@@ -1941,7 +1990,7 @@ export default function App() {
       {csvImport && (
         <div className="modal-overlay" onClick={()=>!csvSaving&&setCsvImport(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:860,width:'95%',textAlign:'left'}}>
-            <div className="modal-title" style={{textAlign:'left',marginBottom:8}}>📥 CSV 일괄 등록 미리보기</div>
+            <div className="modal-title" style={{textAlign:'left',marginBottom:8}}>CSV 일괄 등록 미리보기</div>
             {(()=>{
               const ok=csvImport.rows.filter(r=>r._status==='ok').length;
               const dup=csvImport.rows.filter(r=>r._status==='dup').length;
@@ -1949,9 +1998,9 @@ export default function App() {
               const willRegister=ok+(csvOverwrite?dup:0);
               return (<>
                 <div style={{fontSize:13,marginBottom:12,display:'flex',gap:14,flexWrap:'wrap'}}>
-                  <span style={{color:'#16a34a',fontWeight:700}}>✅ 등록 {ok}</span>
-                  <span style={{color:'#f59e0b',fontWeight:700}}>⚠️ 중복 {dup}</span>
-                  <span style={{color:'#dc2626',fontWeight:700}}>❌ 오류 {err}</span>
+                  <span style={{color:'#16a34a',fontWeight:700}}>등록 {ok}</span>
+                  <span style={{color:'#f59e0b',fontWeight:700}}>중복 {dup}</span>
+                  <span style={{color:'#dc2626',fontWeight:700}}>오류 {err}</span>
                   <span style={{color:'#64748b'}}>· 총 {csvImport.rows.length}행</span>
                 </div>
                 <div style={{maxHeight:'50vh',overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:10}}>
@@ -2020,10 +2069,10 @@ export default function App() {
         return (
         <div className="modal-overlay" onClick={()=>setSchedModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:winWide?1000:520,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
-            <h3 style={{margin:'0 0 6px'}}>📅 급여제공 일정표</h3>
+            <h3 style={{margin:'0 0 6px'}}>급여제공 일정표</h3>
             <div style={{fontSize:13,color:'#64748b',marginBottom:8}}>날짜별 제공시간을 입력하고 저장하세요. 인쇄하면 공식 달력 양식(PDF)으로 출력됩니다.</div>
             <div style={{fontSize:12.5,fontWeight:700,color:'#7c3aed',background:'#f5f3ff',border:'1px solid #ddd6fe',borderRadius:8,padding:'7px 10px',marginBottom:12}}>
-              💡 산정 규칙: 월 인정시간 <b>한도 120시간</b> · <b>주말·공휴일은 1.5배 인정</b> (2시간 근무 → 3시간 인정). 공휴일(<span style={{color:'#dc2626'}}>×1.5</span>)은 자동 표시되며, 평일 날짜를 클릭하면 공휴일로 지정/해제할 수 있어요.
+              산정 규칙: 월 인정시간 <b>한도 120시간</b> · <b>주말·공휴일은 1.5배 인정</b> (2시간 근무 → 3시간 인정). 공휴일(<span style={{color:'#dc2626'}}>×1.5</span>)은 자동 표시되며, 평일 날짜를 클릭하면 공휴일로 지정/해제할 수 있어요.
             </div>
             <div style={{display:'flex',gap:8,marginBottom:10}}>
               <select className="form-input" style={{flex:1,margin:0}} value={schedModal.phone} onChange={e=>{ const p=e.target.value; setSchedModal(f=>({...f,phone:p,loaded:false})); loadSchedule(p, schedModal.ym); }}>
@@ -2061,7 +2110,7 @@ export default function App() {
                 </div>
               ))}
               <div style={{textAlign:'right',fontSize:15,fontWeight:900,color:overCap?'#dc2626':'#1e3a6e',background:overCap?'#fef2f2':'#eff6ff',padding:'9px 14px',borderTop:'1px solid #e2e8f0'}}>
-                입력 {totalInput}시간 · <b>인정 {totalRec} / {SCHED_CAP}시간</b>{overCap && ' ⚠️ 한도 초과'}
+                입력 {totalInput}시간 · <b>인정 {totalRec} / {SCHED_CAP}시간</b>{overCap && ' · 한도 초과'}
               </div>
             </div>
             ) : (
@@ -2085,15 +2134,15 @@ export default function App() {
                 </div>
                 );
               })}
-              <div style={{textAlign:'right',fontSize:14,fontWeight:900,color:overCap?'#dc2626':'#1e3a6e',background:overCap?'#fef2f2':'#eff6ff',padding:'8px 14px'}}>입력 {totalInput}시간 · <b>인정 {totalRec} / {SCHED_CAP}시간</b>{overCap && ' ⚠️ 한도 초과'}</div>
+              <div style={{textAlign:'right',fontSize:14,fontWeight:900,color:overCap?'#dc2626':'#1e3a6e',background:overCap?'#fef2f2':'#eff6ff',padding:'8px 14px'}}>입력 {totalInput}시간 · <b>인정 {totalRec} / {SCHED_CAP}시간</b>{overCap && ' · 한도 초과'}</div>
             </div>
             )}
             <div className="modal-btns" style={{justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
-              {isStaffUp ? <button className="btn-secondary" onClick={printScheduleBatch} title="이 달에 저장된 모든 이용자의 일정표를 한 번에 인쇄(PDF 한 파일)">🖨 일괄 출력</button> : <span/>}
+              {isStaffUp ? <button className="btn-secondary" onClick={printScheduleBatch} title="이 달에 저장된 모든 이용자의 일정표를 한 번에 인쇄(PDF 한 파일)">일괄 출력</button> : <span/>}
               <div style={{display:'flex',gap:8}}>
                 <button className="btn-secondary" onClick={()=>setSchedModal(null)}>닫기</button>
-                <button className="btn-secondary" onClick={printSchedule}>🖨 양식 인쇄</button>
-                <button className="btn-primary" onClick={saveSchedule} disabled={schedModal.saving||overCap} title={overCap?'월 인정시간 한도(120시간)를 초과해 저장할 수 없습니다':''}>{schedModal.saving?'저장 중…':overCap?'⚠️ 한도 초과':'💾 파일로 저장'}</button>
+                <button className="btn-secondary" onClick={printSchedule}>양식 인쇄</button>
+                <button className="btn-primary" onClick={saveSchedule} disabled={schedModal.saving||overCap} title={overCap?'월 인정시간 한도(120시간)를 초과해 저장할 수 없습니다':''}>{schedModal.saving?'저장 중…':overCap?'한도 초과':'파일로 저장'}</button>
               </div>
             </div>
           </div>
@@ -2104,7 +2153,7 @@ export default function App() {
       {weeklyModal && (
         <div className="modal-overlay" onClick={()=>{setWeeklyModal(null);setWeeklyDoc(null);}}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:winWide?1020:640,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
-            <h3 style={{margin:'0 0 6px'}}>📄 주간업무 보고서 — 확인·수정·출력</h3>
+            <h3 style={{margin:'0 0 6px'}}>주간업무 보고서 — 확인·수정·출력</h3>
             <div style={{fontSize:13,color:'#64748b',marginBottom:12}}>지원사가 앱에서 주차별로 작성(음성→텍스트)한 내용입니다. 오타를 고치고 지시사항을 적은 뒤 저장·출력하세요.</div>
             <div style={{display:'flex',gap:8,marginBottom:10}}>
               <select className="form-input" style={{flex:1,margin:0}} value={weeklyModal.phone} onChange={e=>{const p=e.target.value;setWeeklyModal(f=>({...f,phone:p}));loadWeekly(p,weeklyModal.ym);}}>
@@ -2164,14 +2213,14 @@ export default function App() {
                   <option value="">전체 작성자</option>
                   {authors.map(em=>(<option key={em} value={em}>{authorName(em)}</option>))}
                 </select>
-                <button className="btn-secondary" style={{whiteSpace:'nowrap'}} onClick={printWeeklyBatch} title="그 달에 저장된 보고서 전체를 한 번에 — PDF 한 파일">🖨 일괄 출력</button>
+                <button className="btn-secondary" style={{whiteSpace:'nowrap'}} onClick={printWeeklyBatch} title="그 달에 저장된 보고서 전체를 한 번에 — PDF 한 파일">일괄 출력</button>
               </div>
               );
             })()}
             <div className="modal-btns" style={{justifyContent:'flex-end',gap:8}}>
               <button className="btn-secondary" onClick={()=>{setWeeklyModal(null);setWeeklyDoc(null);}}>닫기</button>
-              <button className="btn-secondary" onClick={printWeeklyReport}>🖨 양식 출력</button>
-              <button className="btn-primary" onClick={saveWeekly} disabled={!!(weeklyDoc&&weeklyDoc.saving)}>{weeklyDoc&&weeklyDoc.saving?'저장 중…':'💾 파일로 저장'}</button>
+              <button className="btn-secondary" onClick={printWeeklyReport}>양식 출력</button>
+              <button className="btn-primary" onClick={saveWeekly} disabled={!!(weeklyDoc&&weeklyDoc.saving)}>{weeklyDoc&&weeklyDoc.saving?'저장 중…':'파일로 저장'}</button>
             </div>
           </div>
         </div>
@@ -2184,7 +2233,7 @@ export default function App() {
         return (
         <div className="modal-overlay" onClick={close}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600,width:'94%',textAlign:'left'}}>
-            <div className="modal-title" style={{textAlign:'left',marginBottom:18}}>{noteForm.id?'✏️ 상담·방문 일지 수정':'📝 새 상담·방문 일지'}</div>
+            <div className="modal-title" style={{textAlign:'left',marginBottom:18}}>{noteForm.id?'상담·방문 일지 수정':'새 상담·방문 일지'}</div>
             <div style={{display:'flex',flexDirection:'column',gap:15,maxHeight:'66vh',overflowY:'auto',paddingRight:4}}>
               <div>
                 <label style={L}>어르신</label>
@@ -2197,7 +2246,7 @@ export default function App() {
                 <label style={L}>상담 유형</label>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                   {Object.entries(CASE_TYPE_META).map(([k,m])=>(
-                    <button key={k} type="button" onClick={()=>setNoteForm(f=>({...f,type:k}))} style={{fontSize:13,padding:'7px 13px',borderRadius:20,cursor:'pointer',fontWeight:600,border:'1px solid '+(noteForm.type===k?m.color:'#d1d5db'),background:noteForm.type===k?m.bg:'#fff',color:noteForm.type===k?m.color:'#374151'}}>{m.icon} {m.label}</button>
+                    <button key={k} type="button" onClick={()=>setNoteForm(f=>({...f,type:k}))} style={{fontSize:13,padding:'7px 13px',borderRadius:20,cursor:'pointer',fontWeight:600,border:'1px solid '+(noteForm.type===k?m.color:'#d1d5db'),background:noteForm.type===k?m.bg:'#fff',color:noteForm.type===k?m.color:'#374151'}}>{m.label}</button>
                   ))}
                 </div>
               </div>
@@ -2238,14 +2287,14 @@ export default function App() {
               </div>
               <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',paddingTop:2}}>
                 <label style={{fontSize:13,fontWeight:700,color:'#334155',display:'flex',alignItems:'center',gap:7,cursor:'pointer',margin:0}}>
-                  <input type="checkbox" checked={noteForm.followUpNeeded} onChange={e=>setNoteForm(f=>({...f,followUpNeeded:e.target.checked}))} style={{width:16,height:16}}/> 🔔 후속조치 필요
+                  <input type="checkbox" checked={noteForm.followUpNeeded} onChange={e=>setNoteForm(f=>({...f,followUpNeeded:e.target.checked}))} style={{width:16,height:16}}/> 후속조치 필요
                 </label>
                 {noteForm.followUpNeeded && <input type="date" className="form-input" style={{width:180,margin:0}} value={noteForm.followUpDue} onChange={e=>setNoteForm(f=>({...f,followUpDue:e.target.value}))}/>}
               </div>
             </div>
             <div className="modal-btns" style={{marginTop:20,justifyContent:'flex-end'}}>
               <button className="btn-secondary" onClick={close}>취소</button>
-              <button className="btn-secondary" onClick={()=>copyNote({elderName:noteForm.elderName,type:noteForm.type,category:noteForm.category,content:noteForm.content,action:noteForm.action,visitedAt:(noteForm.visitedDate&&noteForm.visitedTime)?`${noteForm.visitedDate}T${noteForm.visitedTime}`:new Date().toISOString(),followUp:{needed:noteForm.followUpNeeded,dueDate:noteForm.followUpDue}},'modal')} title="정부 노인맞춤돌봄시스템 등에 붙여넣기용 텍스트 복사">{copiedNoteId==='modal'?'✅ 복사됨':'📋 복사'}</button>
+              <button className="btn-secondary" onClick={()=>copyNote({elderName:noteForm.elderName,type:noteForm.type,category:noteForm.category,content:noteForm.content,action:noteForm.action,visitedAt:(noteForm.visitedDate&&noteForm.visitedTime)?`${noteForm.visitedDate}T${noteForm.visitedTime}`:new Date().toISOString(),followUp:{needed:noteForm.followUpNeeded,dueDate:noteForm.followUpDue}},'modal')} title="정부 노인맞춤돌봄시스템 등에 붙여넣기용 텍스트 복사">{copiedNoteId==='modal'?'복사됨':'복사'}</button>
               <button className="btn-primary" onClick={saveNote} disabled={noteSaving}>{noteSaving?'저장 중...':(noteForm.id?'수정 저장':'일지 저장')}</button>
             </div>
           </div>
@@ -2259,38 +2308,65 @@ export default function App() {
           <div><div className="logo-title">영실이</div><div className="logo-sub">복지사 관리 시스템</div></div>
         </div>
         <nav className="nav">
-          {[
-            {id:'dashboard', icon:'⊞', label:'대시보드'},
-            {id:'elders',    icon:'👥', label:`${T.elder} 관리`},
+          {(() => {
             // 활동지원 기관: 일지·서식이 주 업무 → 상단 배치, 노인돌봄 전용(안전확인·건강·공공데이터)은 숨김.
             // AI 안부전화는 보조 기능으로 유지(발신·멘트·통화기록).
-            ...(isDisability ? [
-              {id:'casenotes', icon:'📝', label:'상담·방문 일지'},
-              {id:'forms',     icon:'📥', label:'보고서·서식'},
-              {id:'report',    icon:'📊', label:'리포트 / 통계'},
-              {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
-              {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
-              {id:'calls',     icon:'📞', label:'통화 기록'},
+            const groups = isDisability ? [
+              { label:'모니터링', items:[
+                {id:'dashboard', icon:'dashboard', label:'대시보드'},
+                {id:'elders',    icon:'elders',    label:`${T.elder} 관리`},
+              ]},
+              { label:'일지·보고', items:[
+                {id:'casenotes', icon:'casenotes', label:'상담·방문 일지'},
+                {id:'forms',     icon:'forms',     label:'보고서·서식'},
+                {id:'report',    icon:'report',    label:'리포트 / 통계'},
+              ]},
+              { label:'안부 전화', items:[
+                {id:'schedule', icon:'schedule', label:'전화 발신 관리'},
+                {id:'script',   icon:'script',   label:'전화 멘트 관리'},
+                {id:'calls',    icon:'calls',    label:'통화 기록'},
+              ]},
             ] : [
-              {id:'safety',    icon:'✅', label:'안전확인 관리'},
-              {id:'schedule',  icon:'📅', label:'전화 발신 관리'},
-              {id:'script',    icon:'✍️', label:'전화 멘트 관리'},
-              {id:'calls',     icon:'📞', label:'통화 기록'},
-              {id:'health', icon:'💊', label: alertCount > 0 ? `건강 상태 🔴${alertCount}` : '건강 상태'},
-              {id:'casenotes', icon:'📝', label:'상담·방문 일지'},
-              {id:'forms',     icon:'📥', label:'보고서·서식'},
-              {id:'report',    icon:'📊', label:'리포트 / 통계'},
-              {id:'data',      icon:'🗺️', label:'공공데이터 현황'},
-            ]),
-            ...(isStaffUp ? [{id:'admin', icon: isSuper?'🏢':'👥', label: isSuper?'기관 관리':'구성원 관리'}] : []),
-            {id:'help',      icon:'📖', label: hasNewNotice ? '도움말 보기 🔴' : '도움말 보기'},
-          ].map(item=>(
-            <button key={item.id}
-              className={`nav-item ${(page===item.id||(page==='detail'&&item.id==='elders')||(page==='register'&&item.id==='elders'))?'active':''}`}
-              onClick={()=>goPage(item.id)}>
-              <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
-            </button>
-          ))}
+              { label:'모니터링', items:[
+                {id:'dashboard', icon:'dashboard', label:'대시보드'},
+                {id:'elders',    icon:'elders',    label:`${T.elder} 관리`},
+                {id:'safety',    icon:'safety',    label:'안전확인 관리'},
+                {id:'health',    icon:'health',    label:'건강 상태', badge: alertCount},
+              ]},
+              { label:'안부 전화', items:[
+                {id:'schedule', icon:'schedule', label:'전화 발신 관리'},
+                {id:'script',   icon:'script',   label:'전화 멘트 관리'},
+                {id:'calls',    icon:'calls',    label:'통화 기록'},
+              ]},
+              { label:'기록·보고', items:[
+                {id:'casenotes', icon:'casenotes', label:'상담·방문 일지'},
+                {id:'forms',     icon:'forms',     label:'보고서·서식'},
+                {id:'report',    icon:'report',    label:'리포트 / 통계'},
+              ]},
+              { label:'외부 데이터', items:[
+                {id:'data', icon:'data', label:'공공데이터 현황'},
+              ]},
+            ];
+            groups.push({ label:'관리', items:[
+              ...(isStaffUp ? [{id:'admin', icon:'admin', label: isSuper?'기관 관리':'구성원 관리'}] : []),
+              {id:'help', icon:'help', label:'도움말 보기', dot: hasNewNotice},
+            ]});
+            return groups.map(group=>(
+              <div key={group.label} className="nav-group">
+                <div className="nav-group-label">{group.label}</div>
+                {group.items.map(item=>(
+                  <button key={item.id}
+                    className={`nav-item ${(page===item.id||(page==='detail'&&item.id==='elders')||(page==='register'&&item.id==='elders'))?'active':''}`}
+                    onClick={()=>goPage(item.id)}>
+                    <span className="nav-icon"><NavIcon name={item.icon}/></span>
+                    <span>{item.label}</span>
+                    {item.badge > 0 && <span className="nav-badge">{item.badge}</span>}
+                    {item.dot && <span className="nav-dot"/>}
+                  </button>
+                ))}
+              </div>
+            ));
+          })()}
         </nav>
         <div className="sidebar-footer">
           <div className="worker-info">
@@ -2299,9 +2375,9 @@ export default function App() {
           </div>
           {me?.orgCode && (
             <div onClick={copyOrgCode} title="클릭하면 복사 · 어르신 앱 등록 시 입력" style={{marginTop:10,padding:'8px 10px',borderRadius:8,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
-              <span style={{fontSize:11,color:'#93c5fd'}}>🏢 기관코드</span>
+              <span style={{fontSize:11,color:'#93c5fd'}}>기관코드</span>
               <span style={{fontSize:14,fontWeight:800,letterSpacing:1,color:'#fff',fontFamily:'monospace'}}>{me.orgCode}</span>
-              <span style={{marginLeft:'auto',fontSize:11,color:orgCopied?'#4ade80':'#94a3b8'}}>{orgCopied?'✓ 복사됨':'📋 복사'}</span>
+              <span style={{marginLeft:'auto',fontSize:11,color:orgCopied?'#4ade80':'#94a3b8'}}>{orgCopied?'복사됨':'복사'}</span>
             </div>
           )}
           {authEnabled&&authUser&&<button onClick={doLogout} style={{marginTop:10,width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #cbd5e1',background:'#fff',color:'#475569',fontSize:13,fontWeight:600,cursor:'pointer'}}>로그아웃</button>}
@@ -2311,7 +2387,7 @@ export default function App() {
       <main className="main">
         {authEnabled && authUser && !authUser.emailVerified && (
           <div style={{background:'#fffbeb',borderBottom:'1px solid #fde68a',padding:'10px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',fontSize:14}}>
-            <span style={{color:'#b45309',fontWeight:700}}>📧 이메일 인증을 완료해 주세요.</span>
+            <span style={{color:'#b45309',fontWeight:700}}>이메일 인증을 완료해 주세요.</span>
             <span style={{color:'#92400e'}}>{authUser.email}로 보낸 메일의 링크를 클릭하시면 됩니다. (지금도 사용 가능)</span>
             <span style={{flex:1}}/>
             {verifyNote && <span style={{color:'#166534',fontSize:13}}>{verifyNote}</span>}
@@ -2320,12 +2396,26 @@ export default function App() {
           </div>
         )}
         <header className="header">
-          <div className="header-title">
-            {page==='dashboard'&&'대시보드'}{page==='elders'&&`${T.elder} 관리`}{page==='schedule'&&'전화 발신 관리'}
-            {page==='safety'&&'✅ 안전확인 관리'}{page==='calls'&&'통화 기록'}{page==='script'&&'전화 멘트 관리'}{page==='report'&&'리포트 / 통계'}{page==='data'&&'공공데이터 현황'}{page==='health'&&'💊 건강 상태 현황'}{page==='casenotes'&&'📝 상담·방문 일지'}{page==='forms'&&'📥 보고서·서식'}{page==='admin'&&(isSuper?'🏢 기관 관리 (운영자)':'👥 구성원 관리')}{page==='help'&&'📖 도움말 보기'}
-            {page==='detail'&&`${T.elder} 상세 정보`}{page==='register'&&(editMode?`${T.elder} 정보 수정`:`${T.elder} 신규 등록`)}
+          {(()=>{
+            const title =
+              page==='dashboard'?'대시보드':page==='elders'?`${T.elder} 관리`:page==='schedule'?'전화 발신 관리'
+              :page==='safety'?'안전확인 관리':page==='calls'?'통화 기록':page==='script'?'전화 멘트 관리'
+              :page==='report'?'리포트 / 통계':page==='data'?'공공데이터 현황':page==='health'?'건강 상태'
+              :page==='casenotes'?'상담·방문 일지':page==='forms'?'보고서·서식'
+              :page==='admin'?(isSuper?'기관 관리 (운영자)':'구성원 관리'):page==='help'?'도움말 보기'
+              :page==='detail'?`${T.elder} 상세 정보`:page==='register'?(editMode?`${T.elder} 정보 수정`:`${T.elder} 신규 등록`):'';
+            return (
+              <div>
+                <div className="header-crumb">홈 <span className="crumb-sep">/</span> {title}</div>
+                <div className="header-title">{title}</div>
+              </div>
+            );
+          })()}
+          <div className="header-right">
+            <span className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'})}</span>
+            {lastSync && <span className="header-sync">· 마지막 갱신 {lastSync.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false})}</span>}
+            <button className="btn-refresh" onClick={refreshPage}><RefreshIcon/> 새로고침</button>
           </div>
-          <div className="header-date">{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</div>
         </header>
 
         <div className="content">
@@ -2334,56 +2424,108 @@ export default function App() {
           {page==='dashboard' && (
             <div className="fade-in">
               {(() => {
-                const alerts = [];
-                // 1) 통화 중 위험 키워드 감지 — 서버 알림(alertsData) 직접 표시 (키워드+시각, localStorage 매칭 무관)
-                //    keyword 필드가 비어도(구버전 서버) message에서 "감지: 뒤"를 파싱해 키워드만 깔끔히.
-                alertsData
-                  .filter(a => !a.read && (a.level === 'critical' || a.level === 'urgent') && alertIsReal(a))
-                  .slice(0, 10)
-                  .forEach(a => {
-                    const kw = alertKw(a);
-                    const el = elders.find(e => e.name === a.name);
-                    const code = alertEnCode(a);   // missed/help/safe 등 코드 알림은 문구 자체가 설명 → 따옴표 없이
-                    alerts.push({ elder: el, name: a.name, msg: code ? `${kw} → ${code === 'missed' ? '안전확인 필요' : '즉시 확인'}` : `"${kw}" 위험 키워드 감지`, time: a.timestamp, color: a.level === 'critical' ? '#ef4444' : '#f59e0b', bg: a.level === 'critical' ? '#fef2f2' : '#fffbeb', icon: code === 'missed' ? '📵' : code ? '🆘' : '🚨' });
-                  });
-                // 2) 미응답 (어르신 데이터 기반)
-                elders.forEach(e => {
-                  const days = getNoResponseDays(e.lastCall, e.lastCallAt);
-                  // 통화이력 없음(99 sentinel=신규)은 '미응답'이 아님 → 긴급 알림 제외. 실제 무응답(3~98일)만 알림.
-                  if (days >= 3 && days < 99) alerts.push({ elder: e, type: 'noResponse', msg: `${days}일째 미응답 → 즉시 확인 필요`, color: '#ef4444', bg: '#fef2f2', icon: '📵' });
+                // 통화 중 위험 키워드 감지 — 어르신별·유형별 최신 1건으로 집계 ("오늘 N회"), 알림 피로 방지 (V2)
+                // missed/help/safe 등 코드 알림은 문구 자체가 설명 → 따옴표 없이 (alertKw/alertEnCode)
+                const kwAlerts = alertsData.filter(a => !a.read && (a.level === 'critical' || a.level === 'urgent') && alertIsReal(a));
+                const byKey = {};  // alertsData는 최신순 → 키별 첫 항목이 최신
+                kwAlerts.forEach(a => {
+                  const k = `${a.name}|${alertEnCode(a) || 'kw'}`;
+                  if (!byKey[k]) byKey[k] = { ...a, count: 0 };
+                  byKey[k].count++;
                 });
+                const alerts = Object.values(byKey).map(a => {
+                  const kw = alertKw(a);
+                  const code = alertEnCode(a);
+                  const el = elders.find(e => e.name === a.name);
+                  const msg = code ? `${kw} → ${code === 'missed' ? '안전확인 필요' : '즉시 확인'}` : `“${kw}” 위험 키워드 감지`;
+                  return { elder: el, name: a.name, level: a.level, msg, count: a.count, time: a.timestamp };
+                });
+                const noResp = elders.filter(e => { const d = getNoResponseDays(e.lastCall, e.lastCallAt); return d >= 3 && d < 99; });
                 const heatwaveElders = elders.filter(e => weatherData[e.region]?.alert === 'heatwave');
-                if (heatwaveElders.length > 0) alerts.push({ type: 'weather', msg: `폭염경보 → ${heatwaveElders.map(e=>e.name).join(', ')} 어르신 안전 확인 필요`, color: '#f59e0b', bg: '#fffbeb', icon: '🌡️' });
-                if (alerts.length === 0) return null;
+                if (alerts.length === 0 && noResp.length === 0 && heatwaveElders.length === 0) return null;
                 return (
-                  <div className="alert-center">
-                    <div className="alert-center-title">🔔 실시간 위험 알림</div>
+                  <div className="alert-stack">
                     {alerts.map((a, i) => (
-                      <div key={i} className="alert-center-item" style={{borderLeftColor: a.color, background: a.bg}} onClick={() => a.elder && openDetail(a.elder)}>
-                        <span className="alert-center-icon">{a.icon}</span>
-                        <div className="alert-center-content">
-                          {(a.elder || a.name) && <span className="alert-center-name">{a.elder ? `${a.elder.name} (${a.elder.age}세)` : a.name}</span>}
-                          <span className="alert-center-msg">{a.msg}</span>
-                          {a.time && <span className="alert-center-time" style={{fontSize:12,color:'#9ca3af',marginLeft:6}}>{new Date(a.time).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>}
+                      <div key={i} className={`alert-banner ${a.level==='critical'?'alert-banner-danger':'alert-banner-warning'}`} onClick={() => a.elder && openDetail(a.elder)}>
+                        <span className={`alert-banner-tag ${a.level==='critical'?'tag-danger':'tag-warning'}`}>{a.level==='critical'?'위험':'주의'}</span>
+                        <div className="alert-banner-body">
+                          <span className="alert-banner-name">{a.elder ? `${a.elder.name} (${a.elder.age}세)` : a.name}</span>
+                          <span className="alert-banner-msg">{a.msg}</span>
+                          {a.count > 1 && <span className="alert-banner-count">오늘 {a.count}회</span>}
+                          {a.time && <span className="alert-banner-time">최근 {new Date(a.time).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>}
                         </div>
-                        {a.elder && <button className="btn-call-sm" onClick={e=>{e.stopPropagation();setCallModal(a.elder);}}>📱 앱 전화</button>}
+                        {a.elder && <button className="btn-primary btn-banner-call" onClick={e=>{e.stopPropagation();setCallModal(a.elder);}}>앱 전화</button>}
                       </div>
                     ))}
+                    {noResp.map(e => (
+                      <div key={e.id} className="alert-banner alert-banner-danger" onClick={() => openDetail(e)}>
+                        <span className="alert-banner-tag tag-danger">미응답</span>
+                        <div className="alert-banner-body">
+                          <span className="alert-banner-name">{e.name} ({e.age}세)</span>
+                          <span className="alert-banner-msg">{getNoResponseDays(e.lastCall, e.lastCallAt)}일째 미응답 · 즉시 확인 필요</span>
+                        </div>
+                        <button className="btn-primary btn-banner-call" onClick={ev=>{ev.stopPropagation();setCallModal(e);}}>앱 전화</button>
+                      </div>
+                    ))}
+                    {heatwaveElders.length > 0 && (
+                      <div className="alert-banner alert-banner-warning">
+                        <span className="alert-banner-tag tag-warning">폭염</span>
+                        <div className="alert-banner-body">
+                          <span className="alert-banner-msg">폭염경보 발효 · {heatwaveElders.map(e=>e.name).join(', ')} 어르신 안전 확인 필요</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
 
               <div className="stat-grid">
-                <div className="stat-card stat-total"><div className="stat-num">{elders.length}</div><div className="stat-label">총 담당 어르신</div><div className="stat-icon">👥</div></div>
-                <div className="stat-card stat-danger"><div className="stat-num">{danger}</div><div className="stat-label">위험 감지</div><div className="stat-icon">🚨</div></div>
-                <div className="stat-card stat-warning"><div className="stat-num">{warning}</div><div className="stat-label">주의 필요</div><div className="stat-icon">⚠️</div></div>
-                <div className="stat-card stat-normal"><div className="stat-num">{normal}</div><div className="stat-label">정상</div><div className="stat-icon">✅</div></div>
+                {[
+                  {cls:'stat-total',   label:'총 담당 어르신', num:elders.length, chip:'#334155'},
+                  {cls:'stat-danger',  label:'위험 감지',     num:danger,        chip:'#ef4444'},
+                  {cls:'stat-warning', label:'주의 필요',     num:warning,       chip:'#f59e0b'},
+                  {cls:'stat-normal',  label:'정상',          num:normal,        chip:'#22c55e'},
+                ].map(s=>(
+                  <div key={s.label} className={`stat-card ${s.cls}`}>
+                    <div className="stat-top"><span className="stat-label">{s.label}</span><span className="stat-chip" style={{background:s.chip}}/></div>
+                    <div className="stat-num-row"><span className="stat-num">{s.num}</span><span className="stat-unit">명</span></div>
+                  </div>
+                ))}
               </div>
 
               <div className="dash-two-col">
                 <div className="dash-col-left">
+                  {(() => {
+                    // "오늘 할 일" — 데이터에서 파생한 행동 체크리스트 (V2)
+                    const kwUnread = alertsData.filter(a=>!a.read&&(a.level==='critical'||a.level==='urgent')&&alertIsReal(a)).length;
+                    const noRespCnt = elders.filter(e=>{const d=getNoResponseDays(e.lastCall,e.lastCallAt);return d>=3&&d<99;}).length;
+                    const visitCnt = elders.filter(e=>e.visits>0).length;
+                    const heatCnt = elders.filter(e=>weatherData[e.region]?.alert==='heatwave').length;
+                    const todos = [
+                      noRespCnt>0 && {key:'noresp', label:'미응답 어르신 확인', count:`${noRespCnt}명`, tone:'danger', go:'elders'},
+                      kwUnread>0  && {key:'kw',     label:'위험 키워드 알림 확인', count:`${kwUnread}건`, tone:'danger', go:'health'},
+                      visitCnt>0  && {key:'visit',  label:'방문 필요 어르신 확인', count:`${visitCnt}명`, tone:'warning', go:'elders'},
+                      heatCnt>0   && {key:'heat',   label:'폭염경보 안전 확인', count:`${heatCnt}명`, tone:'warning', go:'script'},
+                    ].filter(Boolean);
+                    const doneCnt = todos.filter(t=>todoDone[t.key]).length;
+                    return (
+                      <div className="section">
+                        <div className="todo-header"><div className="section-title" style={{marginBottom:0}}>오늘 할 일</div><span className="todo-progress">{doneCnt} / {todos.length} 완료</span></div>
+                        {todos.length===0 ? <div className="todo-empty">오늘 처리할 항목이 없습니다.</div> : todos.map(t=>(
+                          <div key={t.key} className={`todo-item ${todoDone[t.key]?'todo-item-done':''}`}>
+                            <button className={`todo-check ${todoDone[t.key]?'todo-check-on':''}`} onClick={()=>setTodoDone(prev=>({...prev,[t.key]:!prev[t.key]}))} aria-label="완료 체크">
+                              {todoDone[t.key] && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>}
+                            </button>
+                            <span className="todo-label" onClick={()=>goPage(t.go)}>{t.label}</span>
+                            <span className={`todo-count ${t.tone==='danger'?'todo-count-danger':'todo-count-warning'}`}>{t.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   <div className="section">
-                    <div className="section-title">📞 오늘 통화 현황</div>
+                    <div className="section-title">오늘 통화 현황</div>
                     <div className="call-summary">
                       <div className="call-stat" style={{cursor:'pointer'}} title="발신 이력 보기" onClick={()=>drillDispatch('all')}><div className="call-num" style={{color:'#1d4ed8'}}>{dispatchTotal}건</div><div className="call-label">발신</div></div>
                       <div className="call-stat" style={{cursor:'pointer'}} title="받은 통화 보기" onClick={()=>drillDispatch('received')}><div className="call-num" style={{color:'#16a34a'}}>{answeredCount}건</div><div className="call-label">받음</div></div>
@@ -2393,6 +2535,19 @@ export default function App() {
                       <div className="call-stat" style={{cursor:'pointer'}} title="정상 통화 보기" onClick={()=>drillCalls('normal')}><div className="call-num" style={{color:'#22c55e'}}>{normalCount}건</div><div className="call-label">정상 통화</div></div>
                     </div>
                     <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>· 숫자를 클릭하면 해당 통화·발신 목록으로 이동합니다. (발신 = 받음 + 부재중, 긴급·주의·정상은 받은 통화의 위험 분류)</div>
+                    {(() => {
+                      // 오늘 통화 완료율 — 자동발신 대상 중 오늘 통화 완료 비율 (V2)
+                      const active = elders.filter(e=>e.callActive);
+                      const calledSet = new Set(todayCalls.map(c=>String(c.phone||'').replace(/\D/g,'')));
+                      const done = active.filter(e=>calledSet.has(String(e.phone||'').replace(/\D/g,''))).length;
+                      const rate = active.length ? Math.round(done/active.length*100) : 0;
+                      return (
+                        <div className="callrate-wrap">
+                          <div className="callrate-row"><span className="callrate-label">오늘 통화 완료율</span><span className="callrate-value">{rate}% <span className="callrate-sub">(예정 {active.length}명 중 {done}명 완료)</span></span></div>
+                          <div className="callrate-bar"><div className="callrate-fill" style={{width:`${rate}%`}}/></div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {(() => {
@@ -2402,9 +2557,9 @@ export default function App() {
                     if (!unchecked.length && !undialed) return null;
                     return (
                       <div className="section" style={unchecked.length ? { borderLeft: '4px solid #dc2626' } : {}}>
-                        <div className="section-title">⚠️ 오늘 안전확인 미완료 {unchecked.length > 0 && <span style={{ color: '#dc2626' }}>{unchecked.length}명</span>}</div>
+                        <div className="section-title">오늘 안전확인 미완료 {unchecked.length > 0 && <span style={{ color: '#dc2626' }}>{unchecked.length}명</span>}</div>
                         {unchecked.length === 0 ? (
-                          <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>✅ 발신한 어르신은 모두 안전확인 완료됐습니다.</div>
+                          <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>발신한 어르신은 모두 안전확인 완료됐습니다.</div>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                             {unchecked.map(({ e, d }) => (
@@ -2412,13 +2567,13 @@ export default function App() {
                                 <div style={{ minWidth: 90, fontWeight: 800 }}>{e.name}</div>
                                 <div style={{ minWidth: 80, fontSize: 13, color: '#64748b' }}>{e.region}</div>
                                 <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: d.status === 'missed' ? '#ea580c' : '#dc2626' }}>
-                                  {d.status === 'missed' ? `📵 부재중 — 자동 재발신 ${d.retryCount || 0}회에도 무응답` : `❌ 발신 실패${d.reason ? ` (${d.reason})` : ''}`}
+                                  {d.status === 'missed' ? `부재중 — 자동 재발신 ${d.retryCount || 0}회에도 무응답` : `발신 실패${d.reason ? ` (${d.reason})` : ''}`}
                                 </div>
                                 <div style={{ fontSize: 12, color: '#94a3b8' }}>{d.sentAtIso ? new Date(d.sentAtIso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
-                                <button className="btn-call" style={{ fontSize: 12, padding: '5px 12px' }} disabled={calling === e.id} onClick={() => makeCall(e)}>{calling === e.id ? '📱 발신 중…' : '📞 재발신'}</button>
+                                <button className="btn-call" style={{ fontSize: 12, padding: '5px 12px' }} disabled={calling === e.id} onClick={() => makeCall(e)}>{calling === e.id ? '발신 중…' : '재발신'}</button>
                               </div>
                             ))}
-                            <div style={{ fontSize: 12.5, color: '#dc2626', fontWeight: 600 }}>🚨 재발신에도 무응답이면 직접 전화 또는 방문 확인이 필요합니다.</div>
+                            <div style={{ fontSize: 12.5, color: '#dc2626', fontWeight: 600 }}>재발신에도 무응답이면 직접 전화 또는 방문 확인이 필요합니다.</div>
                           </div>
                         )}
                         {undialed > 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>· 오늘 아직 발신하지 않은 어르신 {undialed}명 (전화 발신 관리에서 발신)</div>}
@@ -2427,20 +2582,20 @@ export default function App() {
                   })()}
 
                   <div className="section">
-                    <div className="section-title">⚡ 빠른 실행</div>
+                    <div className="section-title">빠른 실행</div>
                     <div className="quick-actions">
-                      <button className="quick-btn quick-danger" onClick={()=>goPage('schedule')}><span>🚨</span><span>위험 어르신만 전화</span><span className="quick-count">{elders.filter(e=>e.status!=='normal').length}명</span></button>
-                      <button className="quick-btn quick-all" onClick={()=>goPage('schedule')}><span>📱</span><span>전체 일괄 앱 알림</span><span className="quick-count">{elders.filter(e=>e.callActive).length}명</span></button>
-                      <button className="quick-btn" style={{background:'#f0fdf4',border:'2px solid #bbf7d0'}} onClick={()=>goPage('health')}><span>💊</span><span>건강 상태 확인</span>{alertCount > 0 && <span className="quick-count" style={{background:'#dc2626'}}>{alertCount}건</span>}</button>
-                      <button className="quick-btn quick-report" onClick={()=>goPage('report')}><span>📋</span><span>오늘 리포트 출력</span></button>
-                      <button className="quick-btn quick-register" onClick={openRegister}><span>➕</span><span>어르신 신규 등록</span></button>
+                      <button className="quick-btn quick-danger" onClick={()=>goPage('schedule')}><span>위험 어르신만 전화</span><span className="quick-count">{elders.filter(e=>e.status!=='normal').length}명</span></button>
+                      <button className="quick-btn quick-all" onClick={()=>goPage('schedule')}><span>전체 일괄 앱 알림</span><span className="quick-count">{elders.filter(e=>e.callActive).length}명</span></button>
+                      <button className="quick-btn" style={{background:'#f0fdf4',border:'2px solid #bbf7d0'}} onClick={()=>goPage('health')}><span>건강 상태 확인</span>{alertCount > 0 && <span className="quick-count" style={{background:'#dc2626',color:'#fff'}}>{alertCount}건</span>}</button>
+                      <button className="quick-btn quick-report" onClick={()=>goPage('report')}><span>오늘 리포트 출력</span></button>
+                      <button className="quick-btn quick-register" onClick={openRegister}><span>어르신 신규 등록</span></button>
                     </div>
                   </div>
                 </div>
 
                 <div className="dash-col-right">
                   <div className="section">
-                    <div className="section-title">📝 메모 / 공지</div>
+                    <div className="section-title">메모 / 공지</div>
                     <div className="memo-input-wrap">
                       <input className="memo-input" placeholder="메모 추가..." value={memoText} onChange={e=>setMemoText(e.target.value)}
                         onKeyDown={e=>{if(e.key==='Enter'&&memoText.trim()){const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});setMemos(prev=>[{id:Date.now(),text:memoText.trim(),time:now,done:false},...prev]);setMemoText('');}}}/>
@@ -2449,7 +2604,9 @@ export default function App() {
                     <div className="memo-list">
                       {memos.map(memo=>(
                         <div key={memo.id} className={`memo-item ${memo.done?'memo-done':''}`}>
-                          <div className="memo-check" onClick={()=>setMemos(prev=>prev.map(m=>m.id===memo.id?{...m,done:!m.done}:m))}>{memo.done?'✅':'⬜'}</div>
+                          <button className={`todo-check ${memo.done?'todo-check-on':''}`} onClick={()=>setMemos(prev=>prev.map(m=>m.id===memo.id?{...m,done:!m.done}:m))} aria-label="메모 완료">
+                            {memo.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>}
+                          </button>
                           <div className="memo-text">{memo.text}</div>
                           <div className="memo-time">{memo.time}</div>
                           <button className="memo-del" onClick={()=>setMemos(prev=>prev.filter(m=>m.id!==memo.id))}>✕</button>
@@ -2462,7 +2619,7 @@ export default function App() {
 
               <div className="section">
                 <div className="dash-section-header">
-                  <div className="section-title">👥 전체 어르신 현황</div>
+                  <div className="section-title">전체 어르신 현황</div>
                   <button className="btn-primary" onClick={openRegister}>+ 신규 등록</button>
                 </div>
                 <table className="table">
@@ -2473,7 +2630,7 @@ export default function App() {
                       const days = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                       return (
                         <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
-                          <td><div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:18}}>{elder.gender==='female'?'👵':'👴'}</span><span style={{fontWeight:700}}>{elder.name}</span>{elder.keyword&&<span className="keyword-tag">"{elder.keyword}"</span>}</div></td>
+                          <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><span style={{fontWeight:700}}>{elder.name}</span>{elder.keyword&&<span className="keyword-tag">"{elder.keyword}"</span>}</div></td>
                           <td>{elder.age}세</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
@@ -2481,7 +2638,7 @@ export default function App() {
                           <td>{days===0?<span style={{color:'#22c55e',fontWeight:700,fontSize:12}}>정상</span>:<span style={{color:days>=3?'#ef4444':'#f59e0b',fontWeight:700,fontSize:12}}>{days>=99?'통화이력 없음':`${days}일`}</span>}</td>
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
                           <td><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div></td>
-                          <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'⏳':'📱 전화'}</button></td>
+                          <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'발신 중':'앱 전화'}</button></td>
                         </tr>
                       );
                     })}
@@ -2495,8 +2652,8 @@ export default function App() {
             <div className="fade-in">
               <div className="data-banner" style={{marginBottom:16}}>
                 <div>
-                  <div className="data-banner-title">✅ 안전확인 관리</div>
-                  <div className="data-banner-sub">노인맞춤돌봄서비스 전화 안전확인 기준 — 일반돌봄군 주 2회 · 중점돌봄군 주 1회(방문이 주 2회) · 🔄 15초마다 자동 갱신됩니다</div>
+                  <div className="data-banner-title">안전확인 관리</div>
+                  <div className="data-banner-sub">노인맞춤돌봄서비스 전화 안전확인 기준 — 일반돌봄군 주 2회 · 중점돌봄군 주 1회(방문이 주 2회) · 15초마다 자동 갱신됩니다</div>
                 </div>
               </div>
               {(() => {
@@ -2523,33 +2680,33 @@ export default function App() {
                 const nInt = elders.filter(e => e.careGroup === 'intensive').length;
                 return (<>
                   <div className="report-stat-grid" style={{marginBottom:16}}>
-                    <div className="report-stat-card"><div className="report-stat-icon">✅</div><div className="report-stat-value" style={{color:'#16a34a'}}>{st.checkedCount}명</div><div className="report-stat-label">오늘 안전확인 완료</div></div>
-                    <div className="report-stat-card"><div className="report-stat-icon">⚠️</div><div className="report-stat-value" style={{color:st.unchecked.length?'#dc2626':'#16a34a'}}>{st.unchecked.length}명</div><div className="report-stat-label">오늘 미확인 (부재중·실패)</div></div>
-                    <div className="report-stat-card"><div className="report-stat-icon">📞</div><div className="report-stat-value" style={{color:'#64748b'}}>{st.undialed}명</div><div className="report-stat-label">오늘 미발신</div></div>
-                    <div className="report-stat-card"><div className="report-stat-icon">📅</div><div className="report-stat-value" style={{color:rate>=80?'#16a34a':rate>=50?'#f59e0b':'#dc2626'}}>{rate}%</div><div className="report-stat-label">이번 주 주기 준수율</div></div>
+                    <div className="report-stat-card"><div className="report-stat-dot" style={{background:'#16a34a'}}/><div className="report-stat-value" style={{color:'#16a34a'}}>{st.checkedCount}명</div><div className="report-stat-label">오늘 안전확인 완료</div></div>
+                    <div className="report-stat-card"><div className="report-stat-dot" style={{background:'#dc2626'}}/><div className="report-stat-value" style={{color:st.unchecked.length?'#dc2626':'#16a34a'}}>{st.unchecked.length}명</div><div className="report-stat-label">오늘 미확인 (부재중·실패)</div></div>
+                    <div className="report-stat-card"><div className="report-stat-dot" style={{background:'#64748b'}}/><div className="report-stat-value" style={{color:'#64748b'}}>{st.undialed}명</div><div className="report-stat-label">오늘 미발신</div></div>
+                    <div className="report-stat-card"><div className="report-stat-dot" style={{background:'#1d4ed8'}}/><div className="report-stat-value" style={{color:rate>=80?'#16a34a':rate>=50?'#f59e0b':'#dc2626'}}>{rate}%</div><div className="report-stat-label">이번 주 주기 준수율</div></div>
                   </div>
 
                   {st.unchecked.length > 0 && (
                     <div className="section" style={{borderLeft:'4px solid #dc2626'}}>
-                      <div className="section-title">⚠️ 오늘 미확인 어르신 — 우선 대응</div>
+                      <div className="section-title">오늘 미확인 어르신 — 우선 대응</div>
                       <div style={{display:'flex',flexDirection:'column',gap:8}}>
                         {st.unchecked.map(({ e, d }) => (
                           <div key={e.id} style={{display:'flex',alignItems:'center',gap:12,background:d.status==='missed'?'#fff7ed':'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'10px 14px',flexWrap:'wrap'}}>
                             <div style={{minWidth:90,fontWeight:800,color:'#1d4ed8',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name}</div>
                             <div style={{minWidth:80,fontSize:13,color:'#64748b'}}>{e.region}</div>
                             <div style={{flex:1,fontSize:13,fontWeight:700,color:d.status==='missed'?'#ea580c':'#dc2626'}}>
-                              {d.status==='missed' ? `📵 부재중 — 자동 재발신 ${d.retryCount||0}회에도 무응답` : `❌ 발신 실패${d.reason?` (${d.reason})`:''}`}
+                              {d.status==='missed' ? `부재중 — 자동 재발신 ${d.retryCount||0}회에도 무응답` : `발신 실패${d.reason?` (${d.reason})`:''}`}
                             </div>
-                            <button className="btn-call" style={{fontSize:12,padding:'5px 12px'}} disabled={calling===e.id} onClick={()=>makeCall(e)}>{calling===e.id?'📱 발신 중…':'📞 재발신'}</button>
+                            <button className="btn-call" style={{fontSize:12,padding:'5px 12px'}} disabled={calling===e.id} onClick={()=>makeCall(e)}>{calling===e.id?'발신 중…':'재발신'}</button>
                           </div>
                         ))}
-                        <div style={{fontSize:12.5,color:'#dc2626',fontWeight:600}}>🚨 재발신에도 무응답이면 직접 전화 또는 방문 확인 후, 상담·방문 일지에 기록해 주세요.</div>
+                        <div style={{fontSize:12.5,color:'#dc2626',fontWeight:600}}>재발신에도 무응답이면 직접 전화 또는 방문 확인 후, 상담·방문 일지에 기록해 주세요.</div>
                       </div>
                     </div>
                   )}
 
                   <div className="section">
-                    <div className="section-title">📅 이번 주 주기 준수 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(월요일~오늘 · 통화 성공한 날 수 기준 · 돌봄군: 일반 {nGen}명 · 중점 {nInt}명)</span></div>
+                    <div className="section-title">이번 주 주기 준수 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(월요일~오늘 · 통화 성공한 날 수 기준 · 돌봄군: 일반 {nGen}명 · 중점 {nInt}명)</span></div>
                     <div style={{overflowX:'auto'}}>
                       <table className="table" style={{width:'100%'}}>
                         <thead><tr><th>어르신</th><th>돌봄군</th><th>주간 목표</th><th>이번 주 통화</th><th>상태</th><th></th></tr></thead>
@@ -2560,8 +2717,8 @@ export default function App() {
                               <td>{g ? <span style={{fontSize:12,fontWeight:800,color:g.color,background:`${g.color}15`,padding:'2px 8px',borderRadius:6}}>{g.label}</span> : <span style={{fontSize:12,color:'#94a3b8'}}>미지정</span>}</td>
                               <td>{target}회</td>
                               <td style={{fontWeight:800,color:met?'#16a34a':'#f59e0b'}}>{done}회</td>
-                              <td>{met ? <span style={{color:'#16a34a',fontWeight:700}}>✅ 달성</span> : <span style={{color:'#f59e0b',fontWeight:700}}>⏳ 진행 중 ({done}/{target})</span>}</td>
-                              <td>{!met && <button className="btn-secondary" style={{fontSize:12,padding:'3px 10px'}} disabled={calling===e.id} onClick={()=>makeCall(e)}>📞 발신</button>}</td>
+                              <td>{met ? <span style={{color:'#16a34a',fontWeight:700}}>달성</span> : <span style={{color:'#f59e0b',fontWeight:700}}>진행 중 ({done}/{target})</span>}</td>
+                              <td>{!met && <button className="btn-secondary" style={{fontSize:12,padding:'3px 10px'}} disabled={calling===e.id} onClick={()=>makeCall(e)}>발신</button>}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2610,15 +2767,15 @@ export default function App() {
                 return (
                   <div className="section" style={{borderLeft:'4px solid #ea580c'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
-                      <div className="section-title" style={{margin:0}}>🔥 경보 응답 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(최근 24시간분 표시 · 15초 자동 갱신{checkedCnt>0?` · 확인됨 ${checkedCnt}건 숨김`:''})</span></div>
+                      <div className="section-title" style={{margin:0}}>경보 응답 현황 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>(최근 24시간분 표시 · 15초 자동 갱신{checkedCnt>0?` · 확인됨 ${checkedCnt}건 숨김`:''})</span></div>
                       <div style={{display:'flex',gap:10,fontSize:13,fontWeight:700}}>
-                        <span style={{color:'#dc2626'}}>🚨 {nHelp}</span>
-                        <span style={{color:'#ea580c'}}>⚠️ {nMissed}</span>
-                        <span style={{color:'#16a34a'}}>✅ {nSafe}</span>
-                        <button className="btn-secondary" style={{fontSize:12,padding:'2px 8px'}} onClick={()=>loadAlertResponses()}>🔄</button>
+                        <span style={{color:'#dc2626'}}>도움 요청 {nHelp}</span>
+                        <span style={{color:'#ea580c'}}>미응답 {nMissed}</span>
+                        <span style={{color:'#16a34a'}}>안전 {nSafe}</span>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'2px 8px'}} onClick={()=>loadAlertResponses()}>갱신</button>
                       </div>
                     </div>
-                    {list.length === 0 && <div style={{marginTop:10,fontSize:13,color:'#16a34a',fontWeight:600}}>✅ 모든 응답이 확인 처리됐습니다. (확인됨 {checkedCnt}건 · 24시간 경과 시 자동으로 사라집니다)</div>}
+                    {list.length === 0 && <div style={{marginTop:10,fontSize:13,color:'#16a34a',fontWeight:600}}>모든 응답이 확인 처리됐습니다. (확인됨 {checkedCnt}건 · 24시간 경과 시 자동으로 사라집니다)</div>}
                     <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:8}}>
                       {list.map((r, i) => {
                         const c = cfg[r.response] || cfg.safe;
@@ -2636,16 +2793,16 @@ export default function App() {
                               <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}
                                 onClick={()=>openNewNote({ elderPhone:r.phone, elderName:r.elderName, type:'phone', category:'safety',
                                   content:`[산불 경보 ${stageLabel[r.alertStage]||''}] ${r.response==='help'?'어르신이 "도와줘" — 도움 요청':`미응답(자동 재발신 ${r.retryCount||0}회 후)`}. 조치 확인 필요.`,
-                                  linkedAlertId:`alertresp_${r.id}` })}>📝 일지</button>
+                                  linkedAlertId:`alertresp_${r.id}` })}>일지</button>
                             )}
                             <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}
                               title="확인 처리 — 목록에서 숨겨집니다(기록은 월간 실적에 보존)"
-                              onClick={async()=>{await authFetch(`${SERVER_URL}/alert/responses/${r.id}/check`,{method:'POST'}).catch(()=>{});loadAlertResponses(true);}}>✔ 확인</button>
+                              onClick={async()=>{await authFetch(`${SERVER_URL}/alert/responses/${r.id}/check`,{method:'POST'}).catch(()=>{});loadAlertResponses(true);}}>확인</button>
                           </div>
                         );
                       })}
                     </div>
-                    {(nHelp>0||nMissed>0) && <div style={{marginTop:10,fontSize:12.5,color:'#ea580c',fontWeight:600}}>🚨 도움 요청·미응답 어르신을 먼저 확인하세요. 목록 상단에 자동 정렬됩니다.</div>}
+                    {(nHelp>0||nMissed>0) && <div style={{marginTop:10,fontSize:12.5,color:'#ea580c',fontWeight:600}}>도움 요청·미응답 어르신을 먼저 확인하세요. 목록 상단에 자동 정렬됩니다.</div>}
                   </div>
                 );
               })()}
@@ -2653,7 +2810,7 @@ export default function App() {
                 <div className="bulk-left">
                   <div className="bulk-title">스마트 선택</div>
                   <div className="smart-filters">
-                    {[{id:'all',label:'전체',count:elders.length},{id:'danger',label:'⚠️ 위험/주의만',count:elders.filter(e=>e.status!=='normal').length},{id:'noCall',label:'📞 발신 대상',count:elders.filter(e=>e.lastCall==='아직 없음'||(e.lastCall||'').includes('어제')).length},{id:'active',label:'✅ 활성만',count:elders.filter(e=>e.callActive).length}].map(f=>(
+                    {[{id:'all',label:'전체',count:elders.length},{id:'danger',label:'위험/주의만',count:elders.filter(e=>e.status!=='normal').length},{id:'noCall',label:'발신 대상',count:elders.filter(e=>e.lastCall==='아직 없음'||(e.lastCall||'').includes('어제')).length},{id:'active',label:'활성만',count:elders.filter(e=>e.callActive).length}].map(f=>(
                       <button key={f.id} className={`smart-btn ${smartFilter===f.id?'smart-active':''}`} onClick={()=>applySmartFilter(f.id)}>{f.label} <span className="filter-count">{f.count}</span></button>
                     ))}
                   </div>
@@ -2669,8 +2826,8 @@ export default function App() {
                     </span>
                   )}
                   {!bulkRunning
-                    ? <button className={`btn-bulk-call ${checked.length===0?'btn-disabled':''}`} onClick={()=>startBulkCall()} disabled={checked.length===0}>📱 앱 알림 발신 ({checked.length}명)</button>
-                    : <button className="btn-bulk-stop" onClick={stopBulkCall}>⏹ 발신 중단</button>
+                    ? <button className={`btn-bulk-call ${checked.length===0?'btn-disabled':''}`} onClick={()=>startBulkCall()} disabled={checked.length===0}>앱 알림 발신 ({checked.length}명)</button>
+                    : <button className="btn-bulk-stop" onClick={stopBulkCall}>발신 중단</button>
                   }
                 </div>
               </div>
@@ -2678,11 +2835,11 @@ export default function App() {
               {(bulkRunning || bulkDone.length > 0) && (
                 <div className="bulk-progress-box">
                   <div className="bulk-progress-header">
-                    <span className="bulk-progress-title">{bulkRunning?'📱 앱 알림 발신 중...':'✅ 발신 완료'}</span>
+                    <span className="bulk-progress-title">{bulkRunning?'앱 알림 발신 중...':'발신 완료'}</span>
                     <span className="bulk-progress-count">{bulkDone.length} / {bulkQueue.length}</span>
                   </div>
                   <div className="bulk-bar-wrap"><div className="bulk-bar" style={{width:`${bulkQueue.length?bulkDone.length/bulkQueue.length*100:0}%`}}/></div>
-                  {batchWait > 0 && <div style={{fontSize:13,color:'#f59e0b',fontWeight:700,margin:'8px 0'}}>⏳ AI서버 부하 분산 — 다음 {batchSize}명 발신까지 {batchWait}초 대기…</div>}
+                  {batchWait > 0 && <div style={{fontSize:13,color:'#f59e0b',fontWeight:700,margin:'8px 0'}}>AI서버 부하 분산 — 다음 {batchSize}명 발신까지 {batchWait}초 대기…</div>}
                   <div className="bulk-result-list">
                     {bulkQueue.map(elder=>{
                       const done = bulkDone.find(d=>d.id===elder.id);
@@ -2693,14 +2850,14 @@ export default function App() {
                           <span className="bulk-name">{elder.name}</span>
                           <span className="bulk-phone">{elder.phone}</span>
                           <span className="bulk-status-icon">{
-                            isCurrent ? '⏳ 발신 중'
-                            : !done ? '⏸ 대기'
-                            : done.status==='ringing' ? '📲 수신대기'
-                            : done.status==='answered' ? '📞 통화중'
-                            : done.status==='completed' ? `✅ 받음 (${done.durationSec||0}초)`
-                            : done.status==='missed' ? '📵 부재중'
-                            : (done.status==='failed'||done.success===false) ? '❌ 발신실패'
-                            : '✅ 전송됨'
+                            isCurrent ? '발신 중'
+                            : !done ? '대기'
+                            : done.status==='ringing' ? '수신대기'
+                            : done.status==='answered' ? '통화중'
+                            : done.status==='completed' ? `받음 (${done.durationSec||0}초)`
+                            : done.status==='missed' ? '부재중'
+                            : (done.status==='failed'||done.success===false) ? '발신실패'
+                            : '전송됨'
                           }</span>
                         </div>
                       );
@@ -2708,10 +2865,10 @@ export default function App() {
                   </div>
                   {!bulkRunning && bulkDone.length>0 && (
                     <div className="bulk-summary">
-                      <span className="bulk-success-count">✅ 받음 {bulkDone.filter(d=>d.status==='completed'||d.status==='answered').length}</span>
-                      <span style={{color:'#f59e0b',fontWeight:700}}>📲 수신대기 {bulkDone.filter(d=>d.status==='ringing').length}</span>
-                      <span className="bulk-fail-count">📵 부재중 {bulkDone.filter(d=>d.status==='missed').length} · ❌ 실패 {bulkDone.filter(d=>d.status==='failed').length}</span>
-                      {bulkDone.filter(d=>d.status==='missed').length>0 && <button className="btn-bulk-call" onClick={resendMissed}>📵 부재중 {bulkDone.filter(d=>d.status==='missed').length}명 다시 발신</button>}
+                      <span className="bulk-success-count">받음 {bulkDone.filter(d=>d.status==='completed'||d.status==='answered').length}</span>
+                      <span style={{color:'#f59e0b',fontWeight:700}}>수신대기 {bulkDone.filter(d=>d.status==='ringing').length}</span>
+                      <span className="bulk-fail-count">부재중 {bulkDone.filter(d=>d.status==='missed').length} · 실패 {bulkDone.filter(d=>d.status==='failed').length}</span>
+                      {bulkDone.filter(d=>d.status==='missed').length>0 && <button className="btn-bulk-call" onClick={resendMissed}>부재중 {bulkDone.filter(d=>d.status==='missed').length}명 다시 발신</button>}
                       <button className="btn-secondary" onClick={()=>{setBulkDone([]);setBulkQueue([]);setChecked([]);}}>닫기</button>
                     </div>
                   )}
@@ -2721,14 +2878,14 @@ export default function App() {
               {/* 발신 이력(날짜별) — 언제 발신했는지 복지사/관리자가 확인 */}
               <div className="section">
                 <div className="section-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
-                  <span>📋 발신 이력</span>
+                  <span>발신 이력</span>
                   <span style={{display:'flex',gap:6}}>
                     {[7,30].map(d=>(
                       <button key={d} onClick={()=>setHistDays(d)} className={`smart-btn ${histDays===d?'smart-active':''}`} style={{fontSize:12,padding:'4px 10px'}}>최근 {d}일</button>
                     ))}
-                    <button onClick={()=>loadDispatchHistory(histDays)} className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}>🔄 새로고침</button>
+                    <button onClick={()=>loadDispatchHistory(histDays)} className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}>새로고침</button>
                     <span style={{fontSize:11,color:'#94a3b8',alignSelf:'center'}}>· 15초마다 자동 갱신</span>
-                    {histStatus!=='all' && <button onClick={()=>setHistStatus('all')} style={{fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:20,border:'1px solid #fdba74',background:'#fff7ed',color:'#ea580c',cursor:'pointer'}}>{histStatus==='missed'?'📵 부재중만':'✅ 받음만'} ✕</button>}
+                    {histStatus!=='all' && <button onClick={()=>setHistStatus('all')} style={{fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:20,border:'1px solid #fdba74',background:'#fff7ed',color:'#ea580c',cursor:'pointer'}}>{histStatus==='missed'?'부재중만':'받음만'} ✕</button>}
                   </span>
                 </div>
                 {histLoading ? (
@@ -2750,21 +2907,21 @@ export default function App() {
                     const hiddenBad=sorted.slice(3).filter(r=>r.status==='missed'||r.status==='failed').length;
                     return (
                     <div key={date} style={{marginBottom:16}}>
-                      <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0',display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {rows.length}건</span><span style={{color:'#16a34a',fontWeight:700,fontSize:13}}>✅ 받음 {recv}건</span><span style={{color:'#f59e0b',fontWeight:700,fontSize:13}}>📵 부재중 {miss}건</span></div>
+                      <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0',display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {rows.length}건</span><span style={{color:'#16a34a',fontWeight:700,fontSize:13}}>받음 {recv}건</span><span style={{color:'#f59e0b',fontWeight:700,fontSize:13}}>부재중 {miss}건</span></div>
                       {shown.map((x,i)=>{
                         const t=x.sentAtIso?new Date(x.sentAtIso).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                         const st=x.status;
-                        const info=(st==='completed'||st==='answered')?{ic:'✅',tx:`받음${x.durationSec?` (${x.durationSec}초)`:''}`,c:'#16a34a'}
-                          :st==='ringing'?{ic:'📲',tx:'수신대기',c:'#f59e0b'}
-                          :st==='missed'?{ic:'📵',tx:'부재중',c:'#f59e0b'}
-                          :st==='failed'?{ic:'❌',tx:`실패${x.reason?` · ${x.reason}`:''}`,c:'#ef4444'}
-                          :{ic:'✅',tx:'전송됨',c:'#64748b'};
+                        const info=(st==='completed'||st==='answered')?{ic:'',tx:`받음${x.durationSec?` (${x.durationSec}초)`:''}`,c:'#16a34a'}
+                          :st==='ringing'?{ic:'',tx:'수신대기',c:'#f59e0b'}
+                          :st==='missed'?{ic:'',tx:'부재중',c:'#f59e0b'}
+                          :st==='failed'?{ic:'',tx:`실패${x.reason?` · ${x.reason}`:''}`,c:'#ef4444'}
+                          :{ic:'',tx:'전송됨',c:'#64748b'};
                         return (
                           <div key={x.callId||i} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 14px',borderRadius:10,background:st==='failed'?'#fef2f2':st==='missed'?'#fff7ed':'#f8fafc',marginBottom:6,flexWrap:'wrap'}}>
                             <div style={{minWidth:46,color:'#64748b',fontSize:13,fontWeight:600}}>{t}</div>
                             <div style={{minWidth:90,fontWeight:700,fontSize:14}}>{nameByPhone(x.phone,x.name)}</div>
                             <div style={{minWidth:110,color:'#64748b',fontSize:13}}>{x.phone}</div>
-                            <div style={{flex:1,minWidth:120,fontWeight:700,fontSize:13,color:info.c}}>{info.ic} {info.tx}</div>
+                            <div style={{flex:1,minWidth:120,fontWeight:700,fontSize:13,color:info.c}}>{info.tx}</div>
                           </div>
                         );
                       })}
@@ -2786,7 +2943,7 @@ export default function App() {
                     return (
                       <tr key={elder.id} className={`${checked.includes(elder.id)?'row-checked':''} ${done?done.success?'row-success':'row-fail':''}`}>
                         <td><input type="checkbox" checked={checked.includes(elder.id)} onChange={()=>toggleCheck(elder.id)} className="cb"/></td>
-                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><div onClick={()=>openEdit(elder)} style={{cursor:'pointer'}} title="클릭 → 어르신 정보 수정"><div style={{fontWeight:700,color:'#1d4ed8'}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age}세</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'✅':'❌'}</span>}</div></td>
+                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><div onClick={()=>openEdit(elder)} style={{cursor:'pointer'}} title="클릭 → 어르신 정보 수정"><div style={{fontWeight:700,color:'#1d4ed8'}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age}세</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'성공':'실패'}</span>}</div></td>
                         <td style={{fontSize:13}}>{elder.phone}</td>
                         <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                         <td><span className="cycle-badge">{cycleLabel(elder.callCycle, elder.callDays)}</span></td>
@@ -2795,8 +2952,8 @@ export default function App() {
                         <td><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div></td>
                         <td>
                           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                            <span style={{fontSize:12,fontWeight:700,padding:'3px 10px',borderRadius:20,whiteSpace:'nowrap',...(elder.callActive?{background:'#dcfce7',color:'#15803d'}:{background:'#fee2e2',color:'#dc2626'})}}>{elder.callActive?'🟢 발신 중':'🔴 발신 중단'}</span>
-                            <button onClick={()=>toggleCallActive(elder.id)} style={{fontSize:12,fontWeight:700,padding:'5px 11px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap',...(elder.callActive?{background:'#fff',color:'#64748b',border:'1px solid #d1d5db'}:{background:'#16a34a',color:'#fff',border:'none'})}}>{elder.callActive?'⏸ 중단하기':'▶ 발신 켜기'}</button>
+                            <span style={{fontSize:12,fontWeight:700,padding:'3px 10px',borderRadius:20,whiteSpace:'nowrap',...(elder.callActive?{background:'#dcfce7',color:'#15803d'}:{background:'#fee2e2',color:'#dc2626'})}}>{elder.callActive?'발신 중':'발신 중단'}</span>
+                            <button onClick={()=>toggleCallActive(elder.id)} style={{fontSize:12,fontWeight:700,padding:'5px 11px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap',...(elder.callActive?{background:'#fff',color:'#64748b',border:'1px solid #d1d5db'}:{background:'#16a34a',color:'#fff',border:'none'})}}>{elder.callActive?'중단하기':'발신 켜기'}</button>
                           </div>
                         </td>
                       </tr>
@@ -2811,19 +2968,18 @@ export default function App() {
             <div className="fade-in">
               {me?.orgCode && (
                 <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:12,padding:'12px 16px',marginBottom:16}}>
-                  <span style={{fontSize:22}}>📱</span>
-                  <div style={{flex:1,minWidth:220}}>
+                                    <div style={{flex:1,minWidth:220}}>
                     <div style={{fontWeight:800,color:'#1e3a6e'}}>앱으로 어르신 등록하기</div>
                     <div style={{fontSize:13,color:'#475569',marginTop:2}}>어르신 폰 <b>영실이 앱 설정</b>에 아래 <b>기관코드</b>를 입력하고 정보를 등록하면, 여기 <b>승인 대기</b>에 뜹니다.</div>
                   </div>
                   <div onClick={copyOrgCode} title="클릭하면 복사" style={{cursor:'pointer',display:'flex',alignItems:'center',gap:8,background:'#fff',border:'2px solid #2563eb',borderRadius:10,padding:'8px 14px'}}>
                     <span style={{fontSize:20,fontWeight:900,letterSpacing:2,color:'#1d4ed8',fontFamily:'monospace'}}>{me.orgCode}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:orgCopied?'#16a34a':'#2563eb'}}>{orgCopied?'✓ 복사됨':'📋 복사'}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:orgCopied?'#16a34a':'#2563eb'}}>{orgCopied?'복사됨':'복사'}</span>
                   </div>
                 </div>
               )}
               <div className="elder-toolbar">
-                <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder={`${T.elder} 이름 검색...`} value={searchName} onChange={e => setSearchName(e.target.value)}/>{searchName && <button className="search-clear" onClick={() => setSearchName('')}>✕</button>}</div>
+                <div className="search-box"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><input className="search-input" placeholder={`${T.elder} 이름 검색...`} value={searchName} onChange={e => setSearchName(e.target.value)}/>{searchName && <button className="search-clear" onClick={() => setSearchName('')}>✕</button>}</div>
                 <select className="form-input region-select" value={regionFilter} onChange={e => setRegionFilter(e.target.value)}>{REGIONS.map(r => <option key={r} value={r}>{r}</option>)}</select>
                 <div className="filter-bar">{['all','danger','warning','normal'].map(f=>(<button key={f} className={`filter-btn ${filter===f?'filter-active':''}`} onClick={()=>setFilter(f)}>{f==='all'?'전체':STATUS_CONFIG[f].label}<span className="filter-count">{f==='all'?elders.length:elders.filter(e=>e.status===f).length}</span></button>))}</div>
               </div>
@@ -2834,8 +2990,8 @@ export default function App() {
                 </div>
                 <div style={{display:'flex',gap:8}}>
                   <div className="view-toggle"><button className={`view-btn ${viewMode==='card'?'view-active':''}`} onClick={()=>setViewMode('card')}>⊞ 카드</button><button className={`view-btn ${viewMode==='table'?'view-active':''}`} onClick={()=>setViewMode('table')}>☰ 목록</button></div>
-                  <button className="btn-secondary" onClick={downloadCsvTemplate} title="엑셀에 채워 넣을 CSV 양식 다운로드">📄 CSV 양식</button>
-                  <button className="btn-secondary" onClick={()=>csvInputRef.current&&csvInputRef.current.click()} title="CSV 파일로 어르신 일괄 등록">📥 CSV 일괄 등록</button>
+                  <button className="btn-secondary" onClick={downloadCsvTemplate} title="엑셀에 채워 넣을 CSV 양식 다운로드">CSV 양식</button>
+                  <button className="btn-secondary" onClick={()=>csvInputRef.current&&csvInputRef.current.click()} title="CSV 파일로 어르신 일괄 등록">CSV 일괄 등록</button>
                   <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={e=>{const f=e.target.files&&e.target.files[0]; handleCsvFile(f); e.target.value='';}}/>
                   <button className="btn-primary" onClick={openRegister}>+ 신규 등록</button>
                 </div>
@@ -2844,15 +3000,15 @@ export default function App() {
 
               {pendingElders.length > 0 && (
                 <div className="section" style={{marginBottom:16,border:'2px solid #fde68a',background:'#fffbeb'}}>
-                  <div className="section-title">🔔 승인 대기 ({pendingElders.length}) — 앱에서 등록 신청한 어르신</div>
+                  <div className="section-title">승인 대기 ({pendingElders.length}) — 앱에서 등록 신청한 어르신</div>
                   {pendingElders.map(e => (
                     <div key={e.phone} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'#fff',border:'1px solid #fde68a',borderRadius:10,marginBottom:8}}>
                       <div className="table-avatar">{(e.name||'?')[0]}</div>
                       <div style={{flex:1}}>
                         <div style={{fontWeight:700}}>{e.name} <span style={{fontSize:12,color:'#94a3b8'}}>{e.age?`${e.age}세 · `:''}{e.region||''}</span></div>
-                        <div style={{fontSize:13,color:'#64748b'}}>📞 {e.phone}{e.caregiver?` · 담당 ${e.caregiver}`:''}{e.guardianName?` · 보호자 ${e.guardianName}`:''}</div>
+                        <div style={{fontSize:13,color:'#64748b'}}>{e.phone}{e.caregiver?` · 담당 ${e.caregiver}`:''}{e.guardianName?` · 보호자 ${e.guardianName}`:''}</div>
                       </div>
-                      <button className="btn-primary" onClick={()=>approveElder(e.phone)}>✅ 승인·활성화</button>
+                      <button className="btn-primary" onClick={()=>approveElder(e.phone)}>승인·활성화</button>
                     </div>
                   ))}
                 </div>
@@ -2865,7 +3021,7 @@ export default function App() {
                   </label>
                   {selectedElders.size>0 && (<>
                     <span style={{fontSize:13,color:'#2563eb',fontWeight:700}}>{selectedElders.size}명 선택됨</span>
-                    <button onClick={deleteSelectedElders} style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>🗑 선택 삭제</button>
+                    <button onClick={deleteSelectedElders} style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>선택 삭제</button>
                     <button onClick={()=>setSelectedElders(new Set())} style={{background:'#fff',color:'#64748b',border:'1px solid #d1d5db',borderRadius:8,padding:'6px 12px',fontSize:13,fontWeight:600,cursor:'pointer'}}>선택 해제</button>
                   </>)}
                 </div>
@@ -2873,21 +3029,21 @@ export default function App() {
 
               {viewMode === 'card' && (
                 <div className="elder-grid">
-                  {filteredElders.length === 0 && <div className="empty-result">검색 결과가 없습니다 🔍</div>}
+                  {filteredElders.length === 0 && <div className="empty-result">검색 결과가 없습니다</div>}
                   {filteredElders.map(elder => {
                     const risk = getSolitudeRisk(elder);
                     const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                     return (
                       <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)} style={selectedElders.has(elder.id)?{outline:'2px solid #2563eb',outlineOffset:2}:undefined}>
-                        <div className="elder-top"><div style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:16,height:16,cursor:'pointer'}}/><div className="elder-avatar">{elder.gender==='female'?'👵':'👴'}</div></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
+                        <div className="elder-top"><div style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:16,height:16,cursor:'pointer'}}/><div className="elder-avatar">{(elder.name||'?')[0]}</div></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
                         <div className="elder-name">{elder.name}</div>
                         <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
-                        {elder.caregiver && <div className="elder-info" style={{color:'#1d4ed8',fontWeight:600}}>👤 담당: {elder.caregiver}</div>}
-                        {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>📵 {noResponseDays >= 99 ? '통화이력 없음' : `${noResponseDays}일째 미응답`}</div>}
-                        <div className="elder-last">📞 마지막 통화: {renderLastCall(elder)}</div>
-                        {elder.keyword && <div className="keyword-tag mt8">⚠️ "{elder.keyword}" 감지</div>}
-                        {elder.visits > 0 && <div className="visit-tag mt8">🏠 방문 필요 {elder.visits}회</div>}
-                        {!elder.callActive && <div className="paused-tag mt8">⏸ 전화 중단 중</div>}
+                        {elder.caregiver && <div className="elder-info" style={{color:'#1d4ed8',fontWeight:600}}>담당: {elder.caregiver}</div>}
+                        {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>{noResponseDays >= 99 ? '통화이력 없음' : `${noResponseDays}일째 미응답`}</div>}
+                        <div className="elder-last">마지막 통화: {renderLastCall(elder)}</div>
+                        {elder.keyword && <div className="keyword-tag mt8">"{elder.keyword}" 감지</div>}
+                        {elder.visits > 0 && <div className="visit-tag mt8">방문 필요 {elder.visits}회</div>}
+                        {!elder.callActive && <div className="paused-tag mt8">전화 중단 중</div>}
                       </div>
                     );
                   })}
@@ -2898,14 +3054,14 @@ export default function App() {
                 <table className="table">
                   <thead><tr><th style={{width:40}}><input type="checkbox" checked={filteredElders.length>0&&filteredElders.every(e=>selectedElders.has(e.id))} onChange={()=>toggleAllElders(filteredElders)} className="cb"/></th><th>어르신</th><th>성별/호칭</th><th>나이</th><th>지역</th><th>담당 복지사</th><th>마지막 통화</th><th>미응답</th><th>고독사 위험도</th><th>상태</th><th>키워드</th><th>즉시 전화</th></tr></thead>
                   <tbody>
-                    {filteredElders.length === 0 && <tr><td colSpan={12} style={{textAlign:'center',color:'#94a3b8',padding:32}}>검색 결과가 없습니다 🔍</td></tr>}
+                    {filteredElders.length === 0 && <tr><td colSpan={12} style={{textAlign:'center',color:'#94a3b8',padding:32}}>검색 결과가 없습니다</td></tr>}
                     {filteredElders.map(elder => {
                       const risk = getSolitudeRisk(elder);
                       const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                       return (
                         <tr key={elder.id} style={{cursor:'pointer',...(selectedElders.has(elder.id)?{background:'#eff6ff'}:{})}} onClick={()=>openDetail(elder)}>
                           <td onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedElders.has(elder.id)} onChange={()=>toggleElderSel(elder.id)} className="cb"/></td>
-                          <td><div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:20}}>{elder.gender==='female'?'👵':'👴'}</span><strong>{elder.name}</strong></div></td>
+                          <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><strong>{elder.name}</strong></div></td>
                           <td><span className="cycle-badge">{elder.title}</span></td>
                           <td>{elder.age}세</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
@@ -2915,7 +3071,7 @@ export default function App() {
                           <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
                           <td><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div></td>
                           <td>{elder.keyword ? <span className="keyword-tag">"{elder.keyword}"</span> : <span style={{color:'#9ca3af',fontSize:12}}>없음</span>}</td>
-                          <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'⏳':'📱'}</button></td>
+                          <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'발신 중':'앱 전화'}</button></td>
                         </tr>
                       );
                     })}
@@ -2929,8 +3085,8 @@ export default function App() {
             <div className="fade-in">
               <div className="weather-panel">
                 <div className="weather-panel-header">
-                  <div><div className="weather-panel-title">🌡️ 기상청 공공데이터 연동</div><div className="weather-panel-sub">날씨 경보 발령 시 자동으로 멘트에 삽입됩니다</div></div>
-                  <button className={`btn-fetch-weather ${fetchingWeather?'btn-calling':''}`} onClick={fetchWeather} disabled={fetchingWeather}>{fetchingWeather ? '⏳ 불러오는 중...' : '🔄 날씨 데이터 갱신'}</button>
+                  <div><div className="weather-panel-title">기상청 공공데이터 연동</div><div className="weather-panel-sub">날씨 경보 발령 시 자동으로 멘트에 삽입됩니다</div></div>
+                  <button className={`btn-fetch-weather ${fetchingWeather?'btn-calling':''}`} onClick={fetchWeather} disabled={fetchingWeather}>{fetchingWeather ? '불러오는 중...' : '날씨 데이터 갱신'}</button>
                 </div>
                 <div className="weather-grid">
                   {Object.entries(weatherData).map(([region, data]) => (
@@ -2953,7 +3109,7 @@ export default function App() {
               </div>
 
               <div className="section">
-                <div className="section-title">⚠️ 경보 멘트 설정</div>
+                <div className="section-title">경보 멘트 설정</div>
                 <div className="alert-template-grid">
                   {[{id:'none',icon:'✅',label:'경보 없음',color:'#22c55e'},{id:'heatwave',icon:'🌡️',label:'폭염경보',color:'#ef4444'},{id:'cold',icon:'❄️',label:'한파경보',color:'#3b82f6'},{id:'dust',icon:'😷',label:'미세먼지 나쁨',color:'#f59e0b'},{id:'rain',icon:'🌧️',label:'호우주의보',color:'#6366f1'},{id:'typhoon',icon:'🌀',label:'태풍경보',color:'#7c3aed'},{id:'wildfire',icon:'🔥',label:'산불발생',color:'#ea580c'}].map(t => (
                     <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} style={activeAlert===t.id?{borderColor:t.color,background:`${t.color}15`}:{}} onClick={() => { setActiveAlert(t.id); if (t.id==='wildfire') { setWildfireStage('prepare'); setAlertScript(tplText('wildfire_prepare', WILDFIRE_STAGES[0].text)); } else { setAlertScript(tplText(t.id, ALERT_TEMPLATES[t.id])); } }}>
@@ -2963,7 +3119,7 @@ export default function App() {
                 </div>
                 {activeAlert === 'wildfire' && (
                   <div style={{marginTop:14}}>
-                    <div className="var-hint" style={{marginBottom:8,color:'#ea580c',fontWeight:700}}>🔥 산불 대피 3단계 — 상황에 맞는 단계를 골라 발신하세요. 어르신이 "괜찮아/도와줘"로 응답하면 자동 처리됩니다.</div>
+                    <div className="var-hint" style={{marginBottom:8,color:'#ea580c',fontWeight:700}}>산불 대피 3단계 — 상황에 맞는 단계를 골라 발신하세요. 어르신이 "괜찮아/도와줘"로 응답하면 자동 처리됩니다.</div>
                     <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
                       {WILDFIRE_STAGES.map(s => (
                         <button key={s.id} className={`alert-template-btn ${wildfireStage===s.id?'alert-template-active':''}`}
@@ -2973,11 +3129,11 @@ export default function App() {
                         </button>
                       ))}
                     </div>
-                    <label className="form-label">🔥 산불 발생 위치 (담당자 입력 · {'{{지역}}'}에 들어감)</label>
+                    <label className="form-label">산불 발생 위치 (담당자 입력 · {'{{지역}}'}에 들어감)</label>
                     <input className="form-input" type="text" value={fireLoc} placeholder="예) 봉화군 도개면 야산"
                       onChange={e => setFireLoc(e.target.value)} style={{marginBottom:4}}/>
                     <div className="var-hint" style={{color:'#94a3b8'}}>산불이 난 곳 — 멘트의 {'{{지역}}'} 자리와 어르신이 "어디서 났어?"라고 물을 때의 답변에 쓰입니다. 비워두면 어르신 거주 지역으로 안내됩니다.</div>
-                    <label className="form-label" style={{marginTop:10}}>🏠 대피소명 (담당자 입력 · {'{{대피소}}'}에 들어감)</label>
+                    <label className="form-label" style={{marginTop:10}}>대피소명 (담당자 입력 · {'{{대피소}}'}에 들어감)</label>
                     <input className="form-input" type="text" value={shelterName} placeholder="예) 봉화초등학교 운동장, 북구민운동장"
                       onChange={e => setShelterName(e.target.value)} style={{marginBottom:4}}/>
                     <div className="var-hint" style={{color:'#94a3b8'}}>여기에 입력한 대피소명이 경보 멘트의 {'{{대피소}}'} 자리에 들어갑니다. 비워두면 "가까운 대피소"로 안내됩니다.</div>
@@ -2990,10 +3146,10 @@ export default function App() {
                     <div className="var-hint">사용 가능 변수: <code>{'{{지역}}'}</code> <code>{'{{보호자}}'}</code>{activeAlert==='wildfire'&&<> <code>{'{{대피소}}'}</code></>}</div>
                     <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8,flexWrap:'wrap'}}>
                       <button className="btn-primary" style={{fontSize:13,padding:'6px 14px'}} disabled={alertTplSaving} onClick={saveAlertTemplate}>
-                        {alertTplSaving ? '저장 중…' : '💾 이 멘트 저장'}
+                        {alertTplSaving ? '저장 중…' : '이 멘트 저장'}
                       </button>
                       <button className="btn-secondary" style={{fontSize:12,padding:'6px 10px'}} disabled={alertTplSaving} onClick={resetAlertTemplate}>기본값으로 되돌리기</button>
-                      {alertTplSaved && <span style={{fontSize:12.5,color:'#16a34a',fontWeight:700}}>✅ 저장됨 — 같은 기관 모든 담당자에게 즉시 적용됩니다</span>}
+                      {alertTplSaved && <span style={{fontSize:12.5,color:'#16a34a',fontWeight:700}}>저장됨 — 같은 기관 모든 담당자에게 즉시 적용됩니다</span>}
                       {savedAlertTpl[curAlertKey()] && !alertTplSaved && <span style={{fontSize:12,color:'#2563eb'}}>· 저장된 맞춤 멘트 사용 중</span>}
                     </div>
                     {(() => {
@@ -3007,15 +3163,15 @@ export default function App() {
                       if (!shown.length) shown.push({ name: '어르신', region: '○○구', guardian: '' });
                       return (
                         <div style={{marginTop:12,background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:10,padding:'12px 14px'}}>
-                          <div style={{fontWeight:700,fontSize:13,color:'#0369a1',marginBottom:8}}>📋 실제 발송 미리보기 <span style={{fontWeight:500,color:'#64748b'}}>— 어르신마다 자기 지역·보호자{activeAlert==='wildfire'?'·대피소':''} 값으로 채워져 발송됩니다{checked.length?` (선택한 ${checked.length}명 기준)`:''}.</span></div>
+                          <div style={{fontWeight:700,fontSize:13,color:'#0369a1',marginBottom:8}}>실제 발송 미리보기 <span style={{fontWeight:500,color:'#64748b'}}>— 어르신마다 자기 지역·보호자{activeAlert==='wildfire'?'·대피소':''} 값으로 채워져 발송됩니다{checked.length?` (선택한 ${checked.length}명 기준)`:''}.</span></div>
                           {shown.map((e, i) => (
                             <div key={i} style={{marginBottom: i < shown.length - 1 ? 10 : 0}}>
-                              <div style={{fontSize:12,fontWeight:800,color:'#0369a1',marginBottom:2}}>📍 {e.region} <span style={{fontWeight:500,color:'#94a3b8'}}>({e.name} 어르신 등)</span></div>
+                              <div style={{fontSize:12,fontWeight:800,color:'#0369a1',marginBottom:2}}>{e.region} <span style={{fontWeight:500,color:'#94a3b8'}}>({e.name} 어르신 등)</span></div>
                               <div style={{fontSize:14,lineHeight:1.6,color:'#1f2937',whiteSpace:'pre-wrap'}}>{alertMsgFor(e)}</div>
                             </div>
                           ))}
                           {byRegion.length > shown.length && <div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>… 외 {byRegion.length - shown.length}개 지역도 각자 지역명으로 발송됩니다.</div>}
-                          {activeAlert === 'wildfire' && !shelterName.trim() && <div style={{fontSize:12,color:'#f59e0b',marginTop:6}}>⚠️ 위 대피소명 칸이 비어 있어 "가까운 대피소"로 나옵니다. 대피소명을 입력해 보세요.</div>}
+                          {activeAlert === 'wildfire' && !shelterName.trim() && <div style={{fontSize:12,color:'#f59e0b',marginTop:6}}>위 대피소명 칸이 비어 있어 "가까운 대피소"로 나옵니다. 대피소명을 입력해 보세요.</div>}
                         </div>
                       );
                     })()}
@@ -3024,7 +3180,7 @@ export default function App() {
                 {activeAlert !== 'none' && (
                   <div style={{marginTop:18,borderTop:'1px solid #e5e7eb',paddingTop:16}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
-                      <label className="form-label" style={{margin:0}}>📋 이 경보 멘트로 발신할 어르신 (체크 후 일괄 발신)</label>
+                      <label className="form-label" style={{margin:0}}>이 경보 멘트로 발신할 어르신 (체크 후 일괄 발신)</label>
                       <div style={{display:'flex',gap:6}}>
                         {(() => {
                           // 자동선택 = "지금 선택한 경보 종류"가 발효 중인 지역만 (예: 폭염 선택 시 비 오는 달서구는 제외 — 호우 멘트를 따로 보내는 설계)
@@ -3033,7 +3189,7 @@ export default function App() {
                           return (
                             <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}}
                               title={`지금 선택한 '${label}' 경보가 발효 중인 지역의 어르신만 선택합니다. 다른 경보(예: 호우) 지역은 그 경보를 선택한 뒤 눌러 주세요.`}
-                              onClick={()=>setChecked(elders.filter(e=>weatherData[e.region]?.alert===activeAlert).map(e=>e.id))}>🎯 {label} 지역 자동선택</button>
+                              onClick={()=>setChecked(elders.filter(e=>weatherData[e.region]?.alert===activeAlert).map(e=>e.id))}>{label} 지역 자동선택</button>
                           );
                         })()}
                         <button className="btn-secondary" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setChecked(elders.map(e=>e.id))}>전체</button>
@@ -3046,7 +3202,7 @@ export default function App() {
                         const allOn = inR.length>0 && inR.every(e=>checked.includes(e.id));
                         const someOn = inR.some(e=>checked.includes(e.id));
                         return (
-                          <button key={r} onClick={()=>{ if(allOn) setChecked(prev=>prev.filter(id=>!inR.some(e=>e.id===id))); else setChecked(prev=>[...new Set([...prev,...inR.map(e=>e.id)])]); }} style={{fontSize:13,padding:'6px 12px',borderRadius:20,border:'1px solid '+(allOn?'#2563eb':someOn?'#93c5fd':'#d1d5db'),background:allOn?'#2563eb':someOn?'#eff6ff':'#fff',color:allOn?'#fff':'#374151',fontWeight:600,cursor:'pointer'}}>📍 {r.replace('대구 ','')} ({inR.length})</button>
+                          <button key={r} onClick={()=>{ if(allOn) setChecked(prev=>prev.filter(id=>!inR.some(e=>e.id===id))); else setChecked(prev=>[...new Set([...prev,...inR.map(e=>e.id)])]); }} style={{fontSize:13,padding:'6px 12px',borderRadius:20,border:'1px solid '+(allOn?'#2563eb':someOn?'#93c5fd':'#d1d5db'),background:allOn?'#2563eb':someOn?'#eff6ff':'#fff',color:allOn?'#fff':'#374151',fontWeight:600,cursor:'pointer'}}>{r.replace('대구 ','')} ({inR.length})</button>
                         );
                       })}
                     </div>
@@ -3057,7 +3213,7 @@ export default function App() {
                         return (
                           <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,border:'1px solid '+(on?'#2563eb':'#e5e7eb'),borderRadius:8,padding:'8px 12px',cursor:'pointer',background:on?'#eff6ff':'#fff'}}>
                             <input type="checkbox" checked={on} onChange={()=>toggleCheck(e.id)} />
-                            <span style={{fontWeight:600}}>{e.gender==='female'?'👵':'👴'} {e.name}</span>
+                            <span style={{fontWeight:600}}>{e.name}</span>
                             <span style={{fontSize:12,color:'#6b7280'}}>{e.region}</span>
                             {inZone && <span style={{fontSize:11,color:'#ef4444',fontWeight:700}}>● 경보지역</span>}
                           </label>
@@ -3065,16 +3221,16 @@ export default function App() {
                       })}
                     </div>
                     {!bulkRunning ? (
-                      <button className="btn-call" onClick={startBulkCall} disabled={checked.length===0} style={{opacity:checked.length===0?0.5:1,cursor:checked.length===0?'not-allowed':'pointer'}}>📢 선택한 {checked.length}명에게 이 경보 멘트로 발신</button>
+                      <button className="btn-call" onClick={startBulkCall} disabled={checked.length===0} style={{opacity:checked.length===0?0.5:1,cursor:checked.length===0?'not-allowed':'pointer'}}>선택한 {checked.length}명에게 이 경보 멘트로 발신</button>
                     ) : (
-                      <div style={{display:'flex',alignItems:'center',gap:12}}><span style={{fontWeight:700,color:'#2563eb'}}>📡 발신 중... ({bulkDone.length}/{bulkQueue.length})</span><button className="btn-secondary" onClick={stopBulkCall}>중지</button></div>
+                      <div style={{display:'flex',alignItems:'center',gap:12}}><span style={{fontWeight:700,color:'#2563eb'}}>발신 중... ({bulkDone.length}/{bulkQueue.length})</span><button className="btn-secondary" onClick={stopBulkCall}>중지</button></div>
                     )}
                   </div>
                 )}
               </div>
 
               <div className="section">
-                <div className="section-title">📋 영실이 실제 안부 질문 (앱 고정)</div>
+                <div className="section-title">영실이 실제 안부 질문 (앱 고정)</div>
                 <div style={{fontSize:13,color:'#64748b',marginBottom:14,lineHeight:1.6}}>
                   영실이 앱이 통화에서 <b>실제로 하는 질문</b>이에요. 자연스러운 대화와 정확한 순서를 위해 <b>앱에 고정</b>돼 있어 이 내용은 대시보드에서 편집하지 않습니다. (위 <b>경보 멘트</b>만 편집 가능 — 날씨 경보 발신 시 인사말에 삽입됩니다.)
                 </div>
@@ -3096,7 +3252,7 @@ export default function App() {
                   ))}
                 </div>
                 <div style={{fontSize:13,color:'#334155',marginTop:14,lineHeight:1.6,background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:10,padding:'12px 14px'}}>
-                  💡 <b>약·물</b>은 격일(이틀에 한 번)로 여쭤 통화가 길어지지 않게 합니다. 통화 중 <b>위험·정서·생활 신호</b>를 감지하면 자동으로 보호자·복지사·119 연락을 안내하고, <b>건강 상태</b> 메뉴에 알림이 뜹니다.
+                  <b>약·물</b>은 격일(이틀에 한 번)로 여쭤 통화가 길어지지 않게 합니다. 통화 중 <b>위험·정서·생활 신호</b>를 감지하면 자동으로 보호자·복지사·119 연락을 안내하고, <b>건강 상태</b> 메뉴에 알림이 뜹니다.
                 </div>
               </div>
             </div>
@@ -3114,9 +3270,9 @@ export default function App() {
                   <span style={{color:'#94a3b8'}}>~</span>
                   <input type="date" value={callsTo} onChange={e=>setCallsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
                 </>)}
-                <button onClick={()=>fetchCalls()} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'⏳':'🔄'}</button>
-                <span style={{fontSize:12,color:'#94a3b8'}}>🔄 15초마다 자동 갱신됩니다</span>
-                <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="🔍 이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#1d4ed8':'#e2e8f0'),fontSize:13,width:120}}/>
+                <button onClick={()=>fetchCalls()} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'불러오는 중':'새로고침'}</button>
+                <span style={{fontSize:12,color:'#94a3b8'}}>15초마다 자동 갱신됩니다</span>
+                <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#1d4ed8':'#e2e8f0'),fontSize:13,width:120}}/>
                 <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#1d4ed8':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#1d4ed8':'#334155',background:'#fff',cursor:'pointer'}}>
                   <option value="">전체 어르신</option>
                   {elders.map(e=>{const k=String(e.phone||'').replace(/\D/g,'');return <option key={k} value={k}>{e.name}</option>;})}
@@ -3125,7 +3281,7 @@ export default function App() {
               </div>
               <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
                 <span style={{fontSize:13,color:'#64748b',fontWeight:600}}>위험도:</span>
-                {[['all','전체','#334155'],['critical','🔴 긴급','#dc2626'],['urgent','🟠 주의','#f59e0b'],['normal','🟢 정상','#16a34a']].map(([k,label,col])=>(
+                {[['all','전체','#334155'],['critical','긴급','#dc2626'],['urgent','주의','#f59e0b'],['normal','정상','#16a34a']].map(([k,label,col])=>(
                   <button key={k} onClick={()=>setCallsRisk(k)} style={{padding:'5px 12px',borderRadius:20,border:'1px solid '+(callsRisk===k?col:'#e2e8f0'),background:callsRisk===k?col:'#fff',color:callsRisk===k?'#fff':'#64748b',fontWeight:700,fontSize:12.5,cursor:'pointer'}}>{label}</button>
                 ))}
                 {callsRisk!=='all' && <span style={{fontSize:12,color:'#94a3b8'}}>· 대시보드에서 이동됨</span>}
@@ -3143,17 +3299,20 @@ export default function App() {
                       const R=RISK_CONFIG[c.riskLevel]||{};
                       const hm=c.at?new Date(c.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                       const dur=c.durationSec||0;
+                      const risky=c.riskLevel==='critical'||c.riskLevel==='urgent';
+                      const kw=risky?kwFromTranscript(c.transcript):null;
                       return (
-                        <div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderRadius:10,background:c.riskLevel==='critical'?'#fef2f2':c.riskLevel==='urgent'?'#fff7ed':'#f8fafc',marginBottom:6,flexWrap:'wrap'}}>
-                          <div style={{minWidth:80,fontWeight:700,fontSize:14}}>{nameByPhone(c.phone,c.elderName)}</div>
+                        <div key={c.id} className={`call-row ${c.riskLevel==='critical'?'call-row-danger':c.riskLevel==='urgent'?'call-row-warning':''}`}>
                           <div style={{minWidth:46,color:'#64748b',fontSize:13}}>{hm}</div>
-                          <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
-                          <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
+                          <div style={{minWidth:80,fontWeight:700,fontSize:14}}>{nameByPhone(c.phone,c.elderName)}</div>
+                          <div style={{minWidth:64,color:'#94a3b8',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
+                          <span className={`result-pill ${c.riskLevel==='critical'?'pill-danger':c.riskLevel==='urgent'?'pill-warning':'pill-normal'}`}>{R.label||'정상'}</span>
+                          <div style={{minWidth:110,fontWeight:700,fontSize:13,color:R.color||'#cbd5e1'}}>{kw?`“${kw}”`:'—'}</div>
                           {c.transcript && (
                             <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px',marginLeft:'auto'}}
                               disabled={!!draftingCallId} title="통화 내용을 AI가 활동일지 초안으로 요약해 일지 작성 창에 채워줍니다"
                               onClick={()=>makeNoteDraft(c)}>
-                              {draftingCallId===c.id ? '⏳ 초안 생성 중…' : '📝 일지 초안'}
+                              {draftingCallId===c.id ? '초안 생성 중…' : '일지 초안'}
                             </button>
                           )}
                           <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
@@ -3168,22 +3327,22 @@ export default function App() {
 
           {page==='report' && (
             <div className="fade-in">
-              <div className="report-banner"><div className="report-banner-title">📊 {new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>📊 엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>⬇️ PDF 다운로드</button></div></div>
+              <div className="report-banner"><div className="report-banner-title">{new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>PDF 다운로드</button></div></div>
               <div className="section" style={{marginBottom:16,borderLeft:'4px solid #1d4ed8'}}>
-                <div className="section-title">📥 월간 실적 보고서 (지자체 보고용 엑셀)</div>
+                <div className="section-title">월간 실적 보고서 (지자체 보고용 엑셀)</div>
                 <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                   <input type="month" className="form-input" style={{width:170,marginBottom:0}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)}/>
-                  <button className="btn-primary" disabled={monthlyBusy} onClick={downloadMonthlyReport}>{monthlyBusy?'⏳ 생성 중…':'📥 엑셀 다운로드'}</button>
+                  <button className="btn-primary" disabled={monthlyBusy} onClick={downloadMonthlyReport}>{monthlyBusy?'생성 중…':'엑셀 다운로드'}</button>
                   <span style={{fontSize:12,color:'#94a3b8'}}>시트 4개 — 요약(안전확인 성공률·위험감지·일지) · 어르신별 실적 · 일별 현황 · 위험 감지 상세</span>
                 </div>
               </div>
               <div className="report-stat-grid">
                 {[{label:'총 통화',value:`${reportCalls.length}건`,icon:'📞',color:'#1d4ed8'},{label:'긴급 감지',value:`${reportCalls.filter(c=>c.riskLevel==='critical').length}건`,icon:'🚨',color:'#ef4444'},{label:'주의 감지',value:`${reportCalls.filter(c=>c.riskLevel==='urgent').length}건`,icon:'⚠️',color:'#f59e0b'},{label:'정상 통화',value:`${reportCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length}건`,icon:'✅',color:'#16a34a'},{label:'총 통화 시간',value:`${Math.round(reportCalls.reduce((s,c)=>s+(c.durationSec||0),0)/60)}분`,icon:'⏱️',color:'#7c3aed'},{label:'관리 어르신',value:`${elders.length}명`,icon:'👥',color:'#0891b2'}].map((s,i)=>(
-                  <div key={i} className="report-stat-card"><div className="report-stat-icon">{s.icon}</div><div className="report-stat-value" style={{color:s.color}}>{s.value}</div><div className="report-stat-label">{s.label}</div></div>
+                  <div key={i} className="report-stat-card"><div className="report-stat-dot" style={{background:s.color}}/><div className="report-stat-value" style={{color:s.color}}>{s.value}</div><div className="report-stat-label">{s.label}</div></div>
                 ))}
               </div>
               <div className="section">
-                <div className="section-title">📈 주간 통화 현황 (최근 7일)</div>
+                <div className="section-title">주간 통화 현황 (최근 7일)</div>
                 <div className="chart-wrap">
                   {(()=>{const last7=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const ds=d.toISOString().slice(0,10);const dn=['일','월','화','수','목','금','토'][d.getDay()];const dc=reportCalls.filter(c=>(c.date||(c.at?c.at.slice(0,10):''))===ds);return{day:dn,calls:dc.length,danger:dc.filter(c=>c.riskLevel==='critical').length,warning:dc.filter(c=>c.riskLevel==='urgent').length};});const maxCalls=Math.max(1,...last7.map(x=>x.calls));return last7.map((d,i)=>(<div key={i} className="chart-col"><div className="chart-bar-wrap"><div className="chart-bar-total" style={{height:`${d.calls/maxCalls*100}%`}}><div className="chart-bar-danger" style={{height:`${d.calls?d.danger/d.calls*100:0}%`}}/><div className="chart-bar-warning" style={{height:`${d.calls?d.warning/d.calls*100:0}%`}}/></div></div><div className="chart-val">{d.calls}</div><div className="chart-day">{d.day}</div></div>));})()}
                 </div>
@@ -3192,7 +3351,7 @@ export default function App() {
               {/* ── 위험 키워드 통계 (실데이터 /stats, 기간선택·빈도·우선순위·추이) ── */}
               <div className="section">
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:14}}>
-                  <div className="section-title" style={{marginBottom:0}}>🔎 위험 키워드 통계</div>
+                  <div className="section-title" style={{marginBottom:0}}>위험 키워드 통계</div>
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     {[['week','이번 주'],['month','이번 달'],['3month','최근 3개월'],['custom','직접 선택']].map(([k,label])=>(
                       <button key={k} onClick={()=>setStatsRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(statsRange===k?'#1d4ed8':'#e2e8f0'),background:statsRange===k?'#eff6ff':'#fff',color:statsRange===k?'#1d4ed8':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
@@ -3202,13 +3361,13 @@ export default function App() {
                       <span style={{color:'#94a3b8'}}>~</span>
                       <input type="date" value={statsTo} onChange={e=>setStatsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
                     </>)}
-                    <button onClick={fetchStats} className="btn-download" style={{padding:'6px 12px'}}>{statsLoading?'⏳':'🔄'}</button>
+                    <button onClick={fetchStats} className="btn-download" style={{padding:'6px 12px'}}>{statsLoading?'불러오는 중':'새로고침'}</button>
                   </div>
                 </div>
 
                 {(!statsData || statsData.available !== true) ? (
                   // available!==true: 실패 응답({error:'인증 필요'} 등)이 '0건'으로 그럴듯하게 표시되지 않게
-                  <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{statsLoading?'불러오는 중...':(statsData&&statsData.error?'통계를 불러오지 못했습니다. 🔄 버튼으로 다시 시도해 주세요.':'아직 통계 데이터가 없습니다. 통화 중 위험 키워드가 감지되면 자동으로 쌓입니다.')}</div>
+                  <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{statsLoading?'불러오는 중...':(statsData&&statsData.error?'통계를 불러오지 못했습니다. 새로고침 버튼으로 다시 시도해 주세요.':'아직 통계 데이터가 없습니다. 통화 중 위험 키워드가 감지되면 자동으로 쌓입니다.')}</div>
                 ) : (()=>{
                   const elderEntries = Object.entries(statsData.elders||{})
                     .filter(([name])=>elders.some(e=>e.name===name))  // 등록된 어르신만 (옛 이름·더미 제외)
@@ -3247,7 +3406,7 @@ export default function App() {
                 })()}
               </div>
               <div className="section">
-                <div className="section-title">🎯 위험도 분포 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 위 키워드 통계와 같은 기간 기준 (긴급 감지=위험, 그 외 감지=주의)</span></div>
+                <div className="section-title">위험도 분포 <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 위 키워드 통계와 같은 기간 기준 (긴급 감지=위험, 그 외 감지=주의)</span></div>
                 {(()=>{
                   // 위 '위험 키워드 통계'와 같은 데이터(선택 기간 statsData)로 분류 — 실시간 알림 상태(status)와
                   // 소스가 달라 "목록엔 주의 감지가 있는데 그래프는 0명"으로 어긋나던 문제 수정.
@@ -3286,15 +3445,22 @@ export default function App() {
 
           {page==='health' && (
             <div className="fade-in">
-              <div className="data-banner" style={{marginBottom:20}}>
-                <div><div className="data-banner-title">💊 어르신 건강 상태 현황</div><div className="data-banner-sub">영실이 앱에서 어르신이 직접 체크한 건강 상태 · 🔄 15초마다 자동 갱신됩니다</div></div>
-                <button className={`btn-download ${healthLoading?'btn-calling':''}`} onClick={()=>fetchHealth()} disabled={healthLoading}>{healthLoading ? '⏳ 불러오는 중...' : '🔄 갱신'}</button>
+              <div className="page-intro">
+                <div><div className="page-intro-title">어르신 건강 상태 현황</div><div className="page-intro-sub">영실이 앱에서 어르신이 직접 체크한 건강 상태 · 15초마다 자동 갱신됩니다</div></div>
+                <button className={`btn-secondary ${healthLoading?'btn-calling':''}`} onClick={()=>fetchHealth()} disabled={healthLoading}>{healthLoading ? '불러오는 중...' : '갱신'}</button>
               </div>
-              <div className="report-stat-grid" style={{marginBottom:20}}>
-                <div className="report-stat-card"><div className="report-stat-icon">😊</div><div className="report-stat-value" style={{color:'#16a34a'}}>{healthData.filter(h=>h.status==='good').length}명</div><div className="report-stat-label">좋아요</div></div>
-                <div className="report-stat-card"><div className="report-stat-icon">😐</div><div className="report-stat-value" style={{color:'#f59e0b'}}>{healthData.filter(h=>h.status==='okay').length}명</div><div className="report-stat-label">그럭저럭</div></div>
-                <div className="report-stat-card"><div className="report-stat-icon">😔</div><div className="report-stat-value" style={{color:'#ef4444'}}>{healthData.filter(h=>h.status==='bad').length}명</div><div className="report-stat-label">안 좋아요</div></div>
-                <div className="report-stat-card"><div className="report-stat-icon">📱</div><div className="report-stat-value" style={{color:'#6b7280'}}>{elders.length - healthData.length}명</div><div className="report-stat-label">미체크</div></div>
+              <div className="stat-grid" style={{marginBottom:20}}>
+                {[
+                  {label:'좋아요',   num:healthData.filter(h=>h.status==='good').length, chip:'#22c55e', color:'#16a34a'},
+                  {label:'그럭저럭', num:healthData.filter(h=>h.status==='okay').length, chip:'#f59e0b', color:'#d97706'},
+                  {label:'안 좋아요', num:healthData.filter(h=>h.status==='bad').length,  chip:'#ef4444', color:'#dc2626'},
+                  {label:'미체크',   num:elders.length - healthData.length,               chip:'#94a3b8', color:'#64748b'},
+                ].map(s=>(
+                  <div key={s.label} className="stat-card">
+                    <div className="stat-top"><span className="stat-label">{s.label}</span><span className="stat-chip" style={{background:s.chip}}/></div>
+                    <div className="stat-num-row"><span className="stat-num" style={{color:s.color}}>{s.num}</span><span className="stat-unit">명</span></div>
+                  </div>
+                ))}
               </div>
               {(()=>{
                 const un = alertsData.filter(a=>(a.status ? a.status !== 'done' : !a.read) && alertIsReal(a));   // 폐루프: 완료(done) 전까지 표시
@@ -3312,22 +3478,21 @@ export default function App() {
                 const cnt = c => un.filter(a=>(a.category||'health')===c).length;
                 return (
                 <div className="section" style={{marginBottom:20}}>
-                  <div className="section-title">🚨 미처리 알림 ({un.length}건) <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 조치 시작 → 조치 완료(또는 일지 작성)로 마감하세요</span></div>
+                  <div className="section-title">미처리 알림 ({un.length}건) <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 조치 시작 → 조치 완료(또는 일지 작성)로 마감하세요</span></div>
                   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
                     {['health','fall','emotion','living','meal','missed','help','safe'].map(c=> cnt(c)>0 && (
-                      <span key={c} style={{fontSize:12.5,fontWeight:700,color:CAT[c].c,background:CAT[c].bg,border:'1px solid '+CAT[c].bd,padding:'3px 10px',borderRadius:20}}>{CAT[c].icon} {CAT[c].label} {cnt(c)}건</span>
+                      <span key={c} style={{fontSize:12.5,fontWeight:700,color:CAT[c].c,background:CAT[c].bg,border:'1px solid '+CAT[c].bd,padding:'3px 10px',borderRadius:20}}>{CAT[c].label} {cnt(c)}건</span>
                     ))}
                   </div>
                   {un.map((alert,i) => {
                     const m = CAT[alert.category] || CAT.health;
                     return (
-                    <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:m.bg,border:'2px solid '+m.bd,borderRadius:12,padding:'14px 18px',marginBottom:10,flexWrap:'wrap'}}>
-                      <span style={{fontSize:24}}>{m.icon}</span>
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:m.bg,borderLeft:'4px solid '+m.c,border:'1px solid '+m.bd,borderRadius:10,padding:'12px 16px',marginBottom:8,flexWrap:'wrap'}}>
                       <div style={{flex:1,minWidth:180}}><div style={{fontSize:14,fontWeight:700,color:m.c,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:11,fontWeight:800,background:m.c,color:'#fff',padding:'2px 8px',borderRadius:20}}>{m.label}</span>{nameByPhone(alert.phone, alert.name)} · {alertEnCode(alert) ? alertKw(alert) : `"${alertKw(alert)}"`}</div><div style={{fontSize:12,color:m.c,marginTop:2,opacity:0.85}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
-                      {alert.status === 'ack' && <span style={{fontSize:12,fontWeight:800,color:'#b45309',background:'#fef3c7',padding:'3px 10px',borderRadius:20}}>🔧 조치중{alert.actionBy?` · ${alert.actionBy.split('@')[0]}`:''}</span>}
-                      <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} disabled={!!draftingAlertId} title="통화 내용을 찾아 초안까지 채워서 엽니다" onClick={()=>openNoteFromAlert(alert)}>{draftingAlertId===alert.id?'⏳ 초안 생성 중…':'📝 일지 작성'}</button>
+                      {alert.status === 'ack' && <span style={{fontSize:12,fontWeight:800,color:'#b45309',background:'#fef3c7',padding:'3px 10px',borderRadius:20}}>조치중{alert.actionBy?` · ${alert.actionBy.split('@')[0]}`:''}</span>}
+                      <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} disabled={!!draftingAlertId} title="통화 내용을 찾아 초안까지 채워서 엽니다" onClick={()=>openNoteFromAlert(alert)}>{draftingAlertId===alert.id?'초안 생성 중…':'일지 작성'}</button>
                       {(!alert.status || alert.status === 'new') && (
-                        <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'ack'})}).catch(()=>{});fetchHealth();}}>🔧 조치 시작</button>
+                        <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'ack'})}).catch(()=>{});fetchHealth();}}>조치 시작</button>
                       )}
                       {alert.status === 'ack' && (
                         <button className="btn-small" style={{background:'#16a34a',color:'#fff',borderColor:'#16a34a'}} onClick={async()=>{
@@ -3335,7 +3500,7 @@ export default function App() {
                           if (note === null) return;
                           await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'done',note})}).catch(()=>{});
                           fetchHealth();
-                        }}>✅ 조치 완료</button>
+                        }}>조치 완료</button>
                       )}
                     </div>
                     );
@@ -3344,27 +3509,27 @@ export default function App() {
                 );
               })()}
               <div className="section">
-                <div className="section-title">📋 어르신별 건강 상태</div>
+                <div className="section-title">어르신별 건강 상태</div>
                 {healthData.length === 0 ? (
-                  <div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:12}}>아직 건강 체크 데이터가 없습니다</div><div style={{fontSize:13,marginTop:6}}>어르신이 앱에서 건강 체크를 하면 여기에 표시됩니다</div></div>
+                  <div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{marginTop:12}}>아직 건강 체크 데이터가 없습니다</div><div style={{fontSize:13,marginTop:6}}>어르신이 앱에서 건강 체크를 하면 여기에 표시됩니다</div></div>
                 ) : (
                   <table className="table">
                     <thead><tr><th>어르신</th><th>건강 상태</th><th>체크 시간</th><th>담당 복지사</th><th>조치</th></tr></thead>
                     <tbody>
                       {healthData.filter(alertIsReal).sort((a,b)=>{const order={bad:0,okay:1,good:2};return order[a.status]-order[b.status];}).map((h,i)=>{
                         const elder=elders.find(e=>String(e.phone||'').replace(/\D/g,'')===String(h.phone||'').replace(/\D/g,''))||elders.find(e=>e.name===h.name);
-                        const statusColor={good:'#16a34a',okay:'#f59e0b',bad:'#ef4444'}[h.status];
-                        const statusLabel={good:'😊 좋아요',okay:'😐 그럭저럭',bad:'😔 안 좋아요'}[h.status];
+                        const pillCls={good:'pill-normal',okay:'pill-warning',bad:'pill-danger'}[h.status];
+                        const statusLabel={good:'좋아요',okay:'그럭저럭',bad:'안 좋아요'}[h.status];
                         return (
                           <tr key={i} style={{background:h.status==='bad'?'#fff5f5':'inherit'}}>
-                            <td><strong>{nameByPhone(h.phone, h.name)}</strong></td>
-                            <td><span style={{color:statusColor,fontWeight:700,fontSize:15}}>{statusLabel}</span></td>
+                            <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(nameByPhone(h.phone, h.name)||'?')[0]}</div><strong>{nameByPhone(h.phone, h.name)}</strong></div></td>
+                            <td><span className={`result-pill ${pillCls}`}>{statusLabel}</span></td>
                             <td style={{fontSize:13,color:'#6b7280'}}>{new Date(h.timestamp).toLocaleString('ko-KR')}</td>
                             <td>{elder?.caregiver||'-'}</td>
                             <td>
-                              {h.status==='bad'&&<button className="btn-small" style={{background:'#dc2626',color:'#fff',borderColor:'#dc2626'}} onClick={()=>elder&&setCallModal(elder)}>📱 즉시 전화</button>}
-                              {h.status==='okay'&&<button className="btn-small" onClick={()=>elder&&setCallModal(elder)}>📱 확인 전화</button>}
-                              {h.status==='good'&&<span style={{color:'#22c55e',fontSize:13}}>✅ 정상</span>}
+                              {h.status==='bad'&&<button className="btn-small" style={{background:'#dc2626',color:'#fff',borderColor:'#dc2626'}} onClick={()=>elder&&setCallModal(elder)}>즉시 전화</button>}
+                              {h.status==='okay'&&<button className="btn-small" onClick={()=>elder&&setCallModal(elder)}>확인 전화</button>}
+                              {h.status==='good'&&<span style={{color:'#16a34a',fontSize:13,fontWeight:700}}>정상</span>}
                             </td>
                           </tr>
                         );
@@ -3375,7 +3540,7 @@ export default function App() {
               </div>
               {elders.filter(e=>!healthData.find(h=>h.name===e.name)).length > 0 && (
                 <div className="section">
-                  <div className="section-title">📵 오늘 미체크 어르신</div>
+                  <div className="section-title">오늘 미체크 어르신</div>
                   <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
                     {elders.filter(e=>!healthData.find(h=>h.name===e.name)).map((e,i)=>(<div key={i} style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 16px',fontSize:14}}><strong>{e.name}</strong><span style={{color:'#9ca3af',fontSize:12,marginLeft:8}}>{e.region}</span></div>))}
                   </div>
@@ -3384,7 +3549,7 @@ export default function App() {
               {/* 건강 체크 이력 (일/월별) — healthEvents 컬렉션 */}
               <div className="section">
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:14}}>
-                  <div className="section-title" style={{marginBottom:0}}>📅 건강 체크 이력 (일/월별)</div>
+                  <div className="section-title" style={{marginBottom:0}}>건강 체크 이력 (일/월별)</div>
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     {[['week','최근 7일'],['month','최근 30일'],['custom','직접 선택']].map(([k,label])=>(
                       <button key={k} onClick={()=>setHealthRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(healthRange===k?'#1d4ed8':'#e2e8f0'),background:healthRange===k?'#eff6ff':'#fff',color:healthRange===k?'#1d4ed8':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
@@ -3406,7 +3571,7 @@ export default function App() {
                       <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {evs.length}건</span></div>
                       {evs.map((h,i)=>{
                         const sc={good:'#16a34a',okay:'#f59e0b',bad:'#ef4444'}[h.status]||'#64748b';
-                        const sl={good:'😊 좋아요',okay:'😐 그럭저럭',bad:'😔 안 좋아요'}[h.status]||h.status||'-';
+                        const sl={good:'좋아요',okay:'그럭저럭',bad:'안 좋아요'}[h.status]||h.status||'-';
                         const hm=h.at?new Date(h.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                         return (<div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 14px',borderRadius:10,background:h.status==='bad'?'#fef2f2':'#f8fafc',marginBottom:6}}>
                           <div style={{minWidth:80,fontWeight:700,fontSize:14}}>{h.name||h.phone||'미상'}</div>
@@ -3424,18 +3589,18 @@ export default function App() {
           {page==='casenotes' && (
             <div className="fade-in">
               <div className="elder-toolbar" style={{marginBottom:12,flexWrap:'wrap',gap:10}}>
-                <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder={`${T.elder} 이름 검색...`} value={caseSearch} onChange={e=>setCaseSearch(e.target.value)}/>{caseSearch&&<button className="search-clear" onClick={()=>setCaseSearch('')}>✕</button>}</div>
+                <div className="search-box"><span className="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><input className="search-input" placeholder={`${T.elder} 이름 검색...`} value={caseSearch} onChange={e=>setCaseSearch(e.target.value)}/>{caseSearch&&<button className="search-clear" onClick={()=>setCaseSearch('')}>✕</button>}</div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                  {[['all','전체'],['visit','🏠 방문'],['phone','📞 전화'],['office','🏢 내소'],['guardian','👪 보호자'],['etc','기타']].map(([v,l])=>(
+                  {[['all','전체'],['visit','방문'],['phone','전화'],['office','내소'],['guardian','보호자'],['etc','기타']].map(([v,l])=>(
                     <button key={v} className={`smart-btn ${caseType===v?'smart-active':''}`} style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setCaseType(v)}>{l}</button>
                   ))}
                   <span style={{width:1,height:20,background:'#e2e8f0',margin:'0 2px'}}/>
-                  <button className="smart-btn" style={{fontSize:12,padding:'5px 10px',...(caseFollowUpOnly?{background:'#f59e0b',borderColor:'#f59e0b',color:'#fff'}:{})}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>🔔 후속 필요{caseFollowUpOnly?' ✕':''}</button>
-                  <button className="btn-secondary" onClick={openSchedule} title="이용자별 월 급여제공 일정표 — 날짜별 제공시간 입력·저장 후 공식 달력 양식으로 인쇄(PDF)">📅 급여제공 일정표</button>
-                  <button className="btn-secondary" onClick={openWeeklyReport} title="공식 양식(1~5주차·사회/신체/가사/기타)에 이번 달 일지를 자동으로 채워 인쇄(PDF)합니다">📄 주간업무 보고서</button>
-                  <button className="btn-secondary" onClick={()=>exportNotesXlsx(caseNotes)} title="일지 전체(최근 90일)를 엑셀로 다운로드 — 기관 보관·결재용">📥 엑셀</button>
+                  <button className="smart-btn" style={{fontSize:12,padding:'5px 10px',...(caseFollowUpOnly?{background:'#f59e0b',borderColor:'#f59e0b',color:'#fff'}:{})}} onClick={()=>setCaseFollowUpOnly(v=>!v)}>후속 필요{caseFollowUpOnly?' ✕':''}</button>
+                  <button className="btn-secondary" onClick={openSchedule} title="이용자별 월 급여제공 일정표 — 날짜별 제공시간 입력·저장 후 공식 달력 양식으로 인쇄(PDF)">급여제공 일정표</button>
+                  <button className="btn-secondary" onClick={openWeeklyReport} title="공식 양식(1~5주차·사회/신체/가사/기타)에 이번 달 일지를 자동으로 채워 인쇄(PDF)합니다">주간업무 보고서</button>
+                  <button className="btn-secondary" onClick={()=>exportNotesXlsx(caseNotes)} title="일지 전체(최근 90일)를 엑셀로 다운로드 — 기관 보관·결재용">엑셀</button>
                   <button className="btn-primary" onClick={()=>openNewNote()}>＋ 새 일지</button>
-                  <span style={{fontSize:12,color:'#94a3b8'}}>🔄 15초마다 자동 갱신됩니다</span>
+                  <span style={{fontSize:12,color:'#94a3b8'}}>15초마다 자동 갱신됩니다</span>
                 </div>
               </div>
               {(()=>{
@@ -3468,7 +3633,7 @@ export default function App() {
                 );
                 if(filtered.length===0) {
                   if(caseNotes.length===0) return <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>아직 작성된 상담·방문 일지가 없습니다. ＋ 새 일지로 첫 기록을 남겨보세요.</div>;
-                  const active=[caseFollowUpOnly&&'🔔 후속 필요', caseType!=='all'&&`유형: ${(CASE_TYPE_META[caseType]||{}).label||caseType}`, caseSearch&&`검색: "${caseSearch}"`].filter(Boolean);
+                  const active=[caseFollowUpOnly&&'후속 필요', caseType!=='all'&&`유형: ${(CASE_TYPE_META[caseType]||{}).label||caseType}`, caseSearch&&`검색: "${caseSearch}"`].filter(Boolean);
                   return (
                     <div style={{padding:'30px',textAlign:'center',color:'#64748b'}}>
                       <div style={{fontSize:15,fontWeight:600}}>선택한 필터에 맞는 일지가 없습니다.</div>
@@ -3489,7 +3654,7 @@ export default function App() {
                     </label>
                     {selectedNotes.size>0 && (<>
                       <span style={{fontSize:13,color:'#2563eb',fontWeight:700}}>{selectedNotes.size}건 선택됨</span>
-                      <button onClick={deleteSelectedNotes} style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>🗑 선택 삭제</button>
+                      <button onClick={deleteSelectedNotes} style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>선택 삭제</button>
                       <button onClick={()=>setSelectedNotes(new Set())} style={{background:'#fff',color:'#64748b',border:'1px solid #d1d5db',borderRadius:8,padding:'6px 12px',fontSize:13,fontWeight:600,cursor:'pointer'}}>선택 해제</button>
                     </>)}
                   </div>
@@ -3509,14 +3674,14 @@ export default function App() {
                             <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                               <input type="checkbox" checked={sel} onChange={()=>toggleNoteSel(n.id)} style={{width:16,height:16,cursor:'pointer',flexShrink:0}}/>
                               <span style={{minWidth:44,color:'#64748b',fontSize:13,fontWeight:600}}>{time}</span>
-                              <span style={{fontSize:12,fontWeight:700,color:tmeta.color,background:tmeta.bg,padding:'2px 8px',borderRadius:20}}>{tmeta.icon} {tmeta.label}</span>
+                              <span style={{fontSize:12,fontWeight:700,color:tmeta.color,background:tmeta.bg,padding:'2px 8px',borderRadius:20}}>{tmeta.label}</span>
                               <span style={{fontWeight:700,fontSize:14}}>{nameByPhone(n.elderPhone,n.elderName)}</span>
                               <span style={{fontSize:12,color:'#64748b'}}>· {CASE_CAT_META[n.category]||'기타'}</span>
                               {(n.topics||[]).length>0 && <span style={{fontSize:11.5,fontWeight:700,color:'#7c3aed',background:'#f5f3ff',border:'1px solid #ddd6fe',borderRadius:12,padding:'2px 8px'}}>{(n.topics||[]).map(t=>CASE_TOPIC_META[t]).filter(Boolean).join('·')}</span>}
-                              {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>🔗 알림 대응</span>}
-                              {fu&&<span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>🔔 후속{n.followUp.dueDate?` ~${n.followUp.dueDate}`:''}</span>}
+                              {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>알림 대응</span>}
+                              {fu&&<span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>후속{n.followUp.dueDate?` ~${n.followUp.dueDate}`:''}</span>}
                               <span style={{flex:1}}/>
-                              <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'✅ 복사됨':'📋 복사'}</button>
+                              <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'복사됨':'복사'}</button>
                               <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
                               <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
                             </div>
@@ -3542,19 +3707,19 @@ export default function App() {
           {page==='data' && (
             <div className="fade-in">
               <div className="data-banner">
-                <div><div className="data-banner-title">📊 대구광역시 독거노인 현황</div><div className="data-banner-sub">출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
-                <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={fetchPopulation} disabled={popLoading}>{popLoading ? '⏳ 불러오는 중...' : '🔄 데이터 갱신'}</button>
+                <div><div className="data-banner-title">대구광역시 독거노인 현황</div><div className="data-banner-sub">출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
+                <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={fetchPopulation} disabled={popLoading}>{popLoading ? '불러오는 중...' : '데이터 갱신'}</button>
               </div>
-              {popError && <div className="call-result-banner error">❌ {popError}</div>}
-              {popLoading && <div style={{textAlign:'center',padding:'40px',color:'#64748b',fontSize:16}}>⏳ 행정안전부 공공데이터 불러오는 중...</div>}
+              {popError && <div className="call-result-banner error">{popError}</div>}
+              {popLoading && <div style={{textAlign:'center',padding:'40px',color:'#64748b',fontSize:16}}>행정안전부 공공데이터 불러오는 중...</div>}
               {popData && (
                 <>
                   <div className="data-total-row">
                     {[{num:popData.total.population.toLocaleString()+'명',label:'대구 전체 인구',color:'#0f172a'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인',color:'#1d4ed8'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인',color:'#f59e0b'},{num:elders.length+'명',label:'영실이 현재 관리',color:'#22c55e'},{num:(elders.length/popData.total.solitary*100).toFixed(2)+'%',label:'관리 비율',color:'#ef4444'},{num:popData.total.elderlyRatio+'%',label:'고령화율',color:'#7c3aed'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num" style={{color:d.color}}>{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
                   </div>
-                  {popData.total.elderlyRatio >= 20 && <div style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 20px',marginBottom:20,fontSize:14,color:'#dc2626',fontWeight:700}}>🚨 대구광역시 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
+                  {popData.total.elderlyRatio >= 20 && <div style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 20px',marginBottom:20,fontSize:14,color:'#dc2626',fontWeight:700}}>대구광역시 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
                   <div className="section">
-                    <div className="section-title">🗺️ 구별 독거노인 현황</div>
+                    <div className="section-title">구별 독거노인 현황</div>
                     <table className="table">
                       <thead><tr><th>구</th><th>전체 인구</th><th>65세 이상</th><th>고령화율</th><th>추정 독거노인</th><th>영실이 관리</th><th>관리 비율</th><th>커버리지</th></tr></thead>
                       <tbody>
@@ -3578,7 +3743,7 @@ export default function App() {
                     </table>
                   </div>
                   <div className="section">
-                    <div className="section-title">🌡️ 기상특보 집중 케어 대상</div>
+                    <div className="section-title">기상특보 집중 케어 대상</div>
                     <div className="data-banner-sub" style={{marginBottom:14}}>기상청 공공데이터 경보가 발령된 지역의 어르신이에요. 오늘 안전 확인이 필요합니다.</div>
                     {(() => {
                       const ALERTS = [
@@ -3590,7 +3755,7 @@ export default function App() {
                         {key:'wildfire', icon:'🔥', label:'산불발생', color:'#ea580c', tip:'대피 안내 확인·안부 확인'},
                       ];
                       const groups = ALERTS.map(a => ({...a, list: elders.filter(e => weatherData[e.region]?.alert === a.key)})).filter(g => g.list.length > 0);
-                      if (groups.length === 0) return <div style={{color:'#16a34a',fontSize:15,padding:'20px 0',textAlign:'center'}}>☀️ 현재 발령된 기상특보가 없습니다. 모든 어르신이 안전한 날씨예요.</div>;
+                      if (groups.length === 0) return <div style={{color:'#16a34a',fontSize:15,padding:'20px 0',textAlign:'center'}}>현재 발령된 기상특보가 없습니다. 모든 어르신이 안전한 날씨입니다.</div>;
                       return groups.map(g => (
                         <div key={g.key} style={{marginBottom:16}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,fontWeight:700,color:g.color}}>
@@ -3600,10 +3765,10 @@ export default function App() {
                             {g.list.map(e => (
                               <div key={e.id} style={{border:'1px solid '+g.color+'33',borderRadius:10,padding:'10px 14px',background:'#fff',minWidth:210,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
                                 <div>
-                                  <div style={{fontWeight:700,color:'#0f172a'}}>{e.gender==='female'?'👵':'👴'} {e.name} <span style={{fontWeight:400,fontSize:12,color:e.status==='danger'?'#ef4444':e.status==='warning'?'#f59e0b':'#9ca3af'}}>{e.status==='danger'?'· 위험':e.status==='warning'?'· 주의':''}</span></div>
+                                  <div style={{fontWeight:700,color:'#0f172a'}}>{e.name} <span style={{fontWeight:400,fontSize:12,color:e.status==='danger'?'#ef4444':e.status==='warning'?'#f59e0b':'#9ca3af'}}>{e.status==='danger'?'· 위험':e.status==='warning'?'· 주의':''}</span></div>
                                   <div style={{fontSize:12,color:'#6b7280'}}>{e.region} · {weatherData[e.region]?.temp}℃</div>
                                 </div>
-                                <button onClick={()=>e.callActive&&setCallModal(e)} disabled={calling===e.id||!e.callActive} style={{fontSize:13,padding:'6px 12px',borderRadius:8,border:'none',background:e.callActive?g.color:'#d1d5db',color:'#fff',cursor:e.callActive?'pointer':'not-allowed',fontWeight:700,whiteSpace:'nowrap'}}>{calling===e.id?'⏳':'📞 전화'}</button>
+                                <button onClick={()=>e.callActive&&setCallModal(e)} disabled={calling===e.id||!e.callActive} style={{fontSize:13,padding:'6px 12px',borderRadius:8,border:'none',background:e.callActive?g.color:'#d1d5db',color:'#fff',cursor:e.callActive?'pointer':'not-allowed',fontWeight:700,whiteSpace:'nowrap'}}>{calling===e.id?'발신 중':'앱 전화'}</button>
                               </div>
                             ))}
                           </div>
@@ -3620,9 +3785,9 @@ export default function App() {
             <div className="fade-in">
               <div className="detail-topbar">
                 <button className="back-btn" onClick={()=>{setPage('elders');setSelected(null);}}>← 목록으로</button>
-                <div className="detail-actions"><button className="btn-secondary" onClick={()=>openEdit(selected)}>✏️ 정보 수정</button><button className="btn-danger-outline" onClick={()=>deleteElder(selected.id)}>🗑️ 삭제</button></div>
+                <div className="detail-actions"><button className="btn-secondary" onClick={()=>openEdit(selected)}>정보 수정</button><button className="btn-danger-outline" onClick={()=>deleteElder(selected.id)}>삭제</button></div>
               </div>
-              {callResult&&callResult.elderId===selected.id&&<div className={`call-result-banner ${callResult.status}`}>{callResult.status==='success'?'✅':'❌'} {callResult.message}</div>}
+              {callResult&&callResult.elderId===selected.id&&<div className={`call-result-banner ${callResult.status}`}>{callResult.message}</div>}
               <div className="detail-grid">
                 <div className="detail-card">
                   <div className="detail-avatar">{(selected.name||'?')[0]}</div>
@@ -3630,19 +3795,19 @@ export default function App() {
                   <div className="detail-sub">{selected.age}세 · {selected.region}</div>
                   <div className={`status-badge badge-${selected.status} mt16`}>{(STATUS_CONFIG[selected.status]||STATUS_CONFIG.normal).label}</div>
                   <div className="call-action-box">
-                    <button className={`btn-call-lg ${calling===selected.id?'btn-calling':''} ${!selected.callActive?'btn-disabled':''}`} onClick={()=>selected.callActive&&setCallModal(selected)} disabled={calling===selected.id||!selected.callActive}>{calling===selected.id?'⏳ 발신 중...':'📱 앱으로 전화하기'}</button>
+                    <button className={`btn-call-lg ${calling===selected.id?'btn-calling':''} ${!selected.callActive?'btn-disabled':''}`} onClick={()=>selected.callActive&&setCallModal(selected)} disabled={calling===selected.id||!selected.callActive}>{calling===selected.id?'발신 중...':'앱으로 전화하기'}</button>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,marginTop:8,flexWrap:'wrap'}}>
-                      <span style={{fontSize:13,fontWeight:700,padding:'5px 12px',borderRadius:20,...(selected.callActive?{background:'#dcfce7',color:'#15803d'}:{background:'#fee2e2',color:'#dc2626'})}}>{selected.callActive?'🟢 자동전화 발신 중':'🔴 자동전화 중단'}</span>
-                      <button onClick={()=>toggleCallActive(selected.id)} style={{fontSize:13,fontWeight:700,padding:'7px 14px',borderRadius:8,cursor:'pointer',...(selected.callActive?{background:'#fff',color:'#64748b',border:'1px solid #d1d5db'}:{background:'#16a34a',color:'#fff',border:'none'})}}>{selected.callActive?'⏸ 중단하기':'▶ 발신 켜기'}</button>
+                      <span style={{fontSize:13,fontWeight:700,padding:'5px 12px',borderRadius:20,...(selected.callActive?{background:'#dcfce7',color:'#15803d'}:{background:'#fee2e2',color:'#dc2626'})}}>{selected.callActive?'자동전화 발신 중':'자동전화 중단'}</span>
+                      <button onClick={()=>toggleCallActive(selected.id)} style={{fontSize:13,fontWeight:700,padding:'7px 14px',borderRadius:8,cursor:'pointer',...(selected.callActive?{background:'#fff',color:'#64748b',border:'1px solid #d1d5db'}:{background:'#16a34a',color:'#fff',border:'none'})}}>{selected.callActive?'중단하기':'발신 켜기'}</button>
                     </div>
                   </div>
-                  {[['성별',selected.gender==='female'?'👵 여성':'👴 남성'],['호칭',selected.title||'어르신'],['돌봄군',(CARE_GROUPS[selected.careGroup]||{}).label||'미지정'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',`${selected.address||''} ${selected.addressDetail||''}`.trim()],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle, selected.callDays)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
+                  {[['성별',selected.gender==='female'?'여성':'남성'],['호칭',selected.title||'어르신'],['돌봄군',(CARE_GROUPS[selected.careGroup]||{}).label||'미지정'],['전화번호',selected.phone],['담당 복지사',selected.caregiver||'미배정'],['주소',`${selected.address||''} ${selected.addressDetail||''}`.trim()],['보호자',selected.guardian],['보호자 연락처',selected.guardianPhone],['지병',selected.disease||'없음'],['복용약',selected.medicine||'없음'],['거동상태',selected.mobility],['전화 주기',cycleLabel(selected.callCycle, selected.callDays)],['전화 시간',selected.callTime],['마지막 통화',selected.lastCall],['방문 필요',selected.visits>0?`${selected.visits}회 권고`:'불필요']].map(([label,value],i)=>(<div key={i} className="detail-info-row"><span className="detail-label">{label}</span><span style={{color:label==='방문 필요'&&selected.visits>0?'#ef4444':'inherit',fontWeight:label==='방문 필요'?700:400}}>{value}</span></div>))}
                 </div>
                 <div className="detail-right">
-                  {selected.keyword&&<div className="alert-box"><div className="alert-box-title">🚨 감지된 위험 키워드</div><div className="alert-box-keyword">"{selected.keyword}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
+                  {selected.keyword&&<div className="alert-box"><div className="alert-box-title">감지된 위험 키워드</div><div className="alert-box-keyword">"{selected.keyword}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
                   <div className="section">
                     <div className="script-editor-header" style={{marginBottom:12}}>
-                      <div className="section-title" style={{marginBottom:0}}>📞 통화 기록</div>
+                      <div className="section-title" style={{marginBottom:0}}>통화 기록</div>
                     </div>
                     {(()=>{
                       // 통화기록 메뉴와 동일한 서버 데이터(callsHistory)에서 이 어르신만 필터 (이름 또는 전화번호 매칭)
@@ -3653,7 +3818,7 @@ export default function App() {
                         const hm=c.at?new Date(c.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                         const dur=c.durationSec||0;
                         return (
-                          <div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderRadius:10,background:c.riskLevel==='critical'?'#fef2f2':c.riskLevel==='urgent'?'#fff7ed':'#f8fafc',marginBottom:6,flexWrap:'wrap'}}>
+                          <div key={c.id} className={`call-row ${c.riskLevel==='critical'?'call-row-danger':c.riskLevel==='urgent'?'call-row-warning':''}`}>
                             <div style={{minWidth:96,color:'#64748b',fontSize:13}}>{c.date} {hm}</div>
                             <div style={{minWidth:64,color:'#64748b',fontSize:13}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                             <div style={{minWidth:44,fontWeight:700,fontSize:13,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
@@ -3665,7 +3830,7 @@ export default function App() {
                   </div>
                   <div className="section">
                     <div className="script-editor-header" style={{marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <div className="section-title" style={{marginBottom:0}}>📝 상담·방문 일지</div>
+                      <div className="section-title" style={{marginBottom:0}}>상담·방문 일지</div>
                       <button className="btn-primary" style={{fontSize:13,padding:'6px 12px'}} onClick={()=>openNewNote({elderPhone:selected.phone,elderName:selected.name})}>＋ 일지 작성</button>
                     </div>
                     {(()=>{
@@ -3679,11 +3844,11 @@ export default function App() {
                           <div key={n.id} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',marginBottom:8,background:'#fff'}}>
                             <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                               <span style={{color:'#64748b',fontSize:12,fontWeight:600}}>{when}</span>
-                              <span style={{fontSize:11,fontWeight:700,color:tmeta.color,background:tmeta.bg,padding:'2px 8px',borderRadius:20}}>{tmeta.icon} {tmeta.label}</span>
+                              <span style={{fontSize:11,fontWeight:700,color:tmeta.color,background:tmeta.bg,padding:'2px 8px',borderRadius:20}}>{tmeta.label}</span>
                               <span style={{fontSize:12,color:'#64748b'}}>{CASE_CAT_META[n.category]||'기타'}</span>
-                              {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>🔗 알림 대응</span>}
+                              {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>알림 대응</span>}
                               <span style={{flex:1}}/>
-                              <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'✅ 복사됨':'📋 복사'}</button>
+                              <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'복사됨':'복사'}</button>
                               <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
                               <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
                             </div>
@@ -3704,24 +3869,23 @@ export default function App() {
           {page==='forms' && (
             <div className="fade-in">
               <div className="data-banner" style={{marginBottom:20}}>
-                <div><div className="data-banner-title">📥 보고서·서식</div><div className="data-banner-sub">제출·보관용 서식을 한곳에서 확인하고 내려받으세요 · 월을 바꾸면 현황이 갱신됩니다</div></div>
+                <div><div className="data-banner-title">보고서·서식</div><div className="data-banner-sub">제출·보관용 서식을 한곳에서 확인하고 내려받으세요 · 월을 바꾸면 현황이 갱신됩니다</div></div>
                 <input type="month" className="form-input" style={{width:170,margin:0}} value={formsYm} onChange={e=>{setFormsYm(e.target.value);setReportMonth(e.target.value);}}/>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:14}}>
                 {[
-                  { icon:'📄', title:'주간업무 보고서', desc:'지원사가 주차별 작성(음성→텍스트)한 보고서 — 검토·오타 수정 후 출력', badge:`${formsYm.split('-')[1]}월 ${formsCounts.weekly}명 작성`,
-                    btns:[ {label:'열람·수정·출력', primary:true, on:()=>openWeeklyReport(formsYm)}, {label:'🖨 일괄 출력', on:()=>printWeeklyBatchFor(formsYm)} ] },
-                  { icon:'📅', title:'급여제공 일정표', desc:'일별 제공시간(주말·공휴일 1.5배, 월 120시간 한도) — 공식 달력 양식 출력', badge:`${formsYm.split('-')[1]}월 ${formsCounts.sched}명 작성`,
-                    btns:[ {label:'입력·출력', primary:true, on:()=>openSchedule(formsYm)}, {label:'🖨 일괄 출력', on:()=>printScheduleBatchFor(formsYm)} ] },
-                  { icon:'📝', title:'상담·방문일지 엑셀', desc:'일지 전체를 엑셀로 — 기관 보관·결재용', badge:`최근 90일 ${caseNotes.length}건`,
-                    btns:[ {label:'📥 엑셀 다운로드', primary:true, on:()=>exportNotesXlsx(caseNotes)} ] },
-                  { icon:'📊', title:'월간 실적 보고서', desc:'통화·안전확인·위험감지·일지 실적 종합 — 지자체 보고용 엑셀', badge:`${formsYm.split('-')[1]}월 기준`,
-                    btns:[ {label: monthlyBusy?'⏳ 생성 중…':'📥 엑셀 다운로드', primary:true, on:()=>downloadMonthlyReport(formsYm)} ] },
+                  { icon:'', title:'주간업무 보고서', desc:'지원사가 주차별 작성(음성→텍스트)한 보고서 — 검토·오타 수정 후 출력', badge:`${formsYm.split('-')[1]}월 ${formsCounts.weekly}명 작성`,
+                    btns:[ {label:'열람·수정·출력', primary:true, on:()=>openWeeklyReport(formsYm)}, {label:'일괄 출력', on:()=>printWeeklyBatchFor(formsYm)} ] },
+                  { icon:'', title:'급여제공 일정표', desc:'일별 제공시간(주말·공휴일 1.5배, 월 120시간 한도) — 공식 달력 양식 출력', badge:`${formsYm.split('-')[1]}월 ${formsCounts.sched}명 작성`,
+                    btns:[ {label:'입력·출력', primary:true, on:()=>openSchedule(formsYm)}, {label:'일괄 출력', on:()=>printScheduleBatchFor(formsYm)} ] },
+                  { icon:'', title:'상담·방문일지 엑셀', desc:'일지 전체를 엑셀로 — 기관 보관·결재용', badge:`최근 90일 ${caseNotes.length}건`,
+                    btns:[ {label:'엑셀 다운로드', primary:true, on:()=>exportNotesXlsx(caseNotes)} ] },
+                  { icon:'', title:'월간 실적 보고서', desc:'통화·안전확인·위험감지·일지 실적 종합 — 지자체 보고용 엑셀', badge:`${formsYm.split('-')[1]}월 기준`,
+                    btns:[ {label: monthlyBusy?'생성 중…':'엑셀 다운로드', primary:true, on:()=>downloadMonthlyReport(formsYm)} ] },
                 ].map(card=>(
                   <div key={card.title} className="section" style={{display:'flex',flexDirection:'column',gap:10,margin:0}}>
                     <div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <span style={{fontSize:26}}>{card.icon}</span>
-                      <div style={{flex:1}}>
+                                            <div style={{flex:1}}>
                         <div style={{fontSize:16,fontWeight:900,color:'#1e3a6e'}}>{card.title}</div>
                         <div style={{fontSize:12.5,color:'#64748b',marginTop:2}}>{card.desc}</div>
                       </div>
@@ -3735,7 +3899,7 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              <div style={{fontSize:12.5,color:'#94a3b8',marginTop:14}}>💡 주간업무 보고서·급여제공 일정표의 '저장'은 로컬 파일(엑셀)로 저장됩니다. 인쇄(PDF)는 각 화면의 양식 인쇄 버튼을 사용하세요.</div>
+              <div style={{fontSize:12.5,color:'#94a3b8',marginTop:14}}>주간업무 보고서·급여제공 일정표의 '저장'은 로컬 파일(엑셀)로 저장됩니다. 인쇄(PDF)는 각 화면의 양식 인쇄 버튼을 사용하세요.</div>
             </div>
           )}
 
@@ -3749,7 +3913,7 @@ export default function App() {
 
                 {/* 구성원 초대 링크 — 센터장: 센터장·전담직원·지원사 / 전담직원: 지원사만 */}
                 <div className="section" style={{marginBottom:16}}>
-                  <div className="section-title">✉️ 구성원 초대</div>
+                  <div className="section-title">구성원 초대</div>
                   <div style={{fontSize:13,color:'#64748b',marginBottom:10}}>초대 링크를 만들어 전달하면, 받은 분이 링크에서 직접 가입해 <b>우리 기관 소속으로 자동 합류</b>합니다. (링크는 7일 유효 · 1인 1회용)</div>
                   <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                     <select className="form-input" style={{width:200,margin:0}} value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>
@@ -3768,7 +3932,7 @@ export default function App() {
                             <td style={{fontSize:13,color:'#64748b'}}>{(v.createdBy||'').split('@')[0]}</td>
                             <td style={{fontSize:13,color:'#64748b'}}>{v.expiresAt?new Date(v.expiresAt).toLocaleDateString('ko-KR'):'-'}</td>
                             <td style={{whiteSpace:'nowrap'}}>
-                              <button className="btn-small" onClick={()=>copyInvite(v.code)}>{copiedInvite===v.code?'✅ 복사됨':'📋 복사'}</button>{' '}
+                              <button className="btn-small" onClick={()=>copyInvite(v.code)}>{copiedInvite===v.code?'복사됨':'복사'}</button>{' '}
                               <button className="btn-danger-outline" style={{fontSize:12,padding:'4px 10px'}} onClick={()=>deleteInvite(v.code)}>취소</button>
                             </td>
                           </tr>
@@ -3781,7 +3945,7 @@ export default function App() {
                 {isSuper && (<>
                 {/* 새 기관 만들기 */}
                 <div className="section" style={{marginBottom:16}}>
-                  <div className="section-title">🏢 새 기관(복지관) 만들기</div>
+                  <div className="section-title">새 기관(복지관) 만들기</div>
                   <div style={{fontSize:13,color:'#64748b',marginBottom:10}}>기관을 만들면 <b>기관코드</b>가 자동 발급됩니다. 이 코드를 복지사에게 전달하면, 복지사가 어르신 폰 앱에 입력해 해당 기관으로 등록됩니다.</div>
                   <div style={{display:'flex',gap:8,maxWidth:680}}>
                     <input className="form-input" style={{flex:1}} value={newOrgName} onChange={e=>setNewOrgName(e.target.value)} placeholder="예) ○○구 노인복지관 / ○○장애인자립센터" onKeyDown={e=>e.key==='Enter'&&createOrg()}/>
@@ -3795,7 +3959,7 @@ export default function App() {
 
                 {/* 기관 목록 */}
                 <div className="section" style={{marginBottom:16}}>
-                  <div className="section-title">📋 기관 목록 ({orgs.length})</div>
+                  <div className="section-title">기관 목록 ({orgs.length})</div>
                   <table className="table">
                     <thead><tr><th>기관명</th><th>유형</th><th>기관코드</th><th>대상자</th><th>계정</th></tr></thead>
                     <tbody>
@@ -3816,7 +3980,7 @@ export default function App() {
 
                 {/* 새 구성원 계정 (직접 생성 — 초대 링크 대신 관리자가 만들어 전달할 때) */}
                 <div className="section" style={{marginBottom:16}}>
-                  <div className="section-title">👤 새 구성원 계정 만들기</div>
+                  <div className="section-title">새 구성원 계정 만들기</div>
                   <div style={{fontSize:13,color:'#64748b',marginBottom:10}}>구성원의 로그인 계정을 직접 만듭니다. <b>지원사</b> 계정은 배정된 이용자만 볼 수 있습니다.</div>
                   <div className="form-grid" style={{maxWidth:720}}>
                     <div className="form-field"><label className="form-label">이름</label><input className="form-input" value={newAcct.name} onChange={e=>setNewAcct(a=>({...a,name:e.target.value}))} placeholder="예) 김복지" autoComplete="off"/></div>
@@ -3828,7 +3992,7 @@ export default function App() {
                       <div className="form-field"><label className="form-label">역할</label><select className="form-input" value={newAcct.role} onChange={e=>setNewAcct(a=>({...a,role:e.target.value}))}><option value="admin">센터장(관리자)</option><option value="staff">전담직원</option><option value="worker">지원사</option><option value="superadmin">운영자 (전체 + 기관관리)</option></select></div>
                     </>) : (<>
                       <div className="form-field"><label className="form-label">역할</label><select className="form-input" value={newAcct.role} onChange={e=>setNewAcct(a=>({...a,role:e.target.value}))}>{grantableRoles.map(r=>(<option key={r} value={r}>{ROLE_KO[r]}</option>))}</select></div>
-                      <div className="form-field"><label className="form-label">소속 기관</label><div style={{fontSize:14,fontWeight:700,color:'#1e3a6e',padding:'8px 0'}}>🏢 {me?.orgName||'우리 기관'}{me?.orgCode?` (${me.orgCode})`:''}</div></div>
+                      <div className="form-field"><label className="form-label">소속 기관</label><div style={{fontSize:14,fontWeight:700,color:'#1e3a6e',padding:'8px 0'}}>{me?.orgName||'우리 기관'}{me?.orgCode?` (${me.orgCode})`:''}</div></div>
                     </>)}
                   </div>
                   <button className="btn-primary" style={{marginTop:12,padding:'10px 20px'}} onClick={createAccount}>+ 계정 생성</button>
@@ -3836,7 +4000,7 @@ export default function App() {
 
                 {/* 계정 목록 */}
                 <div className="section">
-                  <div className="section-title">🔑 대시보드 계정 ({accounts.length})</div>
+                  <div className="section-title">대시보드 계정 ({accounts.length})</div>
                   <table className="table">
                     <thead><tr><th>이름</th><th>전화번호</th><th>이메일</th><th>소속 기관</th><th>역할</th><th>관리</th></tr></thead>
                     <tbody>
@@ -3850,7 +4014,7 @@ export default function App() {
                             <td style={{fontSize:13,color:'#64748b'}}>{u.email}</td>
                             <td style={{fontSize:13,color:'#64748b'}}>{org?org.name:(me?.orgName||u.orgId)}</td>
                             <td>{u.role==='superadmin'?<span className="status-badge badge-warning">운영자</span>:<span className="status-badge badge-normal">{ROLE_KO[u.role]||'센터장(관리자)'}</span>}</td>
-                            <td>{(u.role!=='superadmin'&&u.uid!==me?.uid&&isAdmin)?<button className="btn-danger-outline" style={{fontSize:12,padding:'4px 10px'}} onClick={()=>deleteAccount(u.uid,u.email)}>🗑️ 삭제</button>:<span style={{color:'#cbd5e1',fontSize:12}}>—</span>}</td>
+                            <td>{(u.role!=='superadmin'&&u.uid!==me?.uid&&isAdmin)?<button className="btn-danger-outline" style={{fontSize:12,padding:'4px 10px'}} onClick={()=>deleteAccount(u.uid,u.email)}>삭제</button>:<span style={{color:'#cbd5e1',fontSize:12}}>—</span>}</td>
                           </tr>
                         );
                       })}
@@ -3865,20 +4029,20 @@ export default function App() {
           {page==='register' && (
             <div className="fade-in">
               <button className="back-btn" onClick={()=>setPage(editMode?'detail':'elders')}>← 돌아가기</button>
-              {saveSuccess&&<div className="success-banner">✅ {editMode?'수정이 완료되었습니다!':'어르신 등록이 완료되었습니다!'}</div>}
+              {saveSuccess&&<div className="success-banner">{editMode?'수정이 완료되었습니다!':'어르신 등록이 완료되었습니다!'}</div>}
               <div className="step-bar">
                 {[{n:1,label:'기본 정보'},{n:2,label:'보호자 정보'},{n:3,label:'AI 전화 설정'}].map(step=>(<div key={step.n} className={`step-item ${formStep===step.n?'step-active':formStep>step.n?'step-done':''}`}><div className="step-circle">{formStep>step.n?'✓':step.n}</div><div className="step-label">{step.label}</div>{step.n<3&&<div className="step-line"/>}</div>))}
               </div>
               <div className="form-card">
-                {formStep===1&&(<div className="fade-in"><div className="form-section-title">👤 기본 정보</div><div className="form-grid">
+                {formStep===1&&(<div className="fade-in"><div className="form-section-title">기본 정보</div><div className="form-grid">
                   <div className="form-field full-width"><label className="form-label">성별 <span className="required">*</span></label><div className="gender-group">{[{value:'female',icon:'👵',label:'여성'},{value:'male',icon:'👴',label:'남성'}].map(g=>(<label key={g.value} className={`gender-option ${form.gender===g.value?'gender-selected':''}`} onClick={()=>setForm(f=>({...f,gender:g.value,title:TITLE_OPTIONS[g.value][0]}))}><span style={{fontSize:28}}>{g.icon}</span><span style={{fontWeight:700}}>{g.label}</span></label>))}</div></div>
-                  <div className="form-field full-width"><label className="form-label">호칭 (전화 시 사용)</label><div className="radio-group">{(TITLE_OPTIONS[form.gender]||[]).map(t=>(<label key={t} className={`radio-option ${form.title===t?'radio-selected':''}`}><input type="radio" name="title" value={t} checked={form.title===t} onChange={e=>setForm(f=>({...f,title:e.target.value}))} style={{display:'none'}}/>{t}</label>))}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>💬 전화 시 "{form.title}, 안녕하세요. 저 영실이인데요~" 라고 시작합니다</div></div>
+                  <div className="form-field full-width"><label className="form-label">호칭 (전화 시 사용)</label><div className="radio-group">{(TITLE_OPTIONS[form.gender]||[]).map(t=>(<label key={t} className={`radio-option ${form.title===t?'radio-selected':''}`}><input type="radio" name="title" value={t} checked={form.title===t} onChange={e=>setForm(f=>({...f,title:e.target.value}))} style={{display:'none'}}/>{t}</label>))}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>전화 시 "{form.title}, 안녕하세요. 저 영실이인데요~" 라고 시작합니다</div></div>
                   <div className="form-field"><label className="form-label">이름 <span className="required">*</span></label><input {...inp('name')} placeholder="예: 김순자"/>{formErrors.name&&<div className="error-msg">{formErrors.name}</div>}</div>
                   <div className="form-field"><label className="form-label">나이 <span className="required">*</span></label><input {...inp('age')} type="number" placeholder="예: 78"/>{formErrors.age&&<div className="error-msg">{formErrors.age}</div>}</div>
                   <div className="form-field"><label className="form-label">전화번호 <span className="required">*</span></label><input {...inp('phone')} placeholder="예: 010-1234-5678"/>{formErrors.phone&&<div className="error-msg">{formErrors.phone}</div>}</div>
                   <div className="form-field"><label className="form-label">주민등록번호 <span style={{fontSize:11,color:'#94a3b8'}}>(급여제공 일정표의 생년월일에 사용)</span></label><input className="form-input" value={form.jumin||''} inputMode="numeric" maxLength={14} placeholder="000000-0000000" onChange={e=>{const d=e.target.value.replace(/[^0-9]/g,'').slice(0,13);setForm(f=>({...f,jumin:d.length>6?`${d.slice(0,6)}-${d.slice(6)}`:d}));}}/></div>
                   <div className="form-field"><label className="form-label">관할 구역 <span style={{fontSize:11,color:'#94a3b8'}}>(주소에서 자동)</span></label><input className="form-input" value={form.region||''} readOnly placeholder="주소 검색 시 자동 입력" style={{background:'#f8fafc'}}/></div>
-                  <div className="form-field full-width"><label className="form-label">주소 <span className="required">*</span></label><div style={{display:'flex',gap:8}}><input {...inp('address')} placeholder="🔍 주소 검색을 눌러 선택" style={{flex:1}}/><button type="button" className="btn-secondary" onClick={openAddressSearch} style={{whiteSpace:'nowrap',padding:'0 18px',fontWeight:700}}>🔍 주소 검색</button></div>{formErrors.address&&<div className="error-msg">{formErrors.address}</div>}</div>
+                  <div className="form-field full-width"><label className="form-label">주소 <span className="required">*</span></label><div style={{display:'flex',gap:8}}><input {...inp('address')} placeholder="주소 검색을 눌러 선택" style={{flex:1}}/><button type="button" className="btn-secondary" onClick={openAddressSearch} style={{whiteSpace:'nowrap',padding:'0 18px',fontWeight:700}}>주소 검색</button></div>{formErrors.address&&<div className="error-msg">{formErrors.address}</div>}</div>
                   <div className="form-field full-width"><label className="form-label">상세 주소 <span style={{fontSize:11,color:'#94a3b8'}}>(아파트 동/호수 등)</span></label><input {...inp('addressDetail')} placeholder="예: 101동 1202호"/></div>
                   <div className="form-field"><label className="form-label">지병</label><input {...inp('disease')} placeholder="예: 고혈압, 당뇨"/></div>
                   <div className="form-field"><label className="form-label">복용 중인 약</label><input {...inp('medicine')} placeholder="예: 혈압약"/></div>
@@ -3892,8 +4056,8 @@ export default function App() {
                     </select>
                   </div>
                 </div><div className="form-footer"><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
-                {formStep===2&&(<div className="fade-in"><div className="form-section-title">👨‍👩‍👧 보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">💡 위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
-                {formStep===3&&(<div className="fade-in"><div className="form-section-title">📞 AI 전화 설정</div><div className="form-grid">{!isDisability&&<div className="form-field full-width"><label className="form-label">돌봄군 (노인맞춤돌봄서비스)</label><div className="radio-group">{[{value:'',label:'미지정'},{value:'general',label:'일반돌봄군'},{value:'intensive',label:'중점돌봄군'}].map(opt=><label key={opt.value} className={`radio-option ${form.careGroup===opt.value?'radio-selected':''}`}><input type="radio" name="careGroup" value={opt.value} checked={(form.careGroup||'')===opt.value} onChange={()=>{const g=CARE_GROUPS[opt.value];setForm(f=>({...f,careGroup:opt.value,...(g?{callCycle:'custom',callDays:[...g.days]}:{})}));}} style={{display:'none'}}/>{opt.label}</label>)}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>선택하면 전화 안전확인 권장 주기가 자동 적용됩니다 (일반 주 2회 · 중점 주 1회, 아래에서 수정 가능). 미지정은 기존 주기 그대로.</div></div>}<div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #2563eb':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#1d4ed8':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">📋 등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['담당 지원사',(accounts.find(u=>u.email===form.assignedTo)||{}).name||form.assignedTo||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'✅ 수정 완료':'✅ 등록 완료'}</button></div></div>)}
+                {formStep===2&&(<div className="fade-in"><div className="form-section-title">보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
+                {formStep===3&&(<div className="fade-in"><div className="form-section-title">AI 전화 설정</div><div className="form-grid">{!isDisability&&<div className="form-field full-width"><label className="form-label">돌봄군 (노인맞춤돌봄서비스)</label><div className="radio-group">{[{value:'',label:'미지정'},{value:'general',label:'일반돌봄군'},{value:'intensive',label:'중점돌봄군'}].map(opt=><label key={opt.value} className={`radio-option ${form.careGroup===opt.value?'radio-selected':''}`}><input type="radio" name="careGroup" value={opt.value} checked={(form.careGroup||'')===opt.value} onChange={()=>{const g=CARE_GROUPS[opt.value];setForm(f=>({...f,careGroup:opt.value,...(g?{callCycle:'custom',callDays:[...g.days]}:{})}));}} style={{display:'none'}}/>{opt.label}</label>)}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>선택하면 전화 안전확인 권장 주기가 자동 적용됩니다 (일반 주 2회 · 중점 주 1회, 아래에서 수정 가능). 미지정은 기존 주기 그대로.</div></div>}<div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #2563eb':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#1d4ed8':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['담당 지원사',(accounts.find(u=>u.email===form.assignedTo)||{}).name||form.assignedTo||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'수정 완료':'등록 완료'}</button></div></div>)}
               </div>
             </div>
           )}
