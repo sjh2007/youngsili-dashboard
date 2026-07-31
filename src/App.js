@@ -2481,8 +2481,8 @@ export default function App() {
                           <span className="alert-banner-name">미응답 {T.elder} {noRespChronic.length}명</span>
                           <span className="alert-banner-msg">최장 {noRespChronic[0].d}일째 무응답 · 즉시 확인 필요</span>
                         </div>
-                        <button className="btn-small" onClick={()=>{setSortBy('noResponse');goPage('elders');}}>{T.elder} 관리</button>
-                        <button className="btn-small" onClick={()=>setNoRespOpen(v=>!v)}>{noRespOpen?'접기':`펼치기 (${noRespChronic.length})`}</button>
+                        <button className="banner-btn banner-btn--danger" onClick={()=>{setSortBy('noResponse');goPage('elders');}}>{T.elder} 관리</button>
+                        <button className="banner-btn banner-btn--ghost" onClick={()=>setNoRespOpen(v=>!v)}>{noRespOpen?'접기 ▴':`펼치기 (${noRespChronic.length}) ▾`}</button>
                       </div>
                     )}
                     {noRespOpen && noRespChronic.map(({e, d}) => (
@@ -2501,7 +2501,7 @@ export default function App() {
                         <div className="alert-banner-body">
                           <span className="alert-banner-msg">폭염경보 발효 · 영향 {T.elder} {heatwaveElders.length}명 안전 확인 필요</span>
                         </div>
-                        {!isDisability && <button className="btn-small" onClick={()=>goPage('data')}>대상 보기</button>}
+                        {!isDisability && <button className="banner-btn banner-btn--warn" onClick={()=>goPage('data')}>대상 보기</button>}
                       </div>
                     )}
                   </div>
@@ -3521,7 +3521,7 @@ export default function App() {
                       {alert.status === 'ack' && <span style={{fontSize:12,fontWeight:800,color:'#b45309',background:'#fef3c7',padding:'3px 10px',borderRadius:20}}>조치중{alert.actionBy?` · ${alert.actionBy.split('@')[0]}`:''}</span>}
                       <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} disabled={!!draftingAlertId} title="통화 내용을 찾아 초안까지 채워서 엽니다" onClick={()=>openNoteFromAlert(alert)}>{draftingAlertId===alert.id?'초안 생성 중…':'일지 작성'}</button>
                       {(!alert.status || alert.status === 'new') && (
-                        <button className="btn-small" onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'ack'})}).catch(()=>{});fetchHealth();}}>조치 시작</button>
+                        <button className="banner-btn" style={{border:'1.5px solid '+m.c,color:m.c}} onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'ack'})}).catch(()=>{});fetchHealth();}}>조치 시작</button>
                       )}
                       {alert.status === 'ack' && (
                         <button className="btn-small" style={{background:'#16a34a',color:'#fff',borderColor:'#16a34a'}} onClick={async()=>{
