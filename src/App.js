@@ -228,6 +228,7 @@ export default function App() {
   const [memos, setMemos]             = useState(() => { try { return JSON.parse(localStorage.getItem('youngsili_memos')) || []; } catch { return []; } });
   const [lastSync, setLastSync]       = useState(null);   // 마지막 데이터 갱신 시각 (헤더 표시)
   const [todoDone, setTodoDone]       = useState({});     // 대시보드 "오늘 할 일" 체크 상태
+  const [noRespOpen, setNoRespOpen]   = useState(false);  // 대시보드 만성 미응답 요약 펼침 상태
   const [healthData, setHealthData]     = useState([]);
   const [caregivers, setCaregivers]     = useState(CAREGIVERS);
   const [alertsData, setAlertsData]     = useState([]);
@@ -2440,7 +2441,13 @@ export default function App() {
                   const msg = code ? `${kw} → ${code === 'missed' ? '안전확인 필요' : '즉시 확인'}` : `“${kw}” 위험 키워드 감지`;
                   return { elder: el, name: a.name, level: a.level, msg, count: a.count, time: a.timestamp };
                 });
-                const noResp = elders.filter(e => { const d = getNoResponseDays(e.lastCall, e.lastCallAt); return d >= 3 && d < 99; });
+                // 미응답: "오늘 새로 3일차 진입"만 개별 배너로 승격, 만성(4일 이상)은 요약 1줄 + 펼치기 (알림 피로 방지)
+                const noResp = elders
+                  .map(e => ({ e, d: getNoResponseDays(e.lastCall, e.lastCallAt) }))
+                  .filter(x => x.d >= 3 && x.d < 99)
+                  .sort((a, b) => b.d - a.d);
+                const noRespNew = noResp.filter(x => x.d === 3);
+                const noRespChronic = noResp.filter(x => x.d > 3);
                 const heatwaveElders = elders.filter(e => weatherData[e.region]?.alert === 'heatwave');
                 if (alerts.length === 0 && noResp.length === 0 && heatwaveElders.length === 0) return null;
                 return (
@@ -2449,7 +2456,7 @@ export default function App() {
                       <div key={i} className={`alert-banner ${a.level==='critical'?'alert-banner-danger':'alert-banner-warning'}`} onClick={() => a.elder && openDetail(a.elder)}>
                         <span className={`alert-banner-tag ${a.level==='critical'?'tag-danger':'tag-warning'}`}>{a.level==='critical'?'위험':'주의'}</span>
                         <div className="alert-banner-body">
-                          <span className="alert-banner-name">{a.elder ? `${a.elder.name} (${a.elder.age}세)` : a.name}</span>
+                          <span className="alert-banner-name">{a.elder ? `${a.elder.name}${a.elder.age?` (${a.elder.age}세)`:''}` : a.name}</span>
                           <span className="alert-banner-msg">{a.msg}</span>
                           {a.count > 1 && <span className="alert-banner-count">오늘 {a.count}회</span>}
                           {a.time && <span className="alert-banner-time">최근 {new Date(a.time).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>}
@@ -2457,12 +2464,33 @@ export default function App() {
                         {a.elder && <button className="btn-primary btn-banner-call" onClick={e=>{e.stopPropagation();setCallModal(a.elder);}}>앱 전화</button>}
                       </div>
                     ))}
-                    {noResp.map(e => (
+                    {noRespNew.map(({e, d}) => (
                       <div key={e.id} className="alert-banner alert-banner-danger" onClick={() => openDetail(e)}>
                         <span className="alert-banner-tag tag-danger">미응답</span>
                         <div className="alert-banner-body">
-                          <span className="alert-banner-name">{e.name} ({e.age}세)</span>
-                          <span className="alert-banner-msg">{getNoResponseDays(e.lastCall, e.lastCallAt)}일째 미응답 · 즉시 확인 필요</span>
+                          <span className="alert-banner-name">{e.name}{e.age?` (${e.age}세)`:''}</span>
+                          <span className="alert-banner-msg">{d}일째 미응답 · 오늘 확인 필요</span>
+                        </div>
+                        <button className="btn-primary btn-banner-call" onClick={ev=>{ev.stopPropagation();setCallModal(e);}}>앱 전화</button>
+                      </div>
+                    ))}
+                    {noRespChronic.length > 0 && (
+                      <div className="alert-banner alert-banner-danger" style={{cursor:'default'}}>
+                        <span className="alert-banner-tag tag-danger">미응답</span>
+                        <div className="alert-banner-body">
+                          <span className="alert-banner-name">미응답 {T.elder} {noRespChronic.length}명</span>
+                          <span className="alert-banner-msg">최장 {noRespChronic[0].d}일째 무응답 · 즉시 확인 필요</span>
+                        </div>
+                        <button className="btn-small" onClick={()=>{setSortBy('noResponse');goPage('elders');}}>{T.elder} 관리</button>
+                        <button className="btn-small" onClick={()=>setNoRespOpen(v=>!v)}>{noRespOpen?'접기':`펼치기 (${noRespChronic.length})`}</button>
+                      </div>
+                    )}
+                    {noRespOpen && noRespChronic.map(({e, d}) => (
+                      <div key={e.id} className="alert-banner alert-banner-danger alert-banner-sub" onClick={() => openDetail(e)}>
+                        <span className="alert-banner-tag tag-danger">{d}일째</span>
+                        <div className="alert-banner-body">
+                          <span className="alert-banner-name">{e.name}{e.age?` (${e.age}세)`:''}</span>
+                          <span className="alert-banner-msg">{d}일째 미응답 · 즉시 확인 필요</span>
                         </div>
                         <button className="btn-primary btn-banner-call" onClick={ev=>{ev.stopPropagation();setCallModal(e);}}>앱 전화</button>
                       </div>
@@ -2471,8 +2499,9 @@ export default function App() {
                       <div className="alert-banner alert-banner-warning">
                         <span className="alert-banner-tag tag-warning">폭염</span>
                         <div className="alert-banner-body">
-                          <span className="alert-banner-msg">폭염경보 발효 · {heatwaveElders.map(e=>e.name).join(', ')} 어르신 안전 확인 필요</span>
+                          <span className="alert-banner-msg">폭염경보 발효 · 영향 {T.elder} {heatwaveElders.length}명 안전 확인 필요</span>
                         </div>
+                        {!isDisability && <button className="btn-small" onClick={()=>goPage('data')}>대상 보기</button>}
                       </div>
                     )}
                   </div>
@@ -2631,7 +2660,7 @@ export default function App() {
                       return (
                         <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
                           <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><span style={{fontWeight:700}}>{elder.name}</span>{elder.keyword&&<span className="keyword-tag">"{elder.keyword}"</span>}</div></td>
-                          <td>{elder.age}세</td>
+                          <td>{elder.age?`${elder.age}세`:'—'}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
@@ -2943,7 +2972,7 @@ export default function App() {
                     return (
                       <tr key={elder.id} className={`${checked.includes(elder.id)?'row-checked':''} ${done?done.success?'row-success':'row-fail':''}`}>
                         <td><input type="checkbox" checked={checked.includes(elder.id)} onChange={()=>toggleCheck(elder.id)} className="cb"/></td>
-                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><div onClick={()=>openEdit(elder)} style={{cursor:'pointer'}} title="클릭 → 어르신 정보 수정"><div style={{fontWeight:700,color:'#1d4ed8'}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age}세</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'성공':'실패'}</span>}</div></td>
+                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><div onClick={()=>openEdit(elder)} style={{cursor:'pointer'}} title="클릭 → 어르신 정보 수정"><div style={{fontWeight:700,color:'#1d4ed8'}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age?`${elder.age}세`:'—'}</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'성공':'실패'}</span>}</div></td>
                         <td style={{fontSize:13}}>{elder.phone}</td>
                         <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                         <td><span className="cycle-badge">{cycleLabel(elder.callCycle, elder.callDays)}</span></td>
@@ -3037,7 +3066,7 @@ export default function App() {
                       <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)} style={selectedElders.has(elder.id)?{outline:'2px solid #2563eb',outlineOffset:2}:undefined}>
                         <div className="elder-top"><div style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:16,height:16,cursor:'pointer'}}/><div className="elder-avatar">{(elder.name||'?')[0]}</div></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
                         <div className="elder-name">{elder.name}</div>
-                        <div className="elder-info">{elder.age}세 · {elder.title} · {elder.region}</div>
+                        <div className="elder-info">{elder.age?`${elder.age}세 · `:''}{elder.title} · {elder.region}</div>
                         {elder.caregiver && <div className="elder-info" style={{color:'#1d4ed8',fontWeight:600}}>담당: {elder.caregiver}</div>}
                         {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>{noResponseDays >= 99 ? '통화이력 없음' : `${noResponseDays}일째 미응답`}</div>}
                         <div className="elder-last">마지막 통화: {renderLastCall(elder)}</div>
@@ -3063,7 +3092,7 @@ export default function App() {
                           <td onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedElders.has(elder.id)} onChange={()=>toggleElderSel(elder.id)} className="cb"/></td>
                           <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><strong>{elder.name}</strong></div></td>
                           <td><span className="cycle-badge">{elder.title}</span></td>
-                          <td>{elder.age}세</td>
+                          <td>{elder.age?`${elder.age}세`:'—'}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.region}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                           <td style={{fontSize:13,color:'#64748b'}}>{renderLastCall(elder)}</td>
