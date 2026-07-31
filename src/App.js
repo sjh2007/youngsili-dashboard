@@ -57,6 +57,29 @@ function CallTranscript({ text }) {
   );
 }
 
+// P2-8/P2-9 공통 접기·펼치기 패턴 — 일자·그룹 아코디언 헤더 (접혀도 요약 노출 · 클릭 토글 · 스크롤 시 sticky)
+// chips: [{label,value,color}] — 값 0이면 회색 일반, 0 초과면 지정색 볼드 (디자인팀 패턴 스펙)
+function GroupHeader({ label, count, unit = '건', chips = [], flag, open, onToggle }) {
+  return (
+    <div onClick={onToggle} role="button" tabIndex={0} aria-expanded={open}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+      style={{ position: 'sticky', top: 64, zIndex: 9, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
+        cursor: 'pointer', userSelect: 'none', background: open ? '#f0f5ff' : '#fff',
+        border: '1px solid ' + (open ? '#bfdbfe' : '#e2e8f0'), borderRadius: 10, padding: '10px 14px', marginBottom: 8,
+        boxShadow: '0 1px 2px rgba(0,0,0,.05)' }}>
+      <span aria-hidden="true" style={{ fontSize: 10, color: open ? '#246BEB' : '#94a3b8', width: 12, textAlign: 'center' }}>{open ? '▼' : '▶'}</span>
+      <span style={{ fontWeight: 800, fontSize: 14, color: '#334155' }}>{label}</span>
+      <span style={{ color: '#64748b', fontWeight: 600, fontSize: 13 }}>{count}{unit}</span>
+      {chips.map((c, i) => (
+        <span key={i} style={{ fontSize: 13, fontWeight: c.value > 0 ? 800 : 600, color: c.value > 0 ? c.color : '#94a3b8' }}>{c.label} {c.value}</span>
+      ))}
+      {flag && <span style={{ fontSize: 12, fontWeight: 800, color: '#b45309', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 20, padding: '2px 10px' }}>{flag}</span>}
+    </div>
+  );
+}
+// 오늘 날짜 키(로컬 YYYY-MM-DD) — 일자별 아코디언 '기본 오늘만 펼침' 판정
+const localDayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 const CAREGIVERS = [];  // 서버 /settings/caregivers + 등록된 어르신의 담당 복지사에서 파생 (더미 폐지)
 // (더미 INIT_ELDERS 제거 — 어르신 목록은 서버 /elders에서 로드)
 
@@ -602,7 +625,7 @@ export default function App() {
   // (elders 등은 로그인 시 재로드되는데 stats만 빠져 있었음 — 로그인 복원되면 자동 재조회)
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo, authUser]); // eslint-disable-line
   useEffect(() => {
-    if (page !== 'calls' && page !== 'elders' && page !== 'dashboard' && page !== 'safety') return;   // safety=안전확인 관리(주기 준수율)
+    if (page !== 'calls' && page !== 'elders' && page !== 'dashboard' && page !== 'safety' && page !== 'health') return;   // safety=안전확인 관리(주기 준수율) · health=행 확장 상세의 최근 7일 이력(P2-9)
     fetchCalls();
     // 통화기록 탭·홈에 있는 동안 15초 자동 갱신 → 방금 끝난 통화가 새로고침 없이 표시
     // (홈 '오늘 통화 현황'의 긴급/주의/정상 KPI도 callsHistory 기반이라 홈도 포함 — 발신 KPI만 갱신되던 반쪽 불일치 해소)
@@ -783,7 +806,19 @@ export default function App() {
   const [histLoading, setHistLoading] = useState(false);
   const [histDays, setHistDays]     = useState(7);
   const [histStatus, setHistStatus] = useState('all');   // 발신 이력 상태 필터 all|received|missed (KPI 드릴다운)
-  const [expandedHistDays, setExpandedHistDays] = useState(new Set());  // 발신 이력 날짜별 펼침
+  const [expandedHistDays, setExpandedHistDays] = useState(new Set());  // 발신 이력 — 하루 안에서 4건째부터 더 보기
+  const [histDayOv, setHistDayOv] = useState({});         // P2-8: 날짜별 아코디언 펼침 override (기본: 오늘만 펼침)
+  const [histAllOpen, setHistAllOpen] = useState(false);  // P2-8: 전체 접기/펼치기 버튼 상태
+  const [callsDayOv, setCallsDayOv] = useState({});       // P2-9: 통화 기록 날짜별 아코디언 (기본: 오늘만 펼침)
+  const [callsAllOpen, setCallsAllOpen] = useState(false);
+  const [expandedCallDays, setExpandedCallDays] = useState(new Set());  // 통화 기록 — 하루 안에서 4건째부터 더 보기
+  const [healthFilter, setHealthFilter] = useState('all');  // P2-9 건강 상태: 상태 필터 all|danger|warning|normal
+  const [healthRowOv, setHealthRowOv] = useState({});       // P2-9 건강 상태: 행별 펼침 override (기본: 위험만 펼침)
+  const [healthAllOpen, setHealthAllOpen] = useState(false);
+  const [healthNormalShown, setHealthNormalShown] = useState(10);  // 정상 어르신 10명 단위 지연 로드
+  const [elderSecOv, setElderSecOv] = useState({});         // P2-9 어르신 관리: 상태별 섹션 펼침 (기본: 위험·주의만)
+  const [normalCardView, setNormalCardView] = useState(false);  // 정상 그룹 카드/컴팩트 리스트 전환
+  const [popDoneOpen, setPopDoneOpen] = useState({});       // P2-9 공공데이터: 확인 완료 어르신 더보기
   const [batchSize, setBatchSize]   = useState(5);    // 배치당 발신 인원 (AI서버 동시통화 부하 분산)
   const [batchIntervalSec, setBatchIntervalSec] = useState(90);  // 배치 간 대기(초)
   const [batchWait, setBatchWait]   = useState(0);    // 다음 배치까지 남은 초(카운트다운 표시)
@@ -924,7 +959,7 @@ export default function App() {
     fetchElders();
     if (page === 'health') { fetchHealth(); fetchHealthHistory(); }
     if (page === 'report') fetchStats();
-    if (page === 'calls' || page === 'dashboard' || page === 'elders' || page === 'detail') fetchCalls();
+    if (page === 'calls' || page === 'dashboard' || page === 'elders' || page === 'detail' || page === 'health') fetchCalls();  // health: 행 확장 상세의 최근 7일 이력용
     if (page === 'data') fetchPopulation();
     if (page === 'script') fetchWeather();
     if (page === 'casenotes') loadCaseNotes();
@@ -2910,17 +2945,23 @@ export default function App() {
                 </div>
               )}
 
-              {/* 발신 이력(날짜별) — 언제 발신했는지 복지사/관리자가 확인 */}
+              {/* 발신 이력(날짜별 아코디언) — P2-8: 기본 오늘만 펼침, 과거는 요약 헤더만 */}
               <div className="section">
                 <div className="section-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
-                  <span>발신 이력</span>
-                  <span style={{display:'flex',gap:6}}>
+                  <span style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                    <span>발신 이력</span>
+                    {[['all','전체'],['received','받음'],['missed','부재중']].map(([k,l])=>(
+                      <button key={k} onClick={()=>setHistStatus(k)} className={`smart-btn ${histStatus===k?'smart-active':''}`} style={{fontSize:12,padding:'4px 12px'}}>{l}</button>
+                    ))}
+                    {histStatus==='missed' && <span style={{fontSize:11.5,color:'#b45309',fontWeight:700}}>부재중 행만 표시 · 전체 자동 펼침</span>}
+                  </span>
+                  <span style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     {[7,30].map(d=>(
                       <button key={d} onClick={()=>setHistDays(d)} className={`smart-btn ${histDays===d?'smart-active':''}`} style={{fontSize:12,padding:'4px 10px'}}>최근 {d}일</button>
                     ))}
                     <button onClick={()=>loadDispatchHistory(histDays)} className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}>새로고침</button>
-                    <span style={{fontSize:11,color:'#94a3b8',alignSelf:'center'}}>· 15초마다 자동 갱신</span>
-                    {histStatus!=='all' && <button onClick={()=>setHistStatus('all')} style={{fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:20,border:'1px solid #fdba74',background:'#fff7ed',color:'#ea580c',cursor:'pointer'}}>{histStatus==='missed'?'부재중만':'받음만'} ✕</button>}
+                    <button onClick={()=>{const open=!histAllOpen; setHistAllOpen(open); setHistDayOv(()=>{const o={}; dispatchHist.forEach(x=>{o[(x.sentAtIso||'').slice(0,10)||'미상']=open;}); return o;});}} className="btn-secondary" style={{fontSize:12,padding:'4px 10px',fontWeight:700}}>{histAllOpen?'전체 접기 ▴':'전체 펼치기 ▾'}</button>
+                    <span style={{fontSize:11,color:'#94a3b8',alignSelf:'center'}}>15초마다 자동 갱신</span>
                   </span>
                 </div>
                 {histLoading ? (
@@ -2937,13 +2978,18 @@ export default function App() {
                     const recv=rows.filter(r=>r.status==='completed'||r.status==='answered').length;
                     const miss=rows.filter(r=>r.status==='missed').length;
                     const sorted=rows.slice().sort((a,b)=>String(b.sentAtIso).localeCompare(String(a.sentAtIso)));
-                    const open=expandedHistDays.has(date);
-                    const shown=open?sorted:sorted.slice(0,3);
+                    // '부재중' 필터 선택 시 전체 자동 펼침(해당 행만 이미 필터됨), 그 외엔 오늘만 기본 펼침
+                    const open = histStatus==='missed' ? true : (histDayOv[date] !== undefined ? histDayOv[date] : date===localDayKey());
+                    const rowsOpen=expandedHistDays.has(date);
+                    const shown=rowsOpen?sorted:sorted.slice(0,3);
                     const hiddenBad=sorted.slice(3).filter(r=>r.status==='missed'||r.status==='failed').length;
                     return (
-                    <div key={date} style={{marginBottom:16}}>
-                      <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0',display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {rows.length}건</span><span style={{color:'#16a34a',fontWeight:700,fontSize:13}}>받음 {recv}건</span><span style={{color:'#f59e0b',fontWeight:700,fontSize:13}}>부재중 {miss}건</span></div>
-                      {shown.map((x,i)=>{
+                    <div key={date} style={{marginBottom:10}}>
+                      <GroupHeader label={formatDateHeader(date)} count={rows.length}
+                        chips={[{label:'받음',value:recv,color:'#16a34a'},{label:'부재중',value:miss,color:'#f59e0b'}]}
+                        flag={recv===0&&miss>0?'이날 전원 부재중':null}
+                        open={open} onToggle={()=>setHistDayOv(p=>({...p,[date]:!open}))}/>
+                      {open && shown.map((x,i)=>{
                         const t=x.sentAtIso?new Date(x.sentAtIso).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                         const st=x.status;
                         const info=(st==='completed'||st==='answered')?{ic:'',tx:`받음${x.durationSec?` (${x.durationSec}초)`:''}`,c:'#16a34a'}
@@ -2960,9 +3006,9 @@ export default function App() {
                           </div>
                         );
                       })}
-                      {sorted.length>3 && (
+                      {open && sorted.length>3 && (
                         <button onClick={()=>setExpandedHistDays(prev=>{const n=new Set(prev); n.has(date)?n.delete(date):n.add(date); return n;})} style={{marginTop:2,marginLeft:2,background:'none',border:'none',color:'#246BEB',fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'2px 0'}}>
-                          {open?'접기 ▴':`${sorted.length-3}건 더 보기${hiddenBad>0?` (부재중·실패 ${hiddenBad}건 포함)`:''} ▾`}
+                          {rowsOpen?'접기 ▴':`+ ${sorted.length-3}건 더 보기${hiddenBad>0?` (부재중·실패 ${hiddenBad}건 포함)`:''} ▾`}
                         </button>
                       )}
                     </div>
@@ -3062,28 +3108,64 @@ export default function App() {
                 </div>
               )}
 
-              {viewMode === 'card' && (
-                <div className="elder-grid">
-                  {filteredElders.length === 0 && <div className="empty-result">검색 결과가 없습니다</div>}
-                  {filteredElders.map(elder => {
-                    const risk = getSolitudeRisk(elder);
-                    const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
+              {viewMode === 'card' && (()=>{
+                // P2-9: 상태별 섹션 접기 — 위험·주의 기본 펼침, 정상은 접힘 + 컴팩트 리스트/카드 전환 토글
+                if (filteredElders.length === 0) return <div className="empty-result">검색 결과가 없습니다</div>;
+                const renderCard = elder => {
+                  const risk = getSolitudeRisk(elder);
+                  const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
+                  return (
+                    <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)} style={selectedElders.has(elder.id)?{outline:'2px solid #246BEB',outlineOffset:2}:undefined}>
+                      <div className="elder-top"><div style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:16,height:16,cursor:'pointer'}}/><div className="elder-avatar">{(elder.name||'?')[0]}</div></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
+                      <div className="elder-name">{elder.name}</div>
+                      <div className="elder-info">{elder.age?`${elder.age}세 · `:''}{elder.title} · {elder.region}</div>
+                      {elder.caregiver && <div className="elder-info" style={{color:'#246BEB',fontWeight:600}}>담당: {elder.caregiver}</div>}
+                      {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>{noResponseDays >= 99 ? '통화이력 없음' : `${noResponseDays}일째 미응답`}</div>}
+                      <div className="elder-last">마지막 통화: {renderLastCall(elder)}</div>
+                      {elder.keyword && <div className="keyword-tag mt8">"{elder.keyword}" 감지</div>}
+                      {elder.visits > 0 && <div className="visit-tag mt8">방문 필요 {elder.visits}회</div>}
+                      {!elder.callActive && <div className="paused-tag mt8">전화 중단 중</div>}
+                    </div>
+                  );
+                };
+                const renderCompactRow = elder => (
+                  <div key={elder.id} onClick={()=>openDetail(elder)}
+                    style={{display:'flex',alignItems:'center',gap:12,padding:'8px 14px',background:selectedElders.has(elder.id)?'#eff6ff':'#fff',border:'1px solid '+(selectedElders.has(elder.id)?'#93c5fd':'#e2e8f0'),borderRadius:10,marginBottom:6,cursor:'pointer',flexWrap:'wrap'}}>
+                    <input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:15,height:15,cursor:'pointer'}}/>
+                    <span style={{fontWeight:700,fontSize:14,minWidth:96}}>{elder.name}{elder.age?` (${elder.age}세)`:''}</span>
+                    <span style={{fontSize:13,color:'#64748b',minWidth:80}}>{elder.region}</span>
+                    {elder.caregiver && <span style={{fontSize:13,color:'#64748b'}}>담당 {elder.caregiver}</span>}
+                    <span style={{fontSize:12.5}}>{renderLastCall(elder)}</span>
+                    <span style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
+                      {!elder.callActive && <span style={{fontSize:11.5,fontWeight:700,color:'#dc2626'}}>전화 중단</span>}
+                      <span className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</span>
+                      <span style={{color:'#94a3b8',fontSize:12.5,fontWeight:700}}>상세 ›</span>
+                    </span>
+                  </div>
+                );
+                return [['danger','위험'],['warning','주의'],['normal','정상']]
+                  .map(([k,l])=>({k,l,list:filteredElders.filter(e=>e.status===k)}))
+                  .filter(g=>g.list.length>0)
+                  .map(g=>{
+                    const open = elderSecOv[g.k] !== undefined ? elderSecOv[g.k] : g.k!=='normal';
                     return (
-                      <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)} style={selectedElders.has(elder.id)?{outline:'2px solid #246BEB',outlineOffset:2}:undefined}>
-                        <div className="elder-top"><div style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:16,height:16,cursor:'pointer'}}/><div className="elder-avatar">{(elder.name||'?')[0]}</div></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
-                        <div className="elder-name">{elder.name}</div>
-                        <div className="elder-info">{elder.age?`${elder.age}세 · `:''}{elder.title} · {elder.region}</div>
-                        {elder.caregiver && <div className="elder-info" style={{color:'#246BEB',fontWeight:600}}>담당: {elder.caregiver}</div>}
-                        {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>{noResponseDays >= 99 ? '통화이력 없음' : `${noResponseDays}일째 미응답`}</div>}
-                        <div className="elder-last">마지막 통화: {renderLastCall(elder)}</div>
-                        {elder.keyword && <div className="keyword-tag mt8">"{elder.keyword}" 감지</div>}
-                        {elder.visits > 0 && <div className="visit-tag mt8">방문 필요 {elder.visits}회</div>}
-                        {!elder.callActive && <div className="paused-tag mt8">전화 중단 중</div>}
+                      <div key={g.k} style={{marginBottom:14}}>
+                        <GroupHeader label={g.l} count={g.list.length} unit="명"
+                          chips={g.k==='normal'?[]:[{label:'미응답 3일↑',value:g.list.filter(e=>getNoResponseDays(e.lastCall,e.lastCallAt)>=3).length,color:'#dc2626'}]}
+                          flag={g.k==='danger'&&!open?'위험 어르신 확인 필요':null}
+                          open={open} onToggle={()=>setElderSecOv(p=>({...p,[g.k]:!open}))}/>
+                        {open && g.k==='normal' && (
+                          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
+                            <button onClick={()=>setNormalCardView(v=>!v)} className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}}>{normalCardView?'컴팩트 리스트로 보기':'카드로 보기'}</button>
+                          </div>
+                        )}
+                        {open && (g.k==='normal' && !normalCardView
+                          ? <div>{g.list.map(renderCompactRow)}</div>
+                          : <div className="elder-grid">{g.list.map(renderCard)}</div>)}
                       </div>
                     );
-                  })}
-                </div>
-              )}
+                  });
+              })()}
 
               {viewMode === 'table' && (
                 <table className="table">
@@ -3306,6 +3388,7 @@ export default function App() {
                   <input type="date" value={callsTo} onChange={e=>setCallsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
                 </>)}
                 <button onClick={()=>fetchCalls()} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'불러오는 중':'새로고침'}</button>
+                <button onClick={()=>{const open=!callsAllOpen; setCallsAllOpen(open); setCallsDayOv(()=>{const o={}; callsHistory.forEach(c=>{o[c.date||(c.at?c.at.slice(0,10):'미상')]=open;}); return o;});}} className="btn-secondary" style={{fontSize:12,padding:'6px 12px',fontWeight:700}}>{callsAllOpen?'전체 접기 ▴':'전체 펼치기 ▾'}</button>
                 <span style={{fontSize:12,color:'#94a3b8'}}>15초마다 자동 갱신됩니다</span>
                 <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#246BEB':'#e2e8f0'),fontSize:13,width:120}}/>
                 <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#246BEB':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#246BEB':'#334155',background:'#fff',cursor:'pointer'}}>
@@ -3330,10 +3413,22 @@ export default function App() {
                 const src = callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch))&&callsRiskMatch(c));
                 const grouped = {};
                 src.forEach(c=>{ const dk=c.date||(c.at?c.at.slice(0,10):'미상'); (grouped[dk]=grouped[dk]||[]).push(c); });
-                return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,logs])=>(
-                  <div key={date} style={{marginBottom:18}}>
-                    <div style={{fontWeight:800,fontSize:14,color:'#334155',marginBottom:8,paddingBottom:6,borderBottom:'2px solid #e2e8f0'}}>{formatDateHeader(date)} <span style={{color:'#94a3b8',fontWeight:600,fontSize:13}}>· {logs.length}건</span></div>
-                    {logs.map(c=>{
+                // P2-9: 발신 이력과 동일한 일자별 아코디언 — 기본 오늘만 펼침, 필터·검색 사용 시 전체 자동 펼침
+                const filterOn = callsRisk!=='all' || !!callsSearch || !!callsPhone;
+                return Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,logs])=>{
+                  const nCrit=logs.filter(c=>c.riskLevel==='critical').length;
+                  const nUrg=logs.filter(c=>c.riskLevel==='urgent').length;
+                  const open = filterOn ? true : (callsDayOv[date] !== undefined ? callsDayOv[date] : date===localDayKey());
+                  const rowsOpen=expandedCallDays.has(date);
+                  const shown=rowsOpen?logs:logs.slice(0,3);
+                  const hiddenRisk=logs.slice(3).filter(c=>c.riskLevel==='critical'||c.riskLevel==='urgent').length;
+                  return (
+                  <div key={date} style={{marginBottom:12}}>
+                    <GroupHeader label={formatDateHeader(date)} count={logs.length}
+                      chips={[{label:'긴급',value:nCrit,color:'#dc2626'},{label:'주의',value:nUrg,color:'#f59e0b'}]}
+                      flag={nCrit>0&&!open?'위험 감지 있음':null}
+                      open={open} onToggle={()=>setCallsDayOv(p=>({...p,[date]:!open}))}/>
+                    {open && shown.map(c=>{
                       const R=RISK_CONFIG[c.riskLevel]||{};
                       const hm=c.at?new Date(c.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                       const dur=c.durationSec||0;
@@ -3357,8 +3452,13 @@ export default function App() {
                         </div>
                       );
                     })}
+                    {open && logs.length>3 && (
+                      <button onClick={()=>setExpandedCallDays(prev=>{const n=new Set(prev); n.has(date)?n.delete(date):n.add(date); return n;})} style={{marginTop:2,marginLeft:2,background:'none',border:'none',color:'#246BEB',fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'2px 0'}}>
+                        {rowsOpen?'접기 ▴':`+ ${logs.length-3}건 더 보기${hiddenRisk>0?` (긴급·주의 ${hiddenRisk}건 포함)`:''} ▾`}
+                      </button>
+                    )}
                   </div>
-                ));
+                );});
               })()}
             </div>
           )}
@@ -3546,44 +3646,112 @@ export default function App() {
                 </div>
                 );
               })()}
+              {/* P2-9: 어르신별 행 확장 아코디언 — 기본 접힘, 위험만 자동 펼침. 인라인 상세는 펼칠 때만 계산(지연 로드) */}
               <div className="section">
-                <div className="section-title">어르신별 건강 상태</div>
-                {healthData.length === 0 ? (
-                  <div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{marginTop:12}}>아직 건강 체크 데이터가 없습니다</div><div style={{fontSize:13,marginTop:6}}>어르신이 앱에서 건강 체크를 하면 여기에 표시됩니다</div></div>
-                ) : (
-                  <table className="table">
-                    <thead><tr><th>어르신</th><th>건강 상태</th><th>체크 시간</th><th>담당 복지사</th><th>조치</th></tr></thead>
-                    <tbody>
-                      {healthData.filter(alertIsReal).sort((a,b)=>{const order={bad:0,okay:1,good:2};return order[a.status]-order[b.status];}).map((h,i)=>{
-                        const elder=elders.find(e=>String(e.phone||'').replace(/\D/g,'')===String(h.phone||'').replace(/\D/g,''))||elders.find(e=>e.name===h.name);
-                        const pillCls={good:'pill-normal',okay:'pill-warning',bad:'pill-danger'}[h.status];
-                        const statusLabel={good:'좋아요',okay:'그럭저럭',bad:'안 좋아요'}[h.status];
-                        return (
-                          <tr key={i} style={{background:h.status==='bad'?'#fff5f5':'inherit'}}>
-                            <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(nameByPhone(h.phone, h.name)||'?')[0]}</div><strong>{nameByPhone(h.phone, h.name)}</strong></div></td>
-                            <td><span className={`result-pill ${pillCls}`}>{statusLabel}</span></td>
-                            <td style={{fontSize:13,color:'#6b7280'}}>{new Date(h.timestamp).toLocaleString('ko-KR')}</td>
-                            <td>{elder?.caregiver||'-'}</td>
-                            <td>
-                              {h.status==='bad'&&<button className="btn-small" style={{background:'#dc2626',color:'#fff',borderColor:'#dc2626'}} onClick={()=>elder&&setCallModal(elder)}>즉시 전화</button>}
-                              {h.status==='okay'&&<button className="btn-small" onClick={()=>elder&&setCallModal(elder)}>확인 전화</button>}
-                              {h.status==='good'&&<span style={{color:'#16a34a',fontSize:13,fontWeight:700}}>정상</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-              {elders.filter(e=>!healthData.find(h=>h.name===e.name)).length > 0 && (
-                <div className="section">
-                  <div className="section-title">오늘 미체크 어르신</div>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
-                    {elders.filter(e=>!healthData.find(h=>h.name===e.name)).map((e,i)=>(<div key={i} style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 16px',fontSize:14}}><strong>{e.name}</strong><span style={{color:'#9ca3af',fontSize:12,marginLeft:8}}>{e.region}</span></div>))}
-                  </div>
+                <div className="section-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                  <span style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                    <span>어르신별 건강 상태</span>
+                    {[['all','전체'],['danger','위험'],['warning','주의'],['normal','정상']].map(([k,l])=>{
+                      const n = k==='all' ? elders.filter(e=>e.approved!==false).length : elders.filter(e=>e.approved!==false&&e.status===k).length;
+                      return <button key={k} onClick={()=>setHealthFilter(k)} className={`smart-btn ${healthFilter===k?'smart-active':''}`} style={{fontSize:12,padding:'4px 12px'}}>{l} {n}</button>;
+                    })}
+                  </span>
+                  <button onClick={()=>{const open=!healthAllOpen; setHealthAllOpen(open); setHealthRowOv(()=>{const o={}; elders.forEach(e=>{o[e.id]=open;}); return o;}); if(open) setHealthNormalShown(9999);}} className="btn-secondary" style={{fontSize:12,padding:'4px 10px',fontWeight:700}}>{healthAllOpen?'전체 접기 ▴':'전체 펼치기 ▾'}</button>
                 </div>
-              )}
+                {(()=>{
+                  const list = elders.filter(e=>e.approved!==false);
+                  if (list.length===0) return <div style={{textAlign:'center',padding:40,color:'#9ca3af'}}>등록된 어르신이 없습니다.</div>;
+                  const order={danger:0,warning:1,normal:2};
+                  const HLABEL={good:'좋아요',okay:'그럭저럭',bad:'안 좋아요'};
+                  const hCheckOf = (e)=>{ const p=String(e.phone||'').replace(/\D/g,''); return (p&&healthData.find(h=>String(h.phone||'').replace(/\D/g,'')===p))||healthData.find(h=>h.name===e.name); };
+                  // 정렬: 위험 → 주의 → 정상(최근 통화순)
+                  const sorted = list.slice().sort((a,b)=> ((order[a.status]??2)-(order[b.status]??2)) || String(b.lastCallAt||'').localeCompare(String(a.lastCallAt||'')));
+                  const visible = sorted.filter(e=>healthFilter==='all'||e.status===healthFilter);
+                  if (visible.length===0) return <div style={{textAlign:'center',padding:30,color:'#9ca3af'}}>해당 상태의 어르신이 없습니다.</div>;
+                  const riskRows = visible.filter(e=>e.status!=='normal');
+                  const normalRows = visible.filter(e=>e.status==='normal');
+                  const shownRows = [...riskRows, ...normalRows.slice(0,healthNormalShown)];
+                  const hiddenNormal = Math.max(0, normalRows.length-healthNormalShown);
+                  return (<>
+                    {shownRows.map(elder=>{
+                      const stc = STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal;
+                      const open = healthRowOv[elder.id] !== undefined ? healthRowOv[elder.id] : elder.status==='danger';
+                      const hc = hCheckOf(elder);
+                      const nrd = getNoResponseDays(elder.lastCall, elder.lastCallAt);
+                      const isRisk = elder.status!=='normal';
+                      const summary = isRisk
+                        ? ([elder.keyword&&`"${elder.keyword}" 감지`, nrd>=1&&(nrd>=99?'통화 이력 없음':`${nrd}일째 미응답`), hc&&`앱 체크: ${HLABEL[hc.status]||'-'}`].filter(Boolean).join(' · ') || '위험 신호 확인 필요')
+                        : [nrd===0?'오늘 통화 완료':(nrd==null||nrd>=99)?'통화 이력 없음':`마지막 통화 ${nrd}일 전`, hc?`앱 체크: ${HLABEL[hc.status]||'-'}`:'오늘 앱 미체크'].join(' · ');
+                      return (
+                        <div key={elder.id} style={{marginBottom:8}}>
+                          <div onClick={()=>setHealthRowOv(p=>({...p,[elder.id]:!open}))} role="button" tabIndex={0} aria-expanded={open}
+                            onKeyDown={e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); setHealthRowOv(p=>({...p,[elder.id]:!open})); } }}
+                            style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',cursor:'pointer',userSelect:'none',padding:'11px 14px',
+                              borderRadius:open?'10px 10px 0 0':'10px',
+                              border:'1px solid '+(elder.status==='danger'?'#fecaca':open?'#bfdbfe':'#e2e8f0'),
+                              background:elder.status==='danger'?'#fef2f2':open?'#f0f5ff':'#fff'}}>
+                            <span aria-hidden="true" style={{fontSize:10,color:'#94a3b8',width:12,textAlign:'center'}}>{open?'▼':'▶'}</span>
+                            <span style={{fontWeight:800,fontSize:14,minWidth:100}}>{elder.name}{elder.age?` (${elder.age}세)`:''}</span>
+                            <span className={`status-badge badge-${elder.status}`}>{stc.label}</span>
+                            <span style={{flex:1,minWidth:160,fontSize:13,fontWeight:isRisk?700:500,color:elder.status==='danger'?'#dc2626':elder.status==='warning'?'#b45309':'#64748b'}}>{summary}</span>
+                            {elder.status==='danger' ? (
+                              <span style={{display:'flex',gap:6}} onClick={e=>e.stopPropagation()}>
+                                <button className="btn-call-sm" onClick={()=>setCallModal(elder)}>앱 전화</button>
+                                <button className="btn-secondary" style={{fontSize:12,padding:'4px 10px'}} onClick={()=>openDetail(elder)}>상세</button>
+                              </span>
+                            ) : (
+                              <button onClick={e=>{e.stopPropagation();openDetail(elder);}} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12.5,fontWeight:700,cursor:'pointer'}}>상세 ›</button>
+                            )}
+                          </div>
+                          {open && (()=>{
+                            const p = String(elder.phone||'').replace(/\D/g,'');
+                            const wk = Date.now()-7*86400000;
+                            const fmtMD = iso => { const d=new Date(iso); return `${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`; };
+                            const evts = [
+                              ...callsHistory.filter(c=>String(c.phone||'').replace(/\D/g,'')===p && c.at && new Date(c.at)>=wk).map(c=>{
+                                const risky=c.riskLevel==='critical'||c.riskLevel==='urgent';
+                                const kw=risky?kwFromTranscript(c.transcript):null;
+                                return { at:c.at, danger:risky, tx:`받음 ${c.durationSec||0}초${kw?` · "${kw}" 감지`:''}` };
+                              }),
+                              ...healthHistory.filter(h=>{const hp=String(h.phone||'').replace(/\D/g,''); return (hp?hp===p:h.name===elder.name) && h.at && new Date(h.at)>=wk;}).map(h=>(
+                                { at:h.at, danger:h.status==='bad', tx:`앱 건강 체크: ${HLABEL[h.status]||h.status||'-'}` }
+                              )),
+                            ].sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,8);
+                            const judge = isRisk ? [
+                              elder.keyword&&`"${elder.keyword}" 키워드 감지`,
+                              nrd>=2&&nrd<99&&`${nrd}일 연속 미응답`,
+                              hc&&hc.status==='bad'&&`앱 건강 체크 '안 좋아요'`,
+                            ].filter(Boolean).join(' + ') : '';
+                            return (
+                              <div style={{border:'1px solid '+(elder.status==='danger'?'#fecaca':'#bfdbfe'),borderTop:'none',borderRadius:'0 0 10px 10px',background:'#f8fafc',padding:'14px 18px'}}>
+                                <div style={{fontWeight:800,fontSize:13,color:'#334155',marginBottom:6}}>최근 7일 이력</div>
+                                {evts.length===0 ? <div style={{fontSize:13,color:'#94a3b8'}}>최근 7일 내 통화·건강 체크 기록이 없습니다.</div>
+                                  : evts.map((v,i)=>(
+                                    <div key={i} style={{display:'flex',gap:10,fontSize:13,marginBottom:3}}>
+                                      <span style={{color:'#94a3b8',minWidth:40}}>{fmtMD(v.at)}</span>
+                                      <span style={{fontWeight:v.danger?800:500,color:v.danger?'#dc2626':'#334155'}}>{v.tx}</span>
+                                    </div>
+                                  ))}
+                                {judge && <div style={{fontSize:13,fontWeight:800,color:'#dc2626',marginTop:8}}>판단 근거: {judge}</div>}
+                                <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}>
+                                  <button className="btn-call-sm" onClick={()=>setCallModal(elder)}>앱 전화</button>
+                                  <button className="btn-secondary" style={{fontSize:12.5}} onClick={()=>openDetail(elder)}>상세 정보</button>
+                                  {elder.guardianPhone && <a href={`tel:${elder.guardianPhone}`} className="btn-secondary" style={{fontSize:12.5,textDecoration:'none'}}>보호자 연락 ({elder.guardian||'보호자'} {elder.guardianPhone})</a>}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      );
+                    })}
+                    {hiddenNormal>0 && (
+                      <button onClick={()=>setHealthNormalShown(n=>n+10)} style={{background:'none',border:'none',color:'#246BEB',fontSize:13,fontWeight:700,cursor:'pointer',padding:'6px 2px'}}>
+                        + 나머지 정상 {hiddenNormal}명 보기 ▾ <span style={{color:'#94a3b8',fontWeight:600}}>(10명 단위 지연 로드)</span>
+                      </button>
+                    )}
+                  </>);
+                })()}
+              </div>
               {/* 건강 체크 이력 (일/월별) — healthEvents 컬렉션 */}
               <div className="section">
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:14}}>
@@ -3794,24 +3962,46 @@ export default function App() {
                       ];
                       const groups = ALERTS.map(a => ({...a, list: elders.filter(e => weatherData[e.region]?.alert === a.key)})).filter(g => g.list.length > 0);
                       if (groups.length === 0) return <div style={{color:'#16a34a',fontSize:15,padding:'20px 0',textAlign:'center'}}>현재 발령된 기상특보가 없습니다. 모든 어르신이 안전한 날씨입니다.</div>;
-                      return groups.map(g => (
+                      return groups.map(g => {
+                        // P2-9: '확인 필요'만 노출, 오늘 통화 받은(확인 완료) 어르신은 "+N명 더보기 ▾"로 접기
+                        const doneList = g.list.filter(e => getNoResponseDays(e.lastCall, e.lastCallAt) === 0);
+                        const needList = g.list.filter(e => getNoResponseDays(e.lastCall, e.lastCallAt) !== 0);
+                        const doneOpen = !!popDoneOpen[g.key];
+                        return (
                         <div key={g.key} style={{marginBottom:16}}>
-                          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,fontWeight:700,color:g.color}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,fontWeight:700,color:g.color,flexWrap:'wrap'}}>
                             <span style={{fontSize:18}}>{g.icon}</span> {g.label} · {g.list.length}명 <span style={{fontWeight:400,color:'#6b7280',fontSize:13}}>({g.tip})</span>
+                            <span style={{fontSize:13,fontWeight:700,color:needList.length>0?'#dc2626':'#94a3b8'}}>확인 필요 {needList.length}</span>
+                            <span style={{fontSize:13,fontWeight:700,color:'#16a34a'}}>확인 완료 {doneList.length}</span>
                           </div>
+                          {needList.length===0 && <div style={{fontSize:13.5,color:'#16a34a',fontWeight:700,marginBottom:8}}>오늘 통화에서 전원 안전 확인 완료</div>}
                           <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
-                            {g.list.map(e => (
+                            {needList.map(e => (
                               <div key={e.id} style={{border:'1px solid '+g.color+'33',borderRadius:10,padding:'10px 14px',background:'#fff',minWidth:210,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
                                 <div>
                                   <div style={{fontWeight:700,color:'#0f172a'}}>{e.name} <span style={{fontWeight:400,fontSize:12,color:e.status==='danger'?'#ef4444':e.status==='warning'?'#f59e0b':'#9ca3af'}}>{e.status==='danger'?'· 위험':e.status==='warning'?'· 주의':''}</span></div>
-                                  <div style={{fontSize:12,color:'#6b7280'}}>{e.region} · {weatherData[e.region]?.temp}℃</div>
+                                  <div style={{fontSize:12,color:'#6b7280'}}>{e.region} · {weatherData[e.region]?.temp}℃ · <span style={{color:'#dc2626',fontWeight:700}}>확인 필요</span></div>
                                 </div>
                                 <button onClick={()=>e.callActive&&setCallModal(e)} disabled={calling===e.id||!e.callActive} style={{fontSize:13,padding:'6px 12px',borderRadius:8,border:'none',background:e.callActive?g.color:'#d1d5db',color:'#fff',cursor:e.callActive?'pointer':'not-allowed',fontWeight:700,whiteSpace:'nowrap'}}>{calling===e.id?'발신 중':'앱 전화'}</button>
                               </div>
                             ))}
+                            {doneOpen && doneList.map(e => (
+                              <div key={e.id} style={{border:'1px solid #bbf7d0',borderRadius:10,padding:'10px 14px',background:'#f0fdf4',minWidth:210,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+                                <div>
+                                  <div style={{fontWeight:700,color:'#0f172a'}}>{e.name}</div>
+                                  <div style={{fontSize:12,color:'#6b7280'}}>{e.region}</div>
+                                </div>
+                                <span style={{fontSize:13,fontWeight:800,color:'#16a34a',whiteSpace:'nowrap'}}>확인 완료{e.lastCallAt?` (${new Date(e.lastCallAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false})})`:''}</span>
+                              </div>
+                            ))}
                           </div>
+                          {doneList.length>0 && (
+                            <button onClick={()=>setPopDoneOpen(p=>({...p,[g.key]:!doneOpen}))} style={{marginTop:8,background:'none',border:'none',color:'#246BEB',fontSize:13,fontWeight:700,cursor:'pointer',padding:0}}>
+                              {doneOpen?'접기 ▴':`+ ${doneList.length}명 더보기 (확인 완료) ▾`}
+                            </button>
+                          )}
                         </div>
-                      ));
+                      );});
                     })()}
                   </div>
                 </>
