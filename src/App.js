@@ -5,6 +5,9 @@ import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/aut
 import * as XLSX from 'xlsx';
 import HelpGuide, { LATEST_NOTICE } from './HelpGuide';
 import AuthScreen from './AuthScreen';
+import { LayoutGrid, Activity, Users, ShieldCheck, Phone, CalendarDays, MessageSquare,
+         PencilLine, FileText, BarChart3, Database, Building2, BookOpen, RotateCw,
+         AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 const SERVER_URL = 'https://youngsili-server-production.up.railway.app';
 
@@ -46,7 +49,7 @@ function CallTranscript({ text }) {
         );
       })}
       {more > 0 && (
-        <button onClick={() => setOpen(o => !o)} style={{ marginTop: 4, background: 'none', border: 'none', color: '#2563eb', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+        <button onClick={() => setOpen(o => !o)} style={{ marginTop: 4, background: 'none', border: 'none', color: '#246BEB', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
           {open ? '접기 ▴' : `전체 대화 ${more}턴 더 보기 ▾`}
         </button>
       )}
@@ -98,7 +101,7 @@ const juminToBirth = (jumin) => {
 
 // 노인맞춤돌봄서비스 돌봄군 — 전화 안전확인 권장 주기(제도 기준): 일반돌봄군 주 2회, 중점돌봄군 주 1회(방문이 주 2회라 전화는 1회)
 const CARE_GROUPS = {
-  general:   { label: '일반돌봄군', weeklyCalls: 2, days: ['월','목'], color: '#2563eb' },
+  general:   { label: '일반돌봄군', weeklyCalls: 2, days: ['월','목'], color: '#246BEB' },
   intensive: { label: '중점돌봄군', weeklyCalls: 1, days: ['수'],     color: '#7c3aed' },
 };
 
@@ -160,32 +163,19 @@ const getWeatherIcon = (c = '') => {
   return '☀️';
 };
 
-// 사이드바용 라인 아이콘 (이모지 대체 — V2 디자인 언어)
+// 사이드바 아이콘 — Lucide 단일 세트 (P1-3: 이모지·자체 SVG 제거, stroke 1.75)
+const NAV_LUCIDE = {
+  dashboard: LayoutGrid, health: Activity, elders: Users, safety: ShieldCheck,
+  calls: Phone, report: BarChart3, schedule: CalendarDays, script: MessageSquare,
+  casenotes: PencilLine, forms: FileText, data: Database, admin: Building2, help: BookOpen,
+};
 const NavIcon = ({ name }) => {
-  const paths = {
-    dashboard: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
-    health:    <path d="M3 12h4l2-7 4 14 2-7h6"/>,
-    elders:    <><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16 14.5c3 .3 5.5 2.4 5.5 5.5"/></>,
-    calls:     <path d="M21 16.5v3a2 2 0 0 1-2.2 2A19.5 19.5 0 0 1 2.5 5.2 2 2 0 0 1 4.5 3h3a2 2 0 0 1 2 1.7c.13.96.36 1.9.7 2.8a2 2 0 0 1-.45 2.1L8.6 10.7a16 16 0 0 0 4.7 4.7l1.1-1.15a2 2 0 0 1 2.1-.45c.9.34 1.84.57 2.8.7a2 2 0 0 1 1.7 2z"/>,
-    report:    <><path d="M3 21h18"/><rect x="5" y="12" width="3.5" height="6" rx="1"/><rect x="10.5" y="7" width="3.5" height="11" rx="1"/><rect x="16" y="3" width="3.5" height="15" rx="1"/></>,
-    schedule:  <><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></>,
-    script:    <><path d="M21 14a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></>,
-    data:      <><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6M4 11.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></>,
-    safety:    <><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 5-5"/></>,
-    casenotes: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
-    forms:     <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 13h6M9 17h6"/></>,
-    admin:     <><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/></>,
-    help:      <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 4.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></>,
-  };
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.dashboard}</svg>;
+  const I = NAV_LUCIDE[name] || LayoutGrid;
+  return <I size={18} strokeWidth={1.75} aria-hidden="true" />;
 };
 
 // 새로고침 아이콘 (헤더)
-const RefreshIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
-  </svg>
-);
+const RefreshIcon = () => <RotateCw size={13} strokeWidth={2} aria-hidden="true" />;
 
 export default function App() {
   const [page, setPage]         = useState(() => { try { const h = (window.location.hash || '').replace('#',''); return PAGES.includes(h) ? h : 'dashboard'; } catch { return 'dashboard'; } });
@@ -229,6 +219,7 @@ export default function App() {
   const [lastSync, setLastSync]       = useState(null);   // 마지막 데이터 갱신 시각 (헤더 표시)
   const [todoDone, setTodoDone]       = useState({});     // 대시보드 "오늘 할 일" 체크 상태
   const [noRespOpen, setNoRespOpen]   = useState(false);  // 대시보드 만성 미응답 요약 펼침 상태
+  const [alertsOpen, setAlertsOpen]   = useState(false);  // 대시보드 알림 배너 3건 초과분 펼침 (위험은 항상 노출)
   const [healthData, setHealthData]     = useState([]);
   const [caregivers, setCaregivers]     = useState(CAREGIVERS);
   const [alertsData, setAlertsData]     = useState([]);
@@ -1139,7 +1130,7 @@ export default function App() {
 
   // ── 상담·방문 일지(caseNotes) ──
   const CASE_TYPE_META = {
-    visit:    { label: '가정방문', icon: '🏠', color: '#2563eb', bg: '#dbeafe' },
+    visit:    { label: '가정방문', icon: '🏠', color: '#246BEB', bg: '#dbeafe' },
     phone:    { label: '전화상담', icon: '📞', color: '#16a34a', bg: '#dcfce7' },
     office:   { label: '내소상담', icon: '🏢', color: '#7c3aed', bg: '#ede9fe' },
     guardian: { label: '보호자상담', icon: '👪', color: '#c2410c', bg: '#ffedd5' },
@@ -1370,7 +1361,7 @@ export default function App() {
       .sig2{text-align:right;margin-top:14px;font-size:14px}
       .foot{text-align:right;margin-top:22px;font-size:13px;font-weight:700}
       .noprint{position:fixed;top:12px;right:12px}
-      .noprint button{padding:10px 18px;font-size:14px;font-weight:800;border-radius:8px;border:0;background:#1d4ed8;color:#fff;cursor:pointer}
+      .noprint button{padding:10px 18px;font-size:14px;font-weight:800;border-radius:8px;border:0;background:#246BEB;color:#fff;cursor:pointer}
       .hint{position:fixed;top:12px;left:12px;font-size:12px;color:#64748b;background:#f1f5f9;padding:6px 10px;border-radius:8px}
       .pgbrk{page-break-after:always;border-top:2px dashed #cbd5e1;margin:40px 0}
       @media print{.noprint,.hint{display:none}body{margin:0 auto}.pgbrk{border:0;margin:0}}
@@ -1573,7 +1564,7 @@ export default function App() {
       .day.holbg{background:#fef7f7}
       .day.empty{background:#fafafa}
       .dnum{font-size:12px;font-weight:800;color:#334155;margin-bottom:5px}
-      .dnum.red{color:#dc2626}.dnum.blue{color:#2563eb}
+      .dnum.red{color:#dc2626}.dnum.blue{color:#246BEB}
       .x15{font-size:9.5px;font-weight:900;color:#7c3aed;margin-left:3px}
       .val{border:1px solid #cbd5e1;border-radius:8px;padding:6px 4px;text-align:center;font-size:14px;font-weight:700;color:#0f172a;background:#fff;min-height:18px}
       .wksum{background:#f8fafc;border-left:2px solid #e2e8f0;text-align:center;vertical-align:middle;font-weight:900;font-size:13px;color:#1e3a6e;width:88px}
@@ -1585,7 +1576,7 @@ export default function App() {
       .orgn{text-align:right;font-size:13px;font-weight:800;margin-top:4px}
       .pgbrk{page-break-after:always;border-top:2px dashed #cbd5e1;margin:36px 0}
       .noprint{position:fixed;top:12px;right:12px}
-      .noprint button{padding:10px 18px;font-size:14px;font-weight:800;border-radius:8px;border:0;background:#1d4ed8;color:#fff;cursor:pointer}
+      .noprint button{padding:10px 18px;font-size:14px;font-weight:800;border-radius:8px;border:0;background:#246BEB;color:#fff;cursor:pointer}
       .hint{position:fixed;top:12px;left:12px;font-size:12px;color:#64748b;background:#f1f5f9;padding:6px 10px;border-radius:8px}
       @media print{.noprint,.hint{display:none}body{margin:0 auto}.pgbrk{border:0;margin:0}}
     </style></head><body>
@@ -2099,7 +2090,7 @@ export default function App() {
                     <div key={ci} style={{padding:'6px 6px 8px',borderLeft:ci>0?'1px solid #f1f5f9':'none',background:d?(ci===0?'#fef7f7':ci===6?'#f6f9ff':'#fff'):'#fafafa',minHeight:62}}>
                       {d && <>
                         <div onClick={()=>toggleHoliday(d)} title={(dowOf(d)!==0&&dowOf(d)!==6)?'클릭: 공휴일 지정/해제 (1.5배 인정)':''}
-                          style={{fontSize:12.5,fontWeight:800,color:is15(d)?'#dc2626':ci===6?'#2563eb':'#334155',marginBottom:4,cursor:(dowOf(d)!==0&&dowOf(d)!==6)?'pointer':'default'}}>
+                          style={{fontSize:12.5,fontWeight:800,color:is15(d)?'#dc2626':ci===6?'#246BEB':'#334155',marginBottom:4,cursor:(dowOf(d)!==0&&dowOf(d)!==6)?'pointer':'default'}}>
                           {m}/{d}{is15(d)&&<span style={{fontSize:10,marginLeft:3,fontWeight:900,color:'#7c3aed'}}>×1.5</span>}
                         </div>
                         <input type="number" min="0" max="24" step="0.5" className="form-input" style={{width:'100%',margin:0,padding:'5px 6px',fontSize:14,textAlign:'center'}}
@@ -2123,7 +2114,7 @@ export default function App() {
                 return (
                 <div key={d}>
                   <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',background:is15(d)?'#fef7f7':isSat?'#eff6ff':'#fff',borderTop:d>1?'1px solid #f1f5f9':'none'}}>
-                    <span onClick={()=>toggleHoliday(d)} style={{width:96,fontSize:13.5,fontWeight:700,color:is15(d)?'#dc2626':isSat?'#2563eb':'#334155',cursor:(!isSun&&!isSat)?'pointer':'default'}}
+                    <span onClick={()=>toggleHoliday(d)} style={{width:96,fontSize:13.5,fontWeight:700,color:is15(d)?'#dc2626':isSat?'#246BEB':'#334155',cursor:(!isSun&&!isSat)?'pointer':'default'}}
                       title={(!isSun&&!isSat)?'클릭: 공휴일 지정/해제 (1.5배 인정)':''}>
                       {m}/{d} ({DOW[dow]}){is15(d)&&<span style={{fontSize:10.5,marginLeft:3,fontWeight:900,color:'#7c3aed'}}>×1.5</span>}
                     </span>
@@ -2312,37 +2303,38 @@ export default function App() {
           {(() => {
             // 활동지원 기관: 일지·서식이 주 업무 → 상단 배치, 노인돌봄 전용(안전확인·건강·공공데이터)은 숨김.
             // AI 안부전화는 보조 기능으로 유지(발신·멘트·통화기록).
+            // P1-1: 모니터링 → 기록 → 운영 설정 → 외부 데이터 순 (디자인팀 확정)
             const groups = isDisability ? [
               { label:'모니터링', items:[
                 {id:'dashboard', icon:'dashboard', label:'대시보드'},
                 {id:'elders',    icon:'elders',    label:`${T.elder} 관리`},
               ]},
-              { label:'일지·보고', items:[
+              { label:'기록', items:[
+                {id:'calls',     icon:'calls',     label:'통화 기록'},
                 {id:'casenotes', icon:'casenotes', label:'상담·방문 일지'},
                 {id:'forms',     icon:'forms',     label:'보고서·서식'},
                 {id:'report',    icon:'report',    label:'리포트 / 통계'},
               ]},
-              { label:'안부 전화', items:[
+              { label:'운영 설정', items:[
                 {id:'schedule', icon:'schedule', label:'전화 발신 관리'},
                 {id:'script',   icon:'script',   label:'전화 멘트 관리'},
-                {id:'calls',    icon:'calls',    label:'통화 기록'},
               ]},
             ] : [
               { label:'모니터링', items:[
                 {id:'dashboard', icon:'dashboard', label:'대시보드'},
+                {id:'health',    icon:'health',    label:'건강 상태', badge: alertCount},
                 {id:'elders',    icon:'elders',    label:`${T.elder} 관리`},
                 {id:'safety',    icon:'safety',    label:'안전확인 관리'},
-                {id:'health',    icon:'health',    label:'건강 상태', badge: alertCount},
               ]},
-              { label:'안부 전화', items:[
-                {id:'schedule', icon:'schedule', label:'전화 발신 관리'},
-                {id:'script',   icon:'script',   label:'전화 멘트 관리'},
-                {id:'calls',    icon:'calls',    label:'통화 기록'},
-              ]},
-              { label:'기록·보고', items:[
+              { label:'기록', items:[
+                {id:'calls',     icon:'calls',     label:'통화 기록'},
                 {id:'casenotes', icon:'casenotes', label:'상담·방문 일지'},
                 {id:'forms',     icon:'forms',     label:'보고서·서식'},
                 {id:'report',    icon:'report',    label:'리포트 / 통계'},
+              ]},
+              { label:'운영 설정', items:[
+                {id:'schedule', icon:'schedule', label:'전화 발신 관리'},
+                {id:'script',   icon:'script',   label:'전화 멘트 관리'},
               ]},
               { label:'외부 데이터', items:[
                 {id:'data', icon:'data', label:'공공데이터 현황'},
@@ -2450,10 +2442,10 @@ export default function App() {
                 const noRespChronic = noResp.filter(x => x.d > 3);
                 const heatwaveElders = elders.filter(e => weatherData[e.region]?.alert === 'heatwave');
                 if (alerts.length === 0 && noResp.length === 0 && heatwaveElders.length === 0) return null;
-                return (
-                  <div className="alert-stack">
-                    {alerts.map((a, i) => (
-                      <div key={i} className={`alert-banner ${a.level==='critical'?'alert-banner-danger':'alert-banner-warning'}`} onClick={() => a.elder && openDetail(a.elder)}>
+                // P2-9: 배너 3건 초과 시 접기 — 위험(critical)은 항상 노출
+                const ordered = [...alerts].sort((a, b) => (a.level==='critical'?0:1) - (b.level==='critical'?0:1));
+                const kwRows = ordered.map((a, i) => (
+                      <div key={`kw${i}`} className={`alert-banner ${a.level==='critical'?'alert-banner-danger':'alert-banner-warning'}`} onClick={() => a.elder && openDetail(a.elder)}>
                         <span className={`alert-banner-tag ${a.level==='critical'?'tag-danger':'tag-warning'}`}>{a.level==='critical'?'위험':'주의'}</span>
                         <div className="alert-banner-body">
                           <span className="alert-banner-name">{a.elder ? `${a.elder.name}${a.elder.age?` (${a.elder.age}세)`:''}` : a.name}</span>
@@ -2463,9 +2455,9 @@ export default function App() {
                         </div>
                         {a.elder && <button className="btn-primary btn-banner-call" onClick={e=>{e.stopPropagation();setCallModal(a.elder);}}>앱 전화</button>}
                       </div>
-                    ))}
-                    {noRespNew.map(({e, d}) => (
-                      <div key={e.id} className="alert-banner alert-banner-danger" onClick={() => openDetail(e)}>
+                ));
+                const newRows = noRespNew.map(({e, d}) => (
+                      <div key={`nr${e.id}`} className="alert-banner alert-banner-danger" onClick={() => openDetail(e)}>
                         <span className="alert-banner-tag tag-danger">미응답</span>
                         <div className="alert-banner-body">
                           <span className="alert-banner-name">{e.name}{e.age?` (${e.age}세)`:''}</span>
@@ -2473,7 +2465,21 @@ export default function App() {
                         </div>
                         <button className="btn-primary btn-banner-call" onClick={ev=>{ev.stopPropagation();setCallModal(e);}}>앱 전화</button>
                       </div>
-                    ))}
+                ));
+                // 위험(빨강) 행은 항상 노출: critical 키워드 → 미응답 신규(위험) → 주의 순으로 배치
+                const nCritical = ordered.filter(a => a.level === 'critical').length;
+                const rows = [...kwRows.slice(0, nCritical), ...newRows, ...kwRows.slice(nCritical)];
+                const limit = Math.max(3, nCritical + newRows.length);
+                const visibleRows = alertsOpen ? rows : rows.slice(0, limit);
+                const hiddenCnt = rows.length - visibleRows.length;
+                return (
+                  <div className="alert-stack">
+                    {visibleRows}
+                    {(hiddenCnt > 0 || (alertsOpen && rows.length > limit)) && (
+                      <button className="banner-btn banner-btn--ghost alert-more" onClick={()=>setAlertsOpen(v=>!v)}>
+                        {alertsOpen ? '접기 ▴' : `외 ${hiddenCnt}건 ▾`}
+                      </button>
+                    )}
                     {noRespChronic.length > 0 && (
                       <div className="alert-banner alert-banner-danger" style={{cursor:'default'}}>
                         <span className="alert-banner-tag tag-danger">미응답</span>
@@ -2510,13 +2516,13 @@ export default function App() {
 
               <div className="stat-grid">
                 {[
-                  {cls:'stat-total',   label:'총 담당 어르신', num:elders.length, chip:'#334155'},
-                  {cls:'stat-danger',  label:'위험 감지',     num:danger,        chip:'#ef4444'},
-                  {cls:'stat-warning', label:'주의 필요',     num:warning,       chip:'#f59e0b'},
-                  {cls:'stat-normal',  label:'정상',          num:normal,        chip:'#22c55e'},
+                  {cls:'stat-total',   label:'총 담당 어르신', num:elders.length, Icon:Users,        ic:'#334155'},
+                  {cls:'stat-danger',  label:'위험 감지',     num:danger,        Icon:AlertCircle,  ic:'#DC2626'},
+                  {cls:'stat-warning', label:'주의 필요',     num:warning,       Icon:AlertTriangle,ic:'#F59E0B'},
+                  {cls:'stat-normal',  label:'정상',          num:normal,        Icon:CheckCircle2, ic:'#16A34A'},
                 ].map(s=>(
                   <div key={s.label} className={`stat-card ${s.cls}`}>
-                    <div className="stat-top"><span className="stat-label">{s.label}</span><span className="stat-chip" style={{background:s.chip}}/></div>
+                    <div className="stat-top"><span className="stat-label">{s.label}</span><s.Icon size={20} strokeWidth={1.75} color={s.ic} aria-hidden="true"/></div>
                     <div className="stat-num-row"><span className="stat-num">{s.num}</span><span className="stat-unit">명</span></div>
                   </div>
                 ))}
@@ -2556,7 +2562,7 @@ export default function App() {
                   <div className="section">
                     <div className="section-title">오늘 통화 현황</div>
                     <div className="call-summary">
-                      <div className="call-stat" style={{cursor:'pointer'}} title="발신 이력 보기" onClick={()=>drillDispatch('all')}><div className="call-num" style={{color:'#1d4ed8'}}>{dispatchTotal}건</div><div className="call-label">발신</div></div>
+                      <div className="call-stat" style={{cursor:'pointer'}} title="발신 이력 보기" onClick={()=>drillDispatch('all')}><div className="call-num" style={{color:'#246BEB'}}>{dispatchTotal}건</div><div className="call-label">발신</div></div>
                       <div className="call-stat" style={{cursor:'pointer'}} title="받은 통화 보기" onClick={()=>drillDispatch('received')}><div className="call-num" style={{color:'#16a34a'}}>{answeredCount}건</div><div className="call-label">받음</div></div>
                       <div className="call-stat" style={{cursor:'pointer'}} title="부재중만 보기 → 재발신" onClick={()=>drillDispatch('missed')}><div className="call-num" style={{color:'#ea580c'}}>{missedCount}건</div><div className="call-label">부재중</div></div>
                       <div className="call-stat" style={{borderLeft:'1px solid #e2e8f0',cursor:'pointer'}} title="긴급 통화 보기" onClick={()=>drillCalls('critical')}><div className="call-num" style={{color:'#ef4444'}}>{criticalCount}건</div><div className="call-label">긴급 키워드</div></div>
@@ -2712,7 +2718,7 @@ export default function App() {
                     <div className="report-stat-card"><div className="report-stat-dot" style={{background:'#16a34a'}}/><div className="report-stat-value" style={{color:'#16a34a'}}>{st.checkedCount}명</div><div className="report-stat-label">오늘 안전확인 완료</div></div>
                     <div className="report-stat-card"><div className="report-stat-dot" style={{background:'#dc2626'}}/><div className="report-stat-value" style={{color:st.unchecked.length?'#dc2626':'#16a34a'}}>{st.unchecked.length}명</div><div className="report-stat-label">오늘 미확인 (부재중·실패)</div></div>
                     <div className="report-stat-card"><div className="report-stat-dot" style={{background:'#64748b'}}/><div className="report-stat-value" style={{color:'#64748b'}}>{st.undialed}명</div><div className="report-stat-label">오늘 미발신</div></div>
-                    <div className="report-stat-card"><div className="report-stat-dot" style={{background:'#1d4ed8'}}/><div className="report-stat-value" style={{color:rate>=80?'#16a34a':rate>=50?'#f59e0b':'#dc2626'}}>{rate}%</div><div className="report-stat-label">이번 주 주기 준수율</div></div>
+                    <div className="report-stat-card"><div className="report-stat-dot" style={{background:'#246BEB'}}/><div className="report-stat-value" style={{color:rate>=80?'#16a34a':rate>=50?'#f59e0b':'#dc2626'}}>{rate}%</div><div className="report-stat-label">이번 주 주기 준수율</div></div>
                   </div>
 
                   {st.unchecked.length > 0 && (
@@ -2721,7 +2727,7 @@ export default function App() {
                       <div style={{display:'flex',flexDirection:'column',gap:8}}>
                         {st.unchecked.map(({ e, d }) => (
                           <div key={e.id} style={{display:'flex',alignItems:'center',gap:12,background:d.status==='missed'?'#fff7ed':'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'10px 14px',flexWrap:'wrap'}}>
-                            <div style={{minWidth:90,fontWeight:800,color:'#1d4ed8',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name}</div>
+                            <div style={{minWidth:90,fontWeight:800,color:'#246BEB',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name}</div>
                             <div style={{minWidth:80,fontSize:13,color:'#64748b'}}>{e.region}</div>
                             <div style={{flex:1,fontSize:13,fontWeight:700,color:d.status==='missed'?'#ea580c':'#dc2626'}}>
                               {d.status==='missed' ? `부재중 — 자동 재발신 ${d.retryCount||0}회에도 무응답` : `발신 실패${d.reason?` (${d.reason})`:''}`}
@@ -2742,7 +2748,7 @@ export default function App() {
                         <tbody>
                           {sorted.map(({ e, g, target, done, met }) => (
                             <tr key={e.id} style={met?{}:{background:'#fffbeb'}}>
-                              <td style={{fontWeight:700,color:'#1d4ed8',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name} <span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>{e.region}</span></td>
+                              <td style={{fontWeight:700,color:'#246BEB',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name} <span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>{e.region}</span></td>
                               <td>{g ? <span style={{fontSize:12,fontWeight:800,color:g.color,background:`${g.color}15`,padding:'2px 8px',borderRadius:6}}>{g.label}</span> : <span style={{fontSize:12,color:'#94a3b8'}}>미지정</span>}</td>
                               <td>{target}회</td>
                               <td style={{fontWeight:800,color:met?'#16a34a':'#f59e0b'}}>{done}회</td>
@@ -2955,7 +2961,7 @@ export default function App() {
                         );
                       })}
                       {sorted.length>3 && (
-                        <button onClick={()=>setExpandedHistDays(prev=>{const n=new Set(prev); n.has(date)?n.delete(date):n.add(date); return n;})} style={{marginTop:2,marginLeft:2,background:'none',border:'none',color:'#2563eb',fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'2px 0'}}>
+                        <button onClick={()=>setExpandedHistDays(prev=>{const n=new Set(prev); n.has(date)?n.delete(date):n.add(date); return n;})} style={{marginTop:2,marginLeft:2,background:'none',border:'none',color:'#246BEB',fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'2px 0'}}>
                           {open?'접기 ▴':`${sorted.length-3}건 더 보기${hiddenBad>0?` (부재중·실패 ${hiddenBad}건 포함)`:''} ▾`}
                         </button>
                       )}
@@ -2972,7 +2978,7 @@ export default function App() {
                     return (
                       <tr key={elder.id} className={`${checked.includes(elder.id)?'row-checked':''} ${done?done.success?'row-success':'row-fail':''}`}>
                         <td><input type="checkbox" checked={checked.includes(elder.id)} onChange={()=>toggleCheck(elder.id)} className="cb"/></td>
-                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><div onClick={()=>openEdit(elder)} style={{cursor:'pointer'}} title="클릭 → 어르신 정보 수정"><div style={{fontWeight:700,color:'#1d4ed8'}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age?`${elder.age}세`:'—'}</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'성공':'실패'}</span>}</div></td>
+                        <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><div onClick={()=>openEdit(elder)} style={{cursor:'pointer'}} title="클릭 → 어르신 정보 수정"><div style={{fontWeight:700,color:'#246BEB'}}>{elder.name}</div><div style={{fontSize:12,color:'#94a3b8'}}>{elder.age?`${elder.age}세`:'—'}</div></div>{done&&<span className={`inline-result ${done.success?'success':'error'}`}>{done.success?'성공':'실패'}</span>}</div></td>
                         <td style={{fontSize:13}}>{elder.phone}</td>
                         <td style={{fontSize:13,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                         <td><span className="cycle-badge">{cycleLabel(elder.callCycle, elder.callDays)}</span></td>
@@ -3001,9 +3007,9 @@ export default function App() {
                     <div style={{fontWeight:800,color:'#1e3a6e'}}>앱으로 어르신 등록하기</div>
                     <div style={{fontSize:13,color:'#475569',marginTop:2}}>어르신 폰 <b>영실이 앱 설정</b>에 아래 <b>기관코드</b>를 입력하고 정보를 등록하면, 여기 <b>승인 대기</b>에 뜹니다.</div>
                   </div>
-                  <div onClick={copyOrgCode} title="클릭하면 복사" style={{cursor:'pointer',display:'flex',alignItems:'center',gap:8,background:'#fff',border:'2px solid #2563eb',borderRadius:10,padding:'8px 14px'}}>
-                    <span style={{fontSize:20,fontWeight:900,letterSpacing:2,color:'#1d4ed8',fontFamily:'monospace'}}>{me.orgCode}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:orgCopied?'#16a34a':'#2563eb'}}>{orgCopied?'복사됨':'복사'}</span>
+                  <div onClick={copyOrgCode} title="클릭하면 복사" style={{cursor:'pointer',display:'flex',alignItems:'center',gap:8,background:'#fff',border:'2px solid #246BEB',borderRadius:10,padding:'8px 14px'}}>
+                    <span style={{fontSize:20,fontWeight:900,letterSpacing:2,color:'#246BEB',fontFamily:'monospace'}}>{me.orgCode}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:orgCopied?'#16a34a':'#246BEB'}}>{orgCopied?'복사됨':'복사'}</span>
                   </div>
                 </div>
               )}
@@ -3049,7 +3055,7 @@ export default function App() {
                     <input type="checkbox" checked={filteredElders.every(e=>selectedElders.has(e.id))} onChange={()=>toggleAllElders(filteredElders)}/> 전체 선택
                   </label>
                   {selectedElders.size>0 && (<>
-                    <span style={{fontSize:13,color:'#2563eb',fontWeight:700}}>{selectedElders.size}명 선택됨</span>
+                    <span style={{fontSize:13,color:'#246BEB',fontWeight:700}}>{selectedElders.size}명 선택됨</span>
                     <button onClick={deleteSelectedElders} style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>선택 삭제</button>
                     <button onClick={()=>setSelectedElders(new Set())} style={{background:'#fff',color:'#64748b',border:'1px solid #d1d5db',borderRadius:8,padding:'6px 12px',fontSize:13,fontWeight:600,cursor:'pointer'}}>선택 해제</button>
                   </>)}
@@ -3063,11 +3069,11 @@ export default function App() {
                     const risk = getSolitudeRisk(elder);
                     const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                     return (
-                      <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)} style={selectedElders.has(elder.id)?{outline:'2px solid #2563eb',outlineOffset:2}:undefined}>
+                      <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)} style={selectedElders.has(elder.id)?{outline:'2px solid #246BEB',outlineOffset:2}:undefined}>
                         <div className="elder-top"><div style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:16,height:16,cursor:'pointer'}}/><div className="elder-avatar">{(elder.name||'?')[0]}</div></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><div className={`status-badge badge-${elder.status}`}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</div><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
                         <div className="elder-name">{elder.name}</div>
                         <div className="elder-info">{elder.age?`${elder.age}세 · `:''}{elder.title} · {elder.region}</div>
-                        {elder.caregiver && <div className="elder-info" style={{color:'#1d4ed8',fontWeight:600}}>담당: {elder.caregiver}</div>}
+                        {elder.caregiver && <div className="elder-info" style={{color:'#246BEB',fontWeight:600}}>담당: {elder.caregiver}</div>}
                         {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>{noResponseDays >= 99 ? '통화이력 없음' : `${noResponseDays}일째 미응답`}</div>}
                         <div className="elder-last">마지막 통화: {renderLastCall(elder)}</div>
                         {elder.keyword && <div className="keyword-tag mt8">"{elder.keyword}" 감지</div>}
@@ -3179,7 +3185,7 @@ export default function App() {
                       </button>
                       <button className="btn-secondary" style={{fontSize:12,padding:'6px 10px'}} disabled={alertTplSaving} onClick={resetAlertTemplate}>기본값으로 되돌리기</button>
                       {alertTplSaved && <span style={{fontSize:12.5,color:'#16a34a',fontWeight:700}}>저장됨 — 같은 기관 모든 담당자에게 즉시 적용됩니다</span>}
-                      {savedAlertTpl[curAlertKey()] && !alertTplSaved && <span style={{fontSize:12,color:'#2563eb'}}>· 저장된 맞춤 멘트 사용 중</span>}
+                      {savedAlertTpl[curAlertKey()] && !alertTplSaved && <span style={{fontSize:12,color:'#246BEB'}}>· 저장된 맞춤 멘트 사용 중</span>}
                     </div>
                     {(() => {
                       // 실제 발송 미리보기 — 어르신마다 {{지역}} 등이 자기 값으로 치환됨을 "지역별 예시"로 확인
@@ -3231,7 +3237,7 @@ export default function App() {
                         const allOn = inR.length>0 && inR.every(e=>checked.includes(e.id));
                         const someOn = inR.some(e=>checked.includes(e.id));
                         return (
-                          <button key={r} onClick={()=>{ if(allOn) setChecked(prev=>prev.filter(id=>!inR.some(e=>e.id===id))); else setChecked(prev=>[...new Set([...prev,...inR.map(e=>e.id)])]); }} style={{fontSize:13,padding:'6px 12px',borderRadius:20,border:'1px solid '+(allOn?'#2563eb':someOn?'#93c5fd':'#d1d5db'),background:allOn?'#2563eb':someOn?'#eff6ff':'#fff',color:allOn?'#fff':'#374151',fontWeight:600,cursor:'pointer'}}>{r.replace('대구 ','')} ({inR.length})</button>
+                          <button key={r} onClick={()=>{ if(allOn) setChecked(prev=>prev.filter(id=>!inR.some(e=>e.id===id))); else setChecked(prev=>[...new Set([...prev,...inR.map(e=>e.id)])]); }} style={{fontSize:13,padding:'6px 12px',borderRadius:20,border:'1px solid '+(allOn?'#246BEB':someOn?'#93c5fd':'#d1d5db'),background:allOn?'#246BEB':someOn?'#eff6ff':'#fff',color:allOn?'#fff':'#374151',fontWeight:600,cursor:'pointer'}}>{r.replace('대구 ','')} ({inR.length})</button>
                         );
                       })}
                     </div>
@@ -3240,7 +3246,7 @@ export default function App() {
                         const inZone = weatherData[e.region]?.alert === activeAlert;
                         const on = checked.includes(e.id);
                         return (
-                          <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,border:'1px solid '+(on?'#2563eb':'#e5e7eb'),borderRadius:8,padding:'8px 12px',cursor:'pointer',background:on?'#eff6ff':'#fff'}}>
+                          <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,border:'1px solid '+(on?'#246BEB':'#e5e7eb'),borderRadius:8,padding:'8px 12px',cursor:'pointer',background:on?'#eff6ff':'#fff'}}>
                             <input type="checkbox" checked={on} onChange={()=>toggleCheck(e.id)} />
                             <span style={{fontWeight:600}}>{e.name}</span>
                             <span style={{fontSize:12,color:'#6b7280'}}>{e.region}</span>
@@ -3252,7 +3258,7 @@ export default function App() {
                     {!bulkRunning ? (
                       <button className="btn-call" onClick={startBulkCall} disabled={checked.length===0} style={{opacity:checked.length===0?0.5:1,cursor:checked.length===0?'not-allowed':'pointer'}}>선택한 {checked.length}명에게 이 경보 멘트로 발신</button>
                     ) : (
-                      <div style={{display:'flex',alignItems:'center',gap:12}}><span style={{fontWeight:700,color:'#2563eb'}}>발신 중... ({bulkDone.length}/{bulkQueue.length})</span><button className="btn-secondary" onClick={stopBulkCall}>중지</button></div>
+                      <div style={{display:'flex',alignItems:'center',gap:12}}><span style={{fontWeight:700,color:'#246BEB'}}>발신 중... ({bulkDone.length}/{bulkQueue.length})</span><button className="btn-secondary" onClick={stopBulkCall}>중지</button></div>
                     )}
                   </div>
                 )}
@@ -3269,7 +3275,7 @@ export default function App() {
                     {t:'약',     q:'약은 잘 챙겨 드셨어요?', c:'#7c3aed', badge:'격일'},
                     {t:'식사',   q:'오늘 식사는 잘 하셨어요?', c:'#16a34a'},
                     {t:'물',     q:'물도 자주 드시고 계세요?', c:'#0891b2', badge:'격일'},
-                    {t:'정서',   q:'요즘 외롭거나 힘든 일은 없으세요?', c:'#2563eb'},
+                    {t:'정서',   q:'요즘 외롭거나 힘든 일은 없으세요?', c:'#246BEB'},
                     {t:'생활',   q:'요즘 장보기나 집안일 하시는 데 불편한 점은 없으세요?', c:'#16a34a'},
                     {t:'마무리', q:'오늘도 이렇게 얘기 나눠서 좋았어요. 건강 잘 챙기시고, 또 연락드릴게요.', c:'#64748b'},
                   ].map((s,i)=>(
@@ -3292,7 +3298,7 @@ export default function App() {
               {/* 기간 선택 (일/월별 조회) — 서버 calls 컬렉션 실데이터 */}
               <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
                 {[['week','최근 7일'],['month','최근 30일'],['custom','직접 선택']].map(([k,label])=>(
-                  <button key={k} onClick={()=>setCallsRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(callsRange===k?'#1d4ed8':'#e2e8f0'),background:callsRange===k?'#eff6ff':'#fff',color:callsRange===k?'#1d4ed8':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
+                  <button key={k} onClick={()=>setCallsRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(callsRange===k?'#246BEB':'#e2e8f0'),background:callsRange===k?'#eff6ff':'#fff',color:callsRange===k?'#246BEB':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
                 ))}
                 {callsRange==='custom' && (<>
                   <input type="date" value={callsFrom} onChange={e=>setCallsFrom(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
@@ -3301,8 +3307,8 @@ export default function App() {
                 </>)}
                 <button onClick={()=>fetchCalls()} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'불러오는 중':'새로고침'}</button>
                 <span style={{fontSize:12,color:'#94a3b8'}}>15초마다 자동 갱신됩니다</span>
-                <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#1d4ed8':'#e2e8f0'),fontSize:13,width:120}}/>
-                <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#1d4ed8':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#1d4ed8':'#334155',background:'#fff',cursor:'pointer'}}>
+                <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#246BEB':'#e2e8f0'),fontSize:13,width:120}}/>
+                <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#246BEB':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#246BEB':'#334155',background:'#fff',cursor:'pointer'}}>
                   <option value="">전체 어르신</option>
                   {elders.map(e=>{const k=String(e.phone||'').replace(/\D/g,'');return <option key={k} value={k}>{e.name}</option>;})}
                 </select>
@@ -3314,6 +3320,9 @@ export default function App() {
                   <button key={k} onClick={()=>setCallsRisk(k)} style={{padding:'5px 12px',borderRadius:20,border:'1px solid '+(callsRisk===k?col:'#e2e8f0'),background:callsRisk===k?col:'#fff',color:callsRisk===k?'#fff':'#64748b',fontWeight:700,fontSize:12.5,cursor:'pointer'}}>{label}</button>
                 ))}
                 {callsRisk!=='all' && <span style={{fontSize:12,color:'#94a3b8'}}>· 대시보드에서 이동됨</span>}
+              </div>
+              <div style={{fontSize:12,color:'#64748b',background:'#F4F6F8',border:'1px solid #E5E8EB',borderRadius:8,padding:'8px 12px',marginBottom:12}}>
+                개인정보 보호: 원본 음성 미보관 — 통화 음성은 실시간 텍스트 변환(STT) 직후 즉시 삭제되며, 텍스트 기록만 보관됩니다. 녹음 재생 기능은 제공하지 않습니다.
               </div>
               {callsHistory.length===0 ? (
                 <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
@@ -3357,7 +3366,7 @@ export default function App() {
           {page==='report' && (
             <div className="fade-in">
               <div className="report-banner"><div className="report-banner-title">{new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>PDF 다운로드</button></div></div>
-              <div className="section" style={{marginBottom:16,borderLeft:'4px solid #1d4ed8'}}>
+              <div className="section" style={{marginBottom:16,borderLeft:'4px solid #246BEB'}}>
                 <div className="section-title">월간 실적 보고서 (지자체 보고용 엑셀)</div>
                 <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                   <input type="month" className="form-input" style={{width:170,marginBottom:0}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)}/>
@@ -3366,7 +3375,7 @@ export default function App() {
                 </div>
               </div>
               <div className="report-stat-grid">
-                {[{label:'총 통화',value:`${reportCalls.length}건`,icon:'📞',color:'#1d4ed8'},{label:'긴급 감지',value:`${reportCalls.filter(c=>c.riskLevel==='critical').length}건`,icon:'🚨',color:'#ef4444'},{label:'주의 감지',value:`${reportCalls.filter(c=>c.riskLevel==='urgent').length}건`,icon:'⚠️',color:'#f59e0b'},{label:'정상 통화',value:`${reportCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length}건`,icon:'✅',color:'#16a34a'},{label:'총 통화 시간',value:`${Math.round(reportCalls.reduce((s,c)=>s+(c.durationSec||0),0)/60)}분`,icon:'⏱️',color:'#7c3aed'},{label:'관리 어르신',value:`${elders.length}명`,icon:'👥',color:'#0891b2'}].map((s,i)=>(
+                {[{label:'총 통화',value:`${reportCalls.length}건`,icon:'📞',color:'#246BEB'},{label:'긴급 감지',value:`${reportCalls.filter(c=>c.riskLevel==='critical').length}건`,icon:'🚨',color:'#ef4444'},{label:'주의 감지',value:`${reportCalls.filter(c=>c.riskLevel==='urgent').length}건`,icon:'⚠️',color:'#f59e0b'},{label:'정상 통화',value:`${reportCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length}건`,icon:'✅',color:'#16a34a'},{label:'총 통화 시간',value:`${Math.round(reportCalls.reduce((s,c)=>s+(c.durationSec||0),0)/60)}분`,icon:'⏱️',color:'#7c3aed'},{label:'관리 어르신',value:`${elders.length}명`,icon:'👥',color:'#0891b2'}].map((s,i)=>(
                   <div key={i} className="report-stat-card"><div className="report-stat-dot" style={{background:s.color}}/><div className="report-stat-value" style={{color:s.color}}>{s.value}</div><div className="report-stat-label">{s.label}</div></div>
                 ))}
               </div>
@@ -3383,7 +3392,7 @@ export default function App() {
                   <div className="section-title" style={{marginBottom:0}}>위험 키워드 통계</div>
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     {[['week','이번 주'],['month','이번 달'],['3month','최근 3개월'],['custom','직접 선택']].map(([k,label])=>(
-                      <button key={k} onClick={()=>setStatsRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(statsRange===k?'#1d4ed8':'#e2e8f0'),background:statsRange===k?'#eff6ff':'#fff',color:statsRange===k?'#1d4ed8':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
+                      <button key={k} onClick={()=>setStatsRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(statsRange===k?'#246BEB':'#e2e8f0'),background:statsRange===k?'#eff6ff':'#fff',color:statsRange===k?'#246BEB':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
                     ))}
                     {statsRange==='custom' && (<>
                       <input type="date" value={statsFrom} onChange={e=>setStatsFrom(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
@@ -3480,13 +3489,13 @@ export default function App() {
               </div>
               <div className="stat-grid" style={{marginBottom:20}}>
                 {[
-                  {label:'좋아요',   num:healthData.filter(h=>h.status==='good').length, chip:'#22c55e', color:'#16a34a'},
-                  {label:'그럭저럭', num:healthData.filter(h=>h.status==='okay').length, chip:'#f59e0b', color:'#d97706'},
-                  {label:'안 좋아요', num:healthData.filter(h=>h.status==='bad').length,  chip:'#ef4444', color:'#dc2626'},
-                  {label:'미체크',   num:elders.length - healthData.length,               chip:'#94a3b8', color:'#64748b'},
+                  {label:'좋아요',   num:healthData.filter(h=>h.status==='good').length, Icon:CheckCircle2,  ic:'#16A34A', color:'#16a34a'},
+                  {label:'그럭저럭', num:healthData.filter(h=>h.status==='okay').length, Icon:AlertTriangle, ic:'#F59E0B', color:'#d97706'},
+                  {label:'안 좋아요', num:healthData.filter(h=>h.status==='bad').length,  Icon:AlertCircle,   ic:'#DC2626', color:'#dc2626'},
+                  {label:'미체크',   num:elders.length - healthData.length,               Icon:Users,         ic:'#94a3b8', color:'#64748b'},
                 ].map(s=>(
                   <div key={s.label} className="stat-card">
-                    <div className="stat-top"><span className="stat-label">{s.label}</span><span className="stat-chip" style={{background:s.chip}}/></div>
+                    <div className="stat-top"><span className="stat-label">{s.label}</span><s.Icon size={20} strokeWidth={1.75} color={s.ic} aria-hidden="true"/></div>
                     <div className="stat-num-row"><span className="stat-num" style={{color:s.color}}>{s.num}</span><span className="stat-unit">명</span></div>
                   </div>
                 ))}
@@ -3497,7 +3506,7 @@ export default function App() {
                 const CAT = {
                   health:  { label:'건강', icon:'❤️', c:'#dc2626', bg:'#fef2f2', bd:'#fecaca' },
                   fall:    { label:'낙상', icon:'🦴', c:'#dc2626', bg:'#fef2f2', bd:'#fecaca' },
-                  emotion: { label:'정서', icon:'💙', c:'#2563eb', bg:'#eff6ff', bd:'#bfdbfe' },
+                  emotion: { label:'정서', icon:'💙', c:'#246BEB', bg:'#eff6ff', bd:'#bfdbfe' },
                   living:  { label:'생활', icon:'🧺', c:'#16a34a', bg:'#f0fdf4', bd:'#bbf7d0' },
                   meal:    { label:'식사', icon:'🍚', c:'#ea580c', bg:'#fff7ed', bd:'#fed7aa' },
                   missed:  { label:'부재중', icon:'📵', c:'#b45309', bg:'#fffbeb', bd:'#fde68a' },
@@ -3581,7 +3590,7 @@ export default function App() {
                   <div className="section-title" style={{marginBottom:0}}>건강 체크 이력 (일/월별)</div>
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     {[['week','최근 7일'],['month','최근 30일'],['custom','직접 선택']].map(([k,label])=>(
-                      <button key={k} onClick={()=>setHealthRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(healthRange===k?'#1d4ed8':'#e2e8f0'),background:healthRange===k?'#eff6ff':'#fff',color:healthRange===k?'#1d4ed8':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
+                      <button key={k} onClick={()=>setHealthRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(healthRange===k?'#246BEB':'#e2e8f0'),background:healthRange===k?'#eff6ff':'#fff',color:healthRange===k?'#246BEB':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}>{label}</button>
                     ))}
                     {healthRange==='custom' && (<>
                       <input type="date" value={healthHistFrom} onChange={e=>setHealthHistFrom(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
@@ -3636,7 +3645,7 @@ export default function App() {
                 const ym=new Date().toISOString().slice(0,7);
                 const tm=caseNotes.filter(n=>(n.visitedAt||'').slice(0,7)===ym);
                 const stat=[
-                  {label:'이번달 가정방문',value:tm.filter(n=>n.type==='visit').length,color:'#2563eb'},
+                  {label:'이번달 가정방문',value:tm.filter(n=>n.type==='visit').length,color:'#246BEB'},
                   {label:'이번달 전화상담',value:tm.filter(n=>n.type==='phone').length,color:'#16a34a'},
                   {label:'이번달 전체 상담',value:tm.length,color:'#7c3aed'},
                   {label:'미처리 후속',value:caseNotes.filter(n=>n.followUp&&n.followUp.needed&&!n.followUp.done).length,color:'#f59e0b'},
@@ -3668,7 +3677,7 @@ export default function App() {
                       <div style={{fontSize:15,fontWeight:600}}>선택한 필터에 맞는 일지가 없습니다.</div>
                       {active.length>0 && <div style={{fontSize:13,color:'#94a3b8',marginTop:6}}>적용 중인 필터 — {active.join(' · ')}</div>}
                       <div style={{fontSize:13,color:'#94a3b8',marginTop:2}}>전체 {caseNotes.length}건이 있어요. 필터를 끄면 모두 표시됩니다.</div>
-                      <button onClick={()=>{setCaseType('all');setCaseSearch('');setCaseFollowUpOnly(false);}} style={{marginTop:14,background:'#2563eb',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',fontSize:14,fontWeight:700,cursor:'pointer'}}>↺ 필터 초기화</button>
+                      <button onClick={()=>{setCaseType('all');setCaseSearch('');setCaseFollowUpOnly(false);}} style={{marginTop:14,background:'#246BEB',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',fontSize:14,fontWeight:700,cursor:'pointer'}}>↺ 필터 초기화</button>
                     </div>
                   );
                 }
@@ -3682,7 +3691,7 @@ export default function App() {
                       <input type="checkbox" checked={allSel} onChange={selectAll}/> 전체 선택
                     </label>
                     {selectedNotes.size>0 && (<>
-                      <span style={{fontSize:13,color:'#2563eb',fontWeight:700}}>{selectedNotes.size}건 선택됨</span>
+                      <span style={{fontSize:13,color:'#246BEB',fontWeight:700}}>{selectedNotes.size}건 선택됨</span>
                       <button onClick={deleteSelectedNotes} style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>선택 삭제</button>
                       <button onClick={()=>setSelectedNotes(new Set())} style={{background:'#fff',color:'#64748b',border:'1px solid #d1d5db',borderRadius:8,padding:'6px 12px',fontSize:13,fontWeight:600,cursor:'pointer'}}>선택 해제</button>
                     </>)}
@@ -3711,7 +3720,7 @@ export default function App() {
                               {fu&&<span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>후속{n.followUp.dueDate?` ~${n.followUp.dueDate}`:''}</span>}
                               <span style={{flex:1}}/>
                               <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'복사됨':'복사'}</button>
-                              <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
+                              <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#246BEB',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
                               <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
                             </div>
                             {n.content&&<div style={{fontSize:13.5,color:'#1f2937',marginTop:6,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
@@ -3721,7 +3730,7 @@ export default function App() {
                         );
                       })}
                       {rows.length>3 && (
-                        <button onClick={()=>setExpandedNoteDays(prev=>{const s=new Set(prev); s.has(date)?s.delete(date):s.add(date); return s;})} style={{background:'none',border:'none',color:'#2563eb',fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'2px 0'}}>
+                        <button onClick={()=>setExpandedNoteDays(prev=>{const s=new Set(prev); s.has(date)?s.delete(date):s.add(date); return s;})} style={{background:'none',border:'none',color:'#246BEB',fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'2px 0'}}>
                           {open?'접기 ▴':`${rows.length-3}건 더 보기 ▾`}
                         </button>
                       )}
@@ -3744,7 +3753,7 @@ export default function App() {
               {popData && (
                 <>
                   <div className="data-total-row">
-                    {[{num:popData.total.population.toLocaleString()+'명',label:'대구 전체 인구',color:'#0f172a'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인',color:'#1d4ed8'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인',color:'#f59e0b'},{num:elders.length+'명',label:'영실이 현재 관리',color:'#22c55e'},{num:(elders.length/popData.total.solitary*100).toFixed(2)+'%',label:'관리 비율',color:'#ef4444'},{num:popData.total.elderlyRatio+'%',label:'고령화율',color:'#7c3aed'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num" style={{color:d.color}}>{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
+                    {[{num:popData.total.population.toLocaleString()+'명',label:'대구 전체 인구',color:'#0f172a'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인',color:'#246BEB'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인',color:'#f59e0b'},{num:elders.length+'명',label:'영실이 현재 관리',color:'#22c55e'},{num:(elders.length/popData.total.solitary*100).toFixed(2)+'%',label:'관리 비율',color:'#ef4444'},{num:popData.total.elderlyRatio+'%',label:'고령화율',color:'#7c3aed'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num" style={{color:d.color}}>{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
                   </div>
                   {popData.total.elderlyRatio >= 20 && <div style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 20px',marginBottom:20,fontSize:14,color:'#dc2626',fontWeight:700}}>대구광역시 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
                   <div className="section">
@@ -3762,7 +3771,7 @@ export default function App() {
                               <td>{d.total.toLocaleString()}명</td><td>{d.elderly.toLocaleString()}명</td>
                               <td><span style={{color:d.elderlyRatio>=20?'#ef4444':d.elderlyRatio>=14?'#f59e0b':'#22c55e',fontWeight:700}}>{d.elderlyRatio}%</span></td>
                               <td><strong>{d.solitary.toLocaleString()}명</strong></td>
-                              <td><span style={{color:'#1d4ed8',fontWeight:700}}>{managed}명</span></td>
+                              <td><span style={{color:'#246BEB',fontWeight:700}}>{managed}명</span></td>
                               <td><span style={{color:parseFloat(managedRatio)>5?'#22c55e':'#f59e0b',fontWeight:700}}>{managedRatio}%</span></td>
                               <td><div className="progress-bar" style={{width:120}}><div className="progress-fill" style={{width:`${Math.min(parseFloat(managedRatio)*10,100)}%`}}/></div></td>
                             </tr>
@@ -3878,7 +3887,7 @@ export default function App() {
                               {n.linkedAlertId&&<span style={{fontSize:11,color:'#dc2626',fontWeight:700}}>알림 대응</span>}
                               <span style={{flex:1}}/>
                               <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:12,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'복사됨':'복사'}</button>
-                              <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
+                              <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#246BEB',fontSize:12,fontWeight:700,cursor:'pointer'}}>수정</button>
                               <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
                             </div>
                             {n.content&&<div style={{fontSize:13,color:'#1f2937',marginTop:5,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
@@ -3919,7 +3928,7 @@ export default function App() {
                         <div style={{fontSize:12.5,color:'#64748b',marginTop:2}}>{card.desc}</div>
                       </div>
                     </div>
-                    <div><span style={{fontSize:12.5,fontWeight:800,color:'#1d4ed8',background:'#eff6ff',border:'1px solid #bfdbfe',padding:'3px 10px',borderRadius:20}}>{card.badge}</span></div>
+                    <div><span style={{fontSize:12.5,fontWeight:800,color:'#246BEB',background:'#eff6ff',border:'1px solid #bfdbfe',padding:'3px 10px',borderRadius:20}}>{card.badge}</span></div>
                     <div style={{display:'flex',gap:8,marginTop:'auto',flexWrap:'wrap'}}>
                       {card.btns.map(b=>(
                         <button key={b.label} className={b.primary?'btn-primary':'btn-secondary'} style={{padding:'9px 16px',fontSize:13.5}} onClick={b.on}>{b.label}</button>
@@ -3957,7 +3966,7 @@ export default function App() {
                         {invites.map(v=>(
                           <tr key={v.code}>
                             <td><span className="status-badge badge-normal">{ROLE_KO[v.role]||v.role}</span></td>
-                            <td style={{fontSize:12.5,fontFamily:'monospace',color:'#1d4ed8',wordBreak:'break-all'}}>{inviteLink(v.code)}</td>
+                            <td style={{fontSize:12.5,fontFamily:'monospace',color:'#246BEB',wordBreak:'break-all'}}>{inviteLink(v.code)}</td>
                             <td style={{fontSize:13,color:'#64748b'}}>{(v.createdBy||'').split('@')[0]}</td>
                             <td style={{fontSize:13,color:'#64748b'}}>{v.expiresAt?new Date(v.expiresAt).toLocaleDateString('ko-KR'):'-'}</td>
                             <td style={{whiteSpace:'nowrap'}}>
@@ -3997,7 +4006,7 @@ export default function App() {
                         <tr key={o.orgId}>
                           <td><strong>{o.name}</strong></td>
                           <td><span className="status-badge badge-normal">{ORG_TYPE_KO[o.orgType]||'노인맞춤돌봄'}</span></td>
-                          <td><span className="cycle-badge" style={{fontFamily:'monospace',fontWeight:800,letterSpacing:1,color:'#1d4ed8',background:'#eff6ff'}}>{o.code}</span></td>
+                          <td><span className="cycle-badge" style={{fontFamily:'monospace',fontWeight:800,letterSpacing:1,color:'#246BEB',background:'#eff6ff'}}>{o.code}</span></td>
                           <td>{o.elderCount}명</td>
                           <td>{o.userCount}개</td>
                         </tr>
@@ -4076,7 +4085,7 @@ export default function App() {
                   <div className="form-field"><label className="form-label">지병</label><input {...inp('disease')} placeholder="예: 고혈압, 당뇨"/></div>
                   <div className="form-field"><label className="form-label">복용 중인 약</label><input {...inp('medicine')} placeholder="예: 혈압약"/></div>
                   <div className="form-field full-width"><label className="form-label">거동 상태</label><div className="radio-group">{['독립보행 가능','보조기구 필요','거동 불가'].map(opt=><label key={opt} className={`radio-option ${form.mobility===opt?'radio-selected':''}`}><input type="radio" name="mobility" value={opt} checked={form.mobility===opt} onChange={e=>setForm(f=>({...f,mobility:e.target.value}))} style={{display:'none'}}/>{opt}</label>)}</div></div>
-                  <div className="form-field full-width"><label className="form-label">담당 복지사</label><div style={{display:'flex',gap:8}}><select {...inp('caregiver')} style={{flex:1}}><option value="">선택 안 함</option>{[...new Set([...caregivers, ...elders.map(e=>e.caregiver).filter(Boolean)])].map(c=><option key={c} value={c}>{c}</option>)}</select><button type="button" onClick={addCaregiver} style={{padding:'0 16px',borderRadius:8,border:'1px solid #2563eb',background:'#eff6ff',color:'#1d4ed8',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>+ 추가</button></div></div>
+                  <div className="form-field full-width"><label className="form-label">담당 복지사</label><div style={{display:'flex',gap:8}}><select {...inp('caregiver')} style={{flex:1}}><option value="">선택 안 함</option>{[...new Set([...caregivers, ...elders.map(e=>e.caregiver).filter(Boolean)])].map(c=><option key={c} value={c}>{c}</option>)}</select><button type="button" onClick={addCaregiver} style={{padding:'0 16px',borderRadius:8,border:'1px solid #246BEB',background:'#eff6ff',color:'#246BEB',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>+ 추가</button></div></div>
                   <div className="form-field full-width"><label className="form-label">복지사 전화번호</label><input {...inp('caregiverPhone')} placeholder="010-0000-0000" /></div>
                   <div className="form-field full-width"><label className="form-label">담당 지원사 배정 <span style={{fontSize:11,color:'#94a3b8'}}>(지원사 계정 — 배정하면 그 지원사에게 이 어르신이 보입니다)</span></label>
                     <select className="form-input" value={form.assignedTo||''} onChange={e=>setForm(f=>({...f,assignedTo:e.target.value}))}>
@@ -4086,7 +4095,7 @@ export default function App() {
                   </div>
                 </div><div className="form-footer"><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
                 {formStep===2&&(<div className="fade-in"><div className="form-section-title">보호자 정보</div><div className="form-grid"><div className="form-field"><label className="form-label">보호자 이름 <span className="required">*</span></label><input {...inp('guardian')} placeholder="예: 김민준"/>{formErrors.guardian&&<div className="error-msg">{formErrors.guardian}</div>}</div><div className="form-field"><label className="form-label">보호자 연락처 <span className="required">*</span></label><input {...inp('guardianPhone')} placeholder="예: 010-9876-5432"/>{formErrors.guardianPhone&&<div className="error-msg">{formErrors.guardianPhone}</div>}</div></div><div className="form-info-box">위험 키워드 감지 시 보호자에게 즉시 알림이 발송됩니다.</div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(1)}>← 이전</button><button className="btn-primary btn-lg" onClick={nextStep}>다음 단계 →</button></div></div>)}
-                {formStep===3&&(<div className="fade-in"><div className="form-section-title">AI 전화 설정</div><div className="form-grid">{!isDisability&&<div className="form-field full-width"><label className="form-label">돌봄군 (노인맞춤돌봄서비스)</label><div className="radio-group">{[{value:'',label:'미지정'},{value:'general',label:'일반돌봄군'},{value:'intensive',label:'중점돌봄군'}].map(opt=><label key={opt.value} className={`radio-option ${form.careGroup===opt.value?'radio-selected':''}`}><input type="radio" name="careGroup" value={opt.value} checked={(form.careGroup||'')===opt.value} onChange={()=>{const g=CARE_GROUPS[opt.value];setForm(f=>({...f,careGroup:opt.value,...(g?{callCycle:'custom',callDays:[...g.days]}:{})}));}} style={{display:'none'}}/>{opt.label}</label>)}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>선택하면 전화 안전확인 권장 주기가 자동 적용됩니다 (일반 주 2회 · 중점 주 1회, 아래에서 수정 가능). 미지정은 기존 주기 그대로.</div></div>}<div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #2563eb':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#1d4ed8':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['담당 지원사',(accounts.find(u=>u.email===form.assignedTo)||{}).name||form.assignedTo||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'수정 완료':'등록 완료'}</button></div></div>)}
+                {formStep===3&&(<div className="fade-in"><div className="form-section-title">AI 전화 설정</div><div className="form-grid">{!isDisability&&<div className="form-field full-width"><label className="form-label">돌봄군 (노인맞춤돌봄서비스)</label><div className="radio-group">{[{value:'',label:'미지정'},{value:'general',label:'일반돌봄군'},{value:'intensive',label:'중점돌봄군'}].map(opt=><label key={opt.value} className={`radio-option ${form.careGroup===opt.value?'radio-selected':''}`}><input type="radio" name="careGroup" value={opt.value} checked={(form.careGroup||'')===opt.value} onChange={()=>{const g=CARE_GROUPS[opt.value];setForm(f=>({...f,careGroup:opt.value,...(g?{callCycle:'custom',callDays:[...g.days]}:{})}));}} style={{display:'none'}}/>{opt.label}</label>)}</div><div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>선택하면 전화 안전확인 권장 주기가 자동 적용됩니다 (일반 주 2회 · 중점 주 1회, 아래에서 수정 가능). 미지정은 기존 주기 그대로.</div></div>}<div className="form-field full-width"><label className="form-label">전화 주기</label><div className="radio-group">{[{value:'daily',label:'매일'},{value:'custom',label:'요일 지정'}].map(opt=><label key={opt.value} className={`radio-option ${form.callCycle===opt.value?'radio-selected':''}`}><input type="radio" name="callCycle" value={opt.value} checked={form.callCycle===opt.value} onChange={e=>setForm(f=>({...f,callCycle:e.target.value}))} style={{display:'none'}}/>{opt.label}</label>)}</div>{form.callCycle==='custom'&&<div style={{marginTop:10}}><div style={{fontSize:13,color:'#64748b',marginBottom:6}}>요일 선택 (여러 개 가능)</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['월','화','수','목','금','토','일'].map(d=>{const sel=(form.callDays||[]).includes(d);return <button type="button" key={d} onClick={()=>setForm(f=>{const days=f.callDays||[];return{...f,callDays:sel?days.filter(x=>x!==d):[...days,d]};})} style={{padding:'8px 16px',borderRadius:8,border:sel?'2px solid #246BEB':'1px solid #d1d5db',background:sel?'#eff6ff':'#fff',color:sel?'#246BEB':'#374151',fontWeight:700,fontSize:15,cursor:'pointer'}}>{d}</button>;})}</div></div>}</div><div className="form-field full-width"><label className="form-label">전화 시간</label>{(()=>{const [hh,mm]=(form.callTime||'09:00').split(':').map(Number);const ampm=hh<12?'오전':'오후';const h12=(hh%12)||12;const set=(a,h,m)=>{let H=h%12;if(a==='오후')H+=12;setForm(f=>({...f,callTime:`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`}));};return(<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:4}}><select className="form-input" style={{width:100,fontSize:16,fontWeight:700}} value={ampm} onChange={e=>set(e.target.value,h12,mm)}><option value="오전">오전</option><option value="오후">오후</option></select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={h12} onChange={e=>set(ampm,Number(e.target.value),mm)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{h}시</option>)}</select><select className="form-input" style={{width:90,fontSize:16,fontWeight:700}} value={mm} onChange={e=>set(ampm,h12,Number(e.target.value))}>{[0,10,20,30,40,50].map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}분</option>)}</select></div>);})()}</div></div><div className="summary-box"><div className="summary-title">등록 정보 확인</div><div className="summary-grid">{[['이름',form.name],['나이',`${form.age}세`],['전화번호',form.phone],['지역',form.region],['담당 복지사',form.caregiver||'미배정'],['담당 지원사',(accounts.find(u=>u.email===form.assignedTo)||{}).name||form.assignedTo||'미배정'],['보호자',form.guardian],['보호자 연락처',form.guardianPhone],['전화 주기',cycleLabel(form.callCycle, form.callDays)],['전화 시간',form.callTime]].map(([label,value])=><div key={label} className="summary-row"><span className="summary-label">{label}</span><span className="summary-value">{value}</span></div>)}</div></div><div className="form-footer"><button className="btn-secondary btn-lg" onClick={()=>setFormStep(2)}>← 이전</button><button className="btn-success btn-lg" onClick={saveElder}>{editMode?'수정 완료':'등록 완료'}</button></div></div>)}
               </div>
             </div>
           )}

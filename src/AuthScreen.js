@@ -7,7 +7,7 @@ import {
   setPersistence, browserLocalPersistence, browserSessionPersistence,
 } from 'firebase/auth';
 
-const NAVY = '#1e3a6e', BLUE = '#2563eb', GREEN = '#16a34a';
+const NAVY = '#1e3a6e', BLUE = '#246BEB', GREEN = '#16a34a';
 const PW_RE = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,20}$/;
 
 const wrap = { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${NAVY},#0f1f3d)`, padding: 20 };
@@ -26,7 +26,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   // 로그인
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
-  const [keep, setKeep] = useState(true);
+  const [keep, setKeep] = useState(false);  // P2-2: 어르신 건강정보 취급 시스템 — 자동 로그인 기본 해제
   // 회원가입
   const [su, setSu] = useState({ email: '', pw: '', pw2: '', org: '', orgType: 'senior', phone: '', referral: '' });
   const [agree, setAgree] = useState({ tos: false, privacy: false, mkt: false });
@@ -221,13 +221,15 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   return (
     <div style={wrap}><div style={card}>
       <Header />
-      {/* 탭 */}
-      <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 12, padding: 4, marginBottom: 8 }}>
-        {[['login', '로그인'], ['signup', '회원가입']].map(([k, t]) => (
-          <button key={k} onClick={() => { setTab(k); setErr(''); setMsg(''); }}
-            style={{ flex: 1, padding: 10, borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 15, background: tab === k ? BLUE : 'transparent', color: tab === k ? '#fff' : '#64748b' }}>{t}</button>
-        ))}
-      </div>
+      {/* 탭 — P2-2: 로그인 화면에서는 회원가입 진입을 하단 링크 1곳으로 (상·하단 중복 제거) */}
+      {tab === 'signup' && (
+        <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 12, padding: 4, marginBottom: 8 }}>
+          {[['login', '로그인'], ['signup', '회원가입']].map(([k, t]) => (
+            <button key={k} onClick={() => { setTab(k); setErr(''); setMsg(''); }}
+              style={{ flex: 1, padding: 10, borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 15, background: tab === k ? BLUE : 'transparent', color: tab === k ? '#fff' : '#64748b' }}>{t}</button>
+          ))}
+        </div>
+      )}
 
       {tab === 'login' ? (
         <div>
@@ -238,6 +240,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 13, color: '#475569', cursor: 'pointer' }}>
             <input type="checkbox" checked={keep} onChange={e => setKeep(e.target.checked)} /> 자동 로그인
           </label>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>공용 PC에서는 자동 로그인을 사용하지 마세요. 미사용 시 브라우저 종료로 세션이 만료됩니다.</div>
           {err && <div style={errBox}>{err}</div>}
           {msg && <div style={{ ...errBox, color: GREEN, background: '#f0fdf4' }}>{msg}</div>}
           <button style={primaryBtn} disabled={busy} onClick={doLogin}>{busy ? '로그인 중…' : '로그인'}</button>

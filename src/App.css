@@ -1,11 +1,13 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-gov.min.css');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  font-family: 'Noto Sans KR', sans-serif;
-  background: #f1f5f9;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
+  background: #F4F6F8;
   color: #1e293b;
+  font-variant-numeric: tabular-nums; /* P1-4: 숫자 지표 갱신 시 흔들림 방지 */
 }
 
 .app {
@@ -35,7 +37,7 @@ body {
 .logo-icon {
   width: 40px; height: 40px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  background: linear-gradient(135deg, #3b82f6, #246BEB);
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; font-weight: 900; color: #fff;
 }
@@ -70,11 +72,11 @@ body {
   cursor: pointer;
   text-align: left;
   transition: all 0.15s;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
 }
 
 .nav-item:hover { background: #1e293b; color: #e2e8f0; }
-.nav-item.active { background: #1d4ed8; color: #fff; }
+.nav-item.active { background: #246BEB; color: #fff; }
 .nav-icon { font-size: 16px; }
 
 .sidebar-footer {
@@ -174,7 +176,7 @@ body {
   opacity: 0.3;
 }
 
-.stat-total .stat-num  { color: #1d4ed8; }
+.stat-total .stat-num  { color: #246BEB; }
 .stat-danger .stat-num { color: #ef4444; }
 .stat-warning .stat-num{ color: #f59e0b; }
 .stat-normal .stat-num { color: #22c55e; }
@@ -182,6 +184,7 @@ body {
 /* 섹션 */
 .section {
   background: #fff;
+  border: 1px solid #E5E8EB; /* P1-2: 카드 보더 토큰 */
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 20px;
@@ -296,11 +299,11 @@ body {
   align-items: center;
   gap: 6px;
   transition: all 0.15s;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
 }
 
 .filter-btn:hover { border-color: #3b82f6; color: #3b82f6; }
-.filter-active { border-color: #1d4ed8 !important; background: #1d4ed8 !important; color: #fff !important; }
+.filter-active { border-color: #246BEB !important; background: #246BEB !important; color: #fff !important; }
 
 .filter-count {
   background: rgba(255,255,255,0.25);
@@ -344,7 +347,7 @@ body {
   border-radius: 14px;
   background: #eff6ff;
   display: flex; align-items: center; justify-content: center;
-  font-size: 20px; font-weight: 900; color: #1d4ed8;
+  font-size: 20px; font-weight: 900; color: #246BEB;
 }
 
 .elder-name { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
@@ -386,7 +389,7 @@ body {
 
 /* 공공데이터 */
 .data-banner {
-  background: linear-gradient(135deg, #1e3a6e, #1d4ed8);
+  background: linear-gradient(135deg, #1e3a6e, #246BEB);
   border-radius: 16px;
   padding: 28px 32px;
   margin-bottom: 20px;
@@ -414,7 +417,7 @@ body {
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
-.data-total-num { font-size: 28px; font-weight: 900; color: #1d4ed8; }
+.data-total-num { font-size: 28px; font-weight: 900; color: #246BEB; }
 .data-total-label { font-size: 13px; color: #64748b; margin-top: 6px; }
 
 .progress-bar {
@@ -426,7 +429,7 @@ body {
 }
 
 .progress-fill {
-  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+  background: linear-gradient(90deg, #3b82f6, #246BEB);
   height: 100%;
   border-radius: 4px;
   transition: width 0.5s ease;
@@ -442,7 +445,7 @@ body {
   cursor: pointer;
   margin-bottom: 20px;
   padding: 0;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
 }
 
 .detail-grid {
@@ -465,7 +468,7 @@ body {
   border-radius: 24px;
   background: #eff6ff;
   display: flex; align-items: center; justify-content: center;
-  font-size: 36px; font-weight: 900; color: #1d4ed8;
+  font-size: 36px; font-weight: 900; color: #246BEB;
   margin: 0 auto 16px;
 }
 
@@ -534,7 +537,7 @@ body {
 }
 
 .btn-primary {
-  background: #1d4ed8;
+  background: #246BEB;
   color: #fff;
   border: none;
   padding: 10px 20px;
@@ -542,7 +545,7 @@ body {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   transition: background 0.15s;
 }
 .btn-primary:hover { background: #1e40af; }
@@ -556,7 +559,7 @@ body {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   transition: all 0.15s;
 }
 .btn-secondary:hover { border-color: #94a3b8; }
@@ -570,7 +573,7 @@ body {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   transition: all 0.15s;
 }
 .btn-danger-outline:hover { background: #fef2f2; }
@@ -584,7 +587,7 @@ body {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
 }
 .btn-success:hover { background: #15803d; }
 
@@ -626,7 +629,7 @@ body {
   transition: all 0.2s;
 }
 
-.step-active .step-circle { background: #1d4ed8; color: #fff; }
+.step-active .step-circle { background: #246BEB; color: #fff; }
 .step-done .step-circle   { background: #22c55e; color: #fff; }
 
 .step-label {
@@ -635,7 +638,7 @@ body {
   color: #94a3b8;
   white-space: nowrap;
 }
-.step-active .step-label { color: #1d4ed8; }
+.step-active .step-label { color: #246BEB; }
 .step-done .step-label   { color: #22c55e; }
 
 .step-line {
@@ -686,7 +689,7 @@ body {
   border: 2px solid #e2e8f0;
   border-radius: 10px;
   font-size: 14px;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   color: #1e293b;
   transition: border-color 0.15s;
   outline: none;
@@ -719,7 +722,7 @@ body {
   color: #64748b;
 }
 .radio-option:hover { border-color: #3b82f6; color: #3b82f6; }
-.radio-selected { border-color: #1d4ed8 !important; background: #eff6ff !important; color: #1d4ed8 !important; }
+.radio-selected { border-color: #246BEB !important; background: #eff6ff !important; color: #246BEB !important; }
 
 /* 폼 하단 */
 .form-footer {
@@ -736,7 +739,7 @@ body {
   border-radius: 12px;
   padding: 14px 18px;
   font-size: 13px;
-  color: #1d4ed8;
+  color: #246BEB;
   font-weight: 600;
   margin-bottom: 24px;
 }
@@ -823,7 +826,7 @@ body {
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   transition: background 0.15s;
 }
 .btn-call:hover { background: #15803d; }
@@ -838,7 +841,7 @@ body {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   white-space: nowrap;
   transition: all 0.15s;
 }
@@ -854,7 +857,7 @@ body {
   font-size: 16px;
   font-weight: 800;
   cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   margin-bottom: 10px;
   transition: all 0.15s;
 }
@@ -871,7 +874,7 @@ body {
   font-weight: 700;
   cursor: pointer;
   border: none;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   white-space: nowrap;
 }
 
@@ -886,7 +889,7 @@ body {
   font-weight: 700;
   cursor: pointer;
   border: 2px solid transparent;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   margin-bottom: 16px;
   transition: all 0.15s;
 }
@@ -923,7 +926,7 @@ body {
 .schedule-header { margin-bottom: 20px; }
 .schedule-summary { display: flex; gap: 24px; }
 .sch-stat { background: #fff; border-radius: 12px; padding: 16px 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); text-align: center; }
-.sch-num  { font-size: 32px; font-weight: 900; color: #1d4ed8; display: block; }
+.sch-num  { font-size: 32px; font-weight: 900; color: #246BEB; display: block; }
 .sch-label { font-size: 12px; color: #64748b; }
 
 /* 테이블 아바타 */
@@ -932,13 +935,13 @@ body {
   border-radius: 10px;
   background: #eff6ff;
   display: flex; align-items: center; justify-content: center;
-  font-weight: 800; color: #1d4ed8; font-size: 14px;
+  font-weight: 800; color: #246BEB; font-size: 14px;
   flex-shrink: 0;
 }
 
 /* 배지 */
 .cycle-badge {
-  background: #eff6ff; color: #1d4ed8;
+  background: #eff6ff; color: #246BEB;
   padding: 4px 10px; border-radius: 6px;
   font-size: 12px; font-weight: 700;
 }
@@ -953,7 +956,7 @@ body {
   padding: 3px 8px; border-radius: 6px;
   font-size: 11px; font-weight: 700;
 }
-.type-manual { background: #eff6ff; color: #1d4ed8; }
+.type-manual { background: #eff6ff; color: #246BEB; }
 .type-auto   { background: #f0fdf4; color: #16a34a; }
 
 .paused-tag {
@@ -991,7 +994,7 @@ body {
 .bulk-left { display: flex; flex-direction: column; gap: 10px; }
 .bulk-title { font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
 .bulk-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.check-count { font-size: 14px; font-weight: 800; color: #1d4ed8; min-width: 70px; }
+.check-count { font-size: 14px; font-weight: 800; color: #246BEB; min-width: 70px; }
 
 .smart-filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .smart-btn {
@@ -999,16 +1002,16 @@ body {
   border: 2px solid #e2e8f0; background: #fff;
   color: #64748b; font-size: 13px; font-weight: 600;
   cursor: pointer; display: flex; align-items: center; gap: 6px;
-  transition: all 0.15s; font-family: 'Noto Sans KR', sans-serif;
+  transition: all 0.15s; font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
 }
 .smart-btn:hover { border-color: #3b82f6; color: #3b82f6; }
-.smart-active { border-color: #1d4ed8 !important; background: #1d4ed8 !important; color: #fff !important; }
+.smart-active { border-color: #246BEB !important; background: #246BEB !important; color: #fff !important; }
 
 .btn-bulk-call {
   background: #16a34a; color: #fff; border: none;
   padding: 10px 22px; border-radius: 10px;
   font-size: 14px; font-weight: 800; cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif; white-space: nowrap;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif; white-space: nowrap;
   transition: background 0.15s;
 }
 .btn-bulk-call:hover { background: #15803d; }
@@ -1016,7 +1019,7 @@ body {
   background: #ef4444; color: #fff; border: none;
   padding: 10px 22px; border-radius: 10px;
   font-size: 14px; font-weight: 800; cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
 }
 
 /* 발신 진행 상황 */
@@ -1026,7 +1029,7 @@ body {
 }
 .bulk-progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .bulk-progress-title { font-size: 15px; font-weight: 800; color: #0f172a; }
-.bulk-progress-count { font-size: 14px; font-weight: 700; color: #1d4ed8; }
+.bulk-progress-count { font-size: 14px; font-weight: 700; color: #246BEB; }
 .bulk-bar-wrap { background: #e2e8f0; border-radius: 8px; height: 10px; margin-bottom: 16px; overflow: hidden; }
 .bulk-bar { background: linear-gradient(90deg, #22c55e, #16a34a); height: 100%; border-radius: 8px; transition: width 0.4s ease; }
 
@@ -1050,14 +1053,14 @@ body {
 .bulk-success-count { font-size: 14px; font-weight: 800; color: #16a34a; }
 .bulk-fail-count    { font-size: 14px; font-weight: 800; color: #ef4444; flex: 1; }
 
-.cb { width: 16px; height: 16px; cursor: pointer; accent-color: #1d4ed8; }
+.cb { width: 16px; height: 16px; cursor: pointer; accent-color: #246BEB; }
 .row-checked { background: #eff6ff !important; }
 .row-success td { background: #f0fdf4; }
 .row-fail    td { background: #fef2f2; }
 
 /* ── 리포트 ── */
 .report-banner {
-  background: linear-gradient(135deg, #0f172a, #1d4ed8);
+  background: linear-gradient(135deg, #0f172a, #246BEB);
   border-radius: 20px; padding: 28px 32px;
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 20px; color: #fff;
@@ -1068,7 +1071,7 @@ body {
   background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3);
   color: #fff; padding: 10px 20px; border-radius: 10px;
   font-size: 13px; font-weight: 700; cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif; white-space: nowrap;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif; white-space: nowrap;
   transition: background 0.15s;
 }
 .btn-download:hover { background: rgba(255,255,255,0.25); }
@@ -1132,10 +1135,10 @@ body {
 .weather-panel-sub   { font-size: 12px; color: #94a3b8; }
 
 .btn-fetch-weather {
-  background: #1d4ed8; color: #fff; border: none;
+  background: #246BEB; color: #fff; border: none;
   padding: 10px 18px; border-radius: 10px;
   font-size: 13px; font-weight: 700; cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif; white-space: nowrap;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif; white-space: nowrap;
 }
 
 .weather-grid {
@@ -1165,7 +1168,7 @@ body {
   padding: 14px 8px; border-radius: 12px;
   border: 2px solid #e2e8f0; background: #fff;
   cursor: pointer; transition: all 0.15s;
-  font-family: 'Noto Sans KR', sans-serif; font-size: 12px; color: #374151;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif; font-size: 12px; color: #374151;
 }
 .alert-template-btn:hover { border-color: #94a3b8; transform: translateY(-2px); }
 .alert-template-active { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -1181,7 +1184,7 @@ body {
 .script-textarea {
   width: 100%; padding: 16px;
   border: 2px solid #e2e8f0; border-radius: 12px;
-  font-size: 14px; font-family: 'Noto Sans KR', sans-serif;
+  font-size: 14px; font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   color: #1e293b; line-height: 1.8; resize: vertical;
   outline: none; transition: border-color 0.15s;
 }
@@ -1192,7 +1195,7 @@ body {
   font-size: 12px; color: #64748b; margin-bottom: 8px;
 }
 .var-hint code {
-  background: #f1f5f9; color: #1d4ed8;
+  background: #f1f5f9; color: #246BEB;
   padding: 2px 6px; border-radius: 4px;
   font-size: 12px; margin: 0 4px;
 }
@@ -1208,7 +1211,7 @@ body {
 .preview-avatar {
   width: 44px; height: 44px; border-radius: 14px;
   background: #eff6ff; display: flex; align-items: center; justify-content: center;
-  font-size: 20px; font-weight: 900; color: #1d4ed8; flex-shrink: 0;
+  font-size: 20px; font-weight: 900; color: #246BEB; flex-shrink: 0;
 }
 .preview-name   { font-size: 16px; font-weight: 800; }
 .preview-region { font-size: 12px; color: #94a3b8; margin-top: 2px; }
@@ -1243,9 +1246,9 @@ body {
   transform: translateY(-2px);
 }
 .gender-selected {
-  border-color: #1d4ed8 !important;
+  border-color: #246BEB !important;
   background: #eff6ff !important;
-  color: #1d4ed8 !important;
+  color: #246BEB !important;
 }
 
 /* 어르신 카드 아바타 이모지 크기 */
@@ -1298,7 +1301,7 @@ body {
 .search-input {
   border: none; background: transparent;
   font-size: 14px; color: #1e293b;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   outline: none; flex: 1;
 }
 .search-clear {
@@ -1325,12 +1328,12 @@ body {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   transition: all 0.15s;
   white-space: nowrap;
 }
 .sort-btn:hover { border-color: #3b82f6; color: #3b82f6; }
-.sort-active { border-color: #1d4ed8 !important; background: #1d4ed8 !important; color: #fff !important; }
+.sort-active { border-color: #246BEB !important; background: #246BEB !important; color: #fff !important; }
 
 /* 뷰 토글 */
 .view-toggle {
@@ -1347,10 +1350,10 @@ body {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   transition: all 0.15s;
 }
-.view-active { background: #1d4ed8 !important; color: #fff !important; }
+.view-active { background: #246BEB !important; color: #fff !important; }
 
 /* 검색 결과 수 */
 .search-result-count {
@@ -1359,7 +1362,7 @@ body {
   margin-bottom: 16px;
   padding: 0 4px;
 }
-.search-result-count strong { color: #1d4ed8; }
+.search-result-count strong { color: #246BEB; }
 
 /* 고독사 위험도 배지 */
 .risk-badge {
@@ -1453,7 +1456,7 @@ body {
 .quick-btn {
   display: flex; flex-direction: column; align-items: flex-start;
   gap: 4px; padding: 14px 16px; border-radius: 14px;
-  border: none; cursor: pointer; font-family: 'Noto Sans KR', sans-serif;
+  border: none; cursor: pointer; font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   font-size: 13px; font-weight: 700; transition: all 0.15s;
   position: relative;
 }
@@ -1466,7 +1469,7 @@ body {
 }
 .quick-danger   { background: #fef2f2; color: #ef4444; }
 .quick-all      { background: #f0fdf4; color: #16a34a; }
-.quick-report   { background: #eff6ff; color: #1d4ed8; }
+.quick-report   { background: #eff6ff; color: #246BEB; }
 .quick-register { background: #f5f3ff; color: #7c3aed; }
 
 /* 지역별 현황 */
@@ -1483,7 +1486,7 @@ body {
 .region-warning { background: #fffbeb; border-color: #fde68a; }
 .region-normal  { background: #f0fdf4; border-color: #bbf7d0; }
 .region-name    { font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 4px; }
-.region-count   { font-size: 22px; font-weight: 900; color: #1d4ed8; }
+.region-count   { font-size: 22px; font-weight: 900; color: #246BEB; }
 .region-status  { display: flex; justify-content: center; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
 .region-dot-danger  { font-size: 11px; color: #ef4444; font-weight: 700; }
 .region-dot-warning { font-size: 11px; color: #f59e0b; font-weight: 700; }
@@ -1500,7 +1503,7 @@ body {
 .memo-input {
   flex: 1; padding: 10px 14px;
   border: 2px solid #e2e8f0; border-radius: 10px;
-  font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+  font-size: 13px; font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif;
   outline: none; transition: border-color 0.15s;
 }
 .memo-input:focus { border-color: #3b82f6; }
@@ -1521,6 +1524,9 @@ body {
   transition: color 0.15s;
 }
 .memo-del:hover { color: #ef4444; }
+/* P2-4: 삭제 X는 hover 시에만 노출 (오터치 방지) */
+.memo-del { opacity: 0; transition: opacity 0.15s; }
+.memo-item:hover .memo-del { opacity: 1; }
 
 /* ═══════════════ V2 하이브리드 리스킨 (2026-07) ═══════════════
    V1 정보 밀도 유지 + V2 우위 항목 이식:
@@ -1551,9 +1557,9 @@ body {
 .header-sync { font-size: 13px; color: #94a3b8; }
 .btn-refresh {
   display: inline-flex; align-items: center; gap: 6px;
-  background: none; border: none; color: #1d4ed8;
+  background: none; border: none; color: #246BEB;
   font-size: 13px; font-weight: 700; cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif; padding: 6px 10px; border-radius: 8px;
+  font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif; padding: 6px 10px; border-radius: 8px;
 }
 .btn-refresh:hover { background: #eff6ff; }
 
@@ -1607,9 +1613,9 @@ body {
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; padding: 0;
 }
-.todo-check-on { background: #1d4ed8; border-color: #1d4ed8; }
+.todo-check-on { background: #246BEB; border-color: #246BEB; }
 .todo-label { flex: 1; font-size: 14px; color: #1e293b; font-weight: 600; cursor: pointer; }
-.todo-label:hover { color: #1d4ed8; }
+.todo-label:hover { color: #246BEB; }
 .todo-count { font-size: 11px; font-weight: 800; border-radius: 10px; padding: 3px 9px; }
 .todo-count-danger  { background: #dc2626; color: #fff; }
 .todo-count-warning { background: #f1f5f9; color: #475569; }
@@ -1662,7 +1668,7 @@ body {
 .report-stat-dot { width: 10px; height: 10px; border-radius: 3px; margin: 0 auto 10px; }
 
 /* ── 어르신 아바타: 이니셜 ── */
-.elder-avatar { font-size: 18px; font-weight: 900; color: #1d4ed8; }
+.elder-avatar { font-size: 18px; font-weight: 900; color: #246BEB; }
 
 /* ── 멘트 미리보기 점 ── */
 .preview-dot {
@@ -1685,7 +1691,7 @@ body {
 .banner-btn {
   height: 32px; padding: 0 14px; border-radius: 8px;
   font-size: 12px; font-weight: 700; background: #fff;
-  cursor: pointer; font-family: 'Noto Sans KR', sans-serif; flex-shrink: 0;
+  cursor: pointer; font-family: 'Pretendard GOV', Pretendard, 'Noto Sans KR', sans-serif; flex-shrink: 0;
 }
 .banner-btn--danger { border: 1.5px solid #DC2626; color: #DC2626; }
 .banner-btn--danger:hover { background: #FEF2F2; }
@@ -1694,3 +1700,6 @@ body {
 .banner-btn--ghost { border: none; background: transparent; padding: 0 6px; }
 .alert-banner-danger .banner-btn--ghost { color: #DC2626; }
 .alert-banner-warning .banner-btn--ghost { color: #B45309; }
+/* P2-9: 알림 배너 접기 토글 행 */
+.alert-more { align-self: flex-start; color: #64748b; height: 26px; }
+.alert-more:hover { color: #246BEB; }
