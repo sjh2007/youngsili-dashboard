@@ -27,6 +27,11 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [keep, setKeep] = useState(false);  // P2-2: 어르신 건강정보 취급 시스템 — 자동 로그인 기본 해제
+  // ── 아이디·비밀번호 찾기 (디자인팀 로그인 개선안 v1.0) ──
+  const [mode, setMode] = useState('none'); // none | findId | findIdResult | findPw | findPwSent
+  const [fi, setFi] = useState({ name: '', phone: '' });
+  const [fiResult, setFiResult] = useState(null);
+  const [fpEmail, setFpEmail] = useState('');
   // 회원가입
   const [su, setSu] = useState({ email: '', pw: '', pw2: '', org: '', orgType: 'senior', phone: '', referral: '', address: '', region: '' });
   // 기관 주소(선택) — 다음(카카오) 우편번호 검색. region('서울 서대문구')은 기상 공공데이터 관할 산출에 사용
@@ -158,12 +163,39 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
     }
     setBusy(false);
   };
-  const doReset = async () => {
-    if (!email.trim()) { setErr('비밀번호를 재설정할 이메일을 입력하세요.'); return; }
-    setErr(''); setMsg('');
-    try { await sendPasswordResetEmail(auth, email.trim()); setMsg('비밀번호 재설정 메일을 보냈습니다.'); }
-    catch { setErr('재설정 메일 발송 실패. 이메일을 확인하세요.'); }
+  // ── 아이디 찾기: 이름+휴대폰 대조 → 마스킹된 아이디 (SMS 인증번호는 문자 인프라 도입 시 추가) ──
+  const doFindId = async () => {
+    setErr('');
+    if (!fi.name.trim() || fi.phone.replace(/[^0-9]/g, '').length < 9) { setErr('이름과 휴대폰 번호를 정확히 입력해 주세요.'); return; }
+    setBusy(true);
+    try {
+      const r = await fetch(`${serverUrl}/auth/find-id`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: fi.name.trim(), phone: fi.phone }) });
+      const j = await r.json().catch(() => null);
+      if (j && j.found) { setFiResult(j); setMode('findIdResult'); }
+      else if (j && j.error) setErr(j.error);
+      else setErr('일치하는 계정을 찾지 못했습니다. 입력 정보를 확인하거나 기관 관리자에게 문의하세요.');
+    } catch { setErr('네트워크 오류 — 잠시 후 다시 시도해 주세요.'); }
+    setBusy(false);
   };
+  const maskEmail = (em) => { const [l, d] = String(em).split('@'); return d ? l.slice(0, Math.min(5, Math.max(1, l.length - 3))) + '***@' + d : em; };
+  const doFindPw = async (resend) => {
+    const em = fpEmail.trim();
+    setErr('');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { setErr('아이디(이메일) 형식을 확인해 주세요.'); return; }
+    setBusy(true);
+    try { await sendPasswordResetEmail(auth, em); setMode('findPwSent'); setMsg(resend ? '재설정 메일을 다시 보냈습니다.' : ''); }
+    catch (e) {
+      if (e.code === 'auth/user-not-found') { setMode('findPwSent'); setMsg(''); } // 계정 존재 여부 노출 방지
+      else setErr('메일 발송에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+    setBusy(false);
+  };
+  const backToLogin = () => { setMode('none'); setErr(''); setMsg(''); };
+  const backLink = (
+    <div style={{ textAlign: 'center', marginTop: 18 }}>
+      <button style={{ ...linkBtn, color: '#64748b', fontWeight: 600 }} onClick={backToLogin}>← 로그인으로 돌아가기</button>
+    </div>
+  );
 
   // ── 4) 회원가입 ──
   const doSignup = async () => {
@@ -232,6 +264,74 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
     );
   }
 
+  // ── 아이디 찾기 / 비밀번호 찾기 화면 (디자인 시안 31:2 · 31:23 · 32:2 · 32:15) ──
+  if (mode !== 'none') {
+    const FindHeader = ({ title, sub }) => (
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <img src="/youngsili.png" alt="영실이" style={{ width: 56, height: 56, borderRadius: 14, objectFit: 'cover' }} />
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginTop: 10 }}>{title}</div>
+        <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{sub}</div>
+      </div>
+    );
+    return (
+      <div style={wrap}><div style={card}>
+        {mode === 'findId' && (
+          <div>
+            <FindHeader title="아이디 찾기" sub="가입 시 등록한 담당자 정보로 확인합니다" />
+            <div style={label}>이름</div>
+            <input style={input} value={fi.name} onChange={e => setFi(s => ({ ...s, name: e.target.value }))} placeholder="담당자 이름" />
+            <div style={label}>휴대폰 번호</div>
+            <input style={input} value={fi.phone} onChange={e => setFi(s => ({ ...s, phone: e.target.value.replace(/[^0-9-]/g, '') }))} onKeyDown={e => e.key === 'Enter' && doFindId()} placeholder="010-0000-0000" inputMode="numeric" />
+            {err && <div style={errBox}>{err}</div>}
+            <button style={primaryBtn} disabled={busy} onClick={doFindId}>{busy ? '확인 중…' : '아이디 찾기'}</button>
+            {backLink}
+          </div>
+        )}
+        {mode === 'findIdResult' && fiResult && (
+          <div>
+            <FindHeader title="아이디 확인" sub="입력하신 정보와 일치하는 계정입니다" />
+            <div style={{ background: '#eef4ff', borderRadius: 12, padding: '18px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 12.5, color: '#64748b' }}>{fiResult.name} 님의 아이디</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', marginTop: 6 }}>{fiResult.maskedEmail}</div>
+              {fiResult.joinedAt && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>가입일 {fiResult.joinedAt}</div>}
+            </div>
+            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>보안을 위해 아이디 일부는 가려서 표시됩니다</div>
+            <button style={primaryBtn} onClick={backToLogin}>이 아이디로 로그인</button>
+            <button style={{ ...primaryBtn, background: '#fff', color: '#334155', border: '1px solid #cbd5e1', marginTop: 10 }} onClick={() => { setErr(''); setMode('findPw'); }}>비밀번호 찾기</button>
+            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 14 }}>일치하는 계정이 없다면 기관 관리자에게 문의하세요</div>
+          </div>
+        )}
+        {mode === 'findPw' && (
+          <div>
+            <FindHeader title="비밀번호 찾기" sub="가입한 아이디(이메일)로 재설정 링크를 보내드립니다" />
+            <div style={label}>아이디 (기관 이메일)</div>
+            <input style={input} type="email" value={fpEmail} onChange={e => setFpEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && doFindPw()} placeholder="example@center.or.kr" autoComplete="username" />
+            {err && <div style={errBox}>{err}</div>}
+            <button style={primaryBtn} disabled={busy} onClick={() => doFindPw()}>{busy ? '보내는 중…' : '재설정 링크 보내기'}</button>
+            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 14 }}>
+              아이디가 기억나지 않으면 <button style={{ ...linkBtn, fontSize: 12 }} onClick={() => { setErr(''); setMode('findId'); }}>아이디 찾기</button>를 먼저 진행하세요
+            </div>
+            {backLink}
+          </div>
+        )}
+        {mode === 'findPwSent' && (
+          <div>
+            <FindHeader title="메일을 확인해 주세요" sub="재설정 링크를 보내드렸어요" />
+            <div style={{ textAlign: 'center', margin: '6px 0 14px' }}>
+              <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#f0fdf4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: GREEN, fontWeight: 900 }}>✓</div>
+            </div>
+            <div style={{ textAlign: 'center', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{maskEmail(fpEmail.trim())} 로</div>
+            <div style={{ textAlign: 'center', fontSize: 13, color: '#64748b', marginTop: 4 }}>비밀번호 재설정 링크를 보냈습니다. 메일이 안 보이면 스팸함을 확인해 주세요.</div>
+            {msg && <div style={{ ...errBox, color: GREEN, background: '#f0fdf4', textAlign: 'center' }}>{msg}</div>}
+            {err && <div style={errBox}>{err}</div>}
+            <button style={{ ...primaryBtn, background: '#fff', color: '#334155', border: '1px solid #cbd5e1' }} disabled={busy} onClick={() => doFindPw(true)}>{busy ? '보내는 중…' : '메일이 안 왔나요? 다시 보내기'}</button>
+            {backLink}
+          </div>
+        )}
+      </div></div>
+    );
+  }
+
   return (
     <div style={wrap}><div style={card}>
       <Header />
@@ -251,16 +351,22 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
           <input style={input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@example.com" autoComplete="username" />
           <div style={label}>비밀번호</div>
           <input style={input} type="password" value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} placeholder="비밀번호 입력" autoComplete="current-password" />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 13, color: '#475569', cursor: 'pointer' }}>
-            <input type="checkbox" checked={keep} onChange={e => setKeep(e.target.checked)} /> 자동 로그인
-          </label>
-          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>공용 PC에서는 자동 로그인을 사용하지 마세요. 미사용 시 브라우저 종료로 세션이 만료됩니다.</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', cursor: 'pointer' }}>
+              <input type="checkbox" checked={keep} onChange={e => setKeep(e.target.checked)} /> 로그인 상태 유지
+            </label>
+            <span style={{ fontSize: 13 }}>
+              <button style={linkBtn} onClick={() => { setErr(''); setMsg(''); setMode('findId'); }}>아이디 찾기</button>
+              <span style={{ color: '#cbd5e1', margin: '0 6px' }}>·</span>
+              <button style={linkBtn} onClick={() => { setErr(''); setMsg(''); setFpEmail(email); setMode('findPw'); }}>비밀번호 찾기</button>
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>공용 PC에서는 사용하지 마세요. 미사용 시 브라우저 종료로 세션이 만료됩니다.</div>
           {err && <div style={errBox}>{err}</div>}
           {msg && <div style={{ ...errBox, color: GREEN, background: '#f0fdf4' }}>{msg}</div>}
           <button style={primaryBtn} disabled={busy} onClick={doLogin}>{busy ? '로그인 중…' : '로그인'}</button>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14 }}>
-            <span style={{ fontSize: 13, color: '#64748b' }}>회원이 아니신가요? <button style={linkBtn} onClick={() => setTab('signup')}>회원가입</button></span>
-            <button style={{ ...linkBtn, color: '#64748b' }} onClick={doReset}>비밀번호 찾기</button>
+          <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#64748b' }}>
+            기관 계정이 없으신가요? <button style={linkBtn} onClick={() => setTab('signup')}>기관 회원가입</button>
           </div>
         </div>
       ) : (
