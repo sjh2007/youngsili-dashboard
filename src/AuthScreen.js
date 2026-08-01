@@ -28,7 +28,21 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   const [pw, setPw] = useState('');
   const [keep, setKeep] = useState(false);  // P2-2: 어르신 건강정보 취급 시스템 — 자동 로그인 기본 해제
   // 회원가입
-  const [su, setSu] = useState({ email: '', pw: '', pw2: '', org: '', orgType: 'senior', phone: '', referral: '' });
+  const [su, setSu] = useState({ email: '', pw: '', pw2: '', org: '', orgType: 'senior', phone: '', referral: '', address: '', region: '' });
+  // 기관 주소(선택) — 다음(카카오) 우편번호 검색. region('서울 서대문구')은 기상 공공데이터 관할 산출에 사용
+  const openSignupAddress = () => {
+    const SIDO = { '서울특별시': '서울', '부산광역시': '부산', '대구광역시': '대구', '인천광역시': '인천', '광주광역시': '광주', '대전광역시': '대전', '울산광역시': '울산', '세종특별자치시': '세종', '경기도': '경기', '강원특별자치도': '강원', '강원도': '강원', '충청북도': '충북', '충청남도': '충남', '전북특별자치도': '전북', '전라북도': '전북', '전라남도': '전남', '경상북도': '경북', '경상남도': '경남', '제주특별자치도': '제주' };
+    const run = () => new window.daum.Postcode({ oncomplete: (d) => {
+      const sido = SIDO[d.sido] || d.sido;
+      setSu(s => ({ ...s, address: d.roadAddress || d.address, region: `${sido} ${d.sigungu}`.trim() }));
+    } }).open();
+    if (window.daum && window.daum.Postcode) return run();
+    const sc = document.createElement('script');
+    sc.src = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+    sc.onload = run;
+    sc.onerror = () => setErr('주소 검색을 불러오지 못했습니다. 네트워크를 확인해 주세요.');
+    document.body.appendChild(sc);
+  };
   const [agree, setAgree] = useState({ tos: false, privacy: false, mkt: false });
   // 기관설정(안전망)
   const [orgName, setOrgName] = useState('');
@@ -164,7 +178,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
       await createUserWithEmailAndPassword(auth, su.email.trim(), su.pw);
       // 기관 자동 생성 (운영자 승인 없이)
       try {
-        await authFetch(`${serverUrl}/signup/provision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgName: su.org.trim(), orgType: su.orgType === 'etc' ? 'senior' : su.orgType, orgTypeEtc: su.orgType === 'etc' ? (su.orgTypeEtc || '기타') : '', phone: su.phone, referral: su.referral }) });
+        await authFetch(`${serverUrl}/signup/provision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgName: su.org.trim(), orgType: su.orgType === 'etc' ? 'senior' : su.orgType, orgTypeEtc: su.orgType === 'etc' ? (su.orgTypeEtc || '기타') : '', phone: su.phone, referral: su.referral, address: su.address, region: su.region }) });
       } catch { /* 실패 시 인증 후 기관설정 안전망에서 재시도 */ }
       await sendEmailVerification(auth.currentUser);
       // authUser가 생기고 emailVerified=false → 위 '인증 대기' 화면으로 전환됨
@@ -259,6 +273,12 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
           <input style={input} type="password" value={su.pw2} onChange={e => setSu(s => ({ ...s, pw2: e.target.value }))} placeholder="비밀번호 재입력" autoComplete="new-password" />
           <div style={label}>기관 · 단체명</div>
           <input style={input} value={su.org} onChange={e => setSu(s => ({ ...s, org: e.target.value }))} placeholder="예) ○○구 노인복지관 / ○○장애인자립센터" />
+          <div style={label}>기관 주소 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택 · 관할 지역 기상특보 연동에 사용)</span></div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input style={{ ...input, flex: 1, background: '#f8fafc' }} value={su.address} readOnly placeholder="주소 검색을 눌러 선택" />
+            <button type="button" style={{ padding: '0 14px', borderRadius: 10, border: '1.5px solid ' + BLUE, background: '#fff', color: BLUE, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={openSignupAddress}>주소 검색</button>
+          </div>
+          {su.region && <div style={{ fontSize: 12, color: '#16a34a', marginTop: 4 }}>관할 지역: {su.region} (기상 데이터 자동 연동)</div>}
           <div style={label}>기관 유형 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(화면 구성이 유형에 맞게 바뀝니다)</span></div>
           <div style={{ display: 'flex', gap: 8 }}>
             {[['senior', '노인맞춤돌봄'], ['disability', '장애인활동지원'], ['etc', '기타 돌봄기관']].map(([k, t]) => (

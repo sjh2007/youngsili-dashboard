@@ -511,6 +511,27 @@ export default function App() {
   const fetchMe = async () => {
     try { const r = await authFetch(`${SERVER_URL}/me`); if (r.ok) setMe(await r.json()); } catch {}
   };
+  // 기관 주소 변경 (R5: 저장 즉시 관할·기상 데이터 재생성 — 재로그인 불필요)
+  const saveOrgAddress = () => {
+    const SIDO = {'서울특별시':'서울','부산광역시':'부산','대구광역시':'대구','인천광역시':'인천','광주광역시':'광주','대전광역시':'대전','울산광역시':'울산','세종특별자치시':'세종','경기도':'경기','강원특별자치도':'강원','강원도':'강원','충청북도':'충북','충청남도':'충남','전북특별자치도':'전북','전라북도':'전북','전라남도':'전남','경상북도':'경북','경상남도':'경남','제주특별자치도':'제주'};
+    const run = () => new window.daum.Postcode({ oncomplete: async (d) => {
+      const sido = SIDO[d.sido] || d.sido;
+      const address = d.roadAddress || d.address;
+      const region = `${sido} ${d.sigungu}`.trim();
+      try {
+        const r = await authFetch(`${SERVER_URL}/org/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address, region }) });
+        const j = await r.json();
+        if (j.success) { setAdminMsg(`기관 주소가 저장되었습니다 — 관할: ${region} (기상 데이터 자동 연동)`); fetchMe(); fetchWeather(); }
+        else setAdminMsg(j.error || '주소 저장 실패');
+      } catch { setAdminMsg('네트워크 오류 — 주소 저장 실패'); }
+    } }).open();
+    if (window.daum && window.daum.Postcode) return run();
+    const s = document.createElement('script');
+    s.src = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+    s.onload = run;
+    s.onerror = () => window.alert('주소 검색을 불러오지 못했습니다. 네트워크를 확인해 주세요.');
+    document.body.appendChild(s);
+  };
   const fetchOrgs = async () => {
     try { const r = await authFetch(`${SERVER_URL}/admin/orgs`); const d = await r.json(); setOrgs(Array.isArray(d) ? d : []); } catch { setOrgs([]); }
   };
@@ -880,7 +901,8 @@ export default function App() {
     return               { level: 'low',    label: '안전',   color: '#22c55e', bg: '#f0fdf4' };
   };
 
-  const REGIONS = ['전체', '대구 북구', '대구 달서구', '대구 수성구', '대구 중구', '대구 동구', '대구 서구', '대구 남구', '대구 달성군'];
+  // R4 지역 라벨 하드코딩 금지 — 등록된 어르신 지역 + 기관 관할 지역에서 동적 생성
+  const REGIONS = ['전체', ...[...new Set([...elders.map(e => (e.region || '').trim()), (me?.orgRegion || '').trim()])].filter(Boolean).sort()];
 
   const filteredElders = elders
     .filter(e => e.approved !== false)   // 승인 대기(앱 신청)는 별도 '승인 대기' 섹션에 표시
@@ -947,7 +969,12 @@ export default function App() {
     } finally { setFetchingWeather(false); }
   };
 
-  useEffect(() => { fetchWeather(); }, []); // eslint-disable-line
+  // R3: 기상 데이터 5분 주기 자동 갱신 (서버도 지역별 5분 캐시 — 기상청 호출량 안전)
+  useEffect(() => {
+    fetchWeather();
+    const t = setInterval(() => fetchWeather(), 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []); // eslint-disable-line
 
   const saveScript = () => { setMainScript(editScript); setScriptSaved(true); setTimeout(() => setScriptSaved(false), 2000); };
   const resetScript = () => { setEditScript(DEFAULT_SCRIPT); setMainScript(DEFAULT_SCRIPT); };
@@ -2399,7 +2426,7 @@ export default function App() {
         <div className="sidebar-footer">
           <div className="worker-info">
             <div className="worker-avatar">복</div>
-            <div><div className="worker-name">{me?.orgName || (isSuper ? '운영자' : `${T.worker} 관리`)}</div><div className="worker-region">{authEnabled&&authUser?authUser.email:'대구광역시'}{isSuper?' · 운영자':''}</div></div>
+            <div><div className="worker-name">{me?.orgName || (isSuper ? '운영자' : `${T.worker} 관리`)}</div><div className="worker-region">{authEnabled&&authUser?authUser.email:(me?.orgRegion||'')}{isSuper?' · 운영자':''}</div></div>
           </div>
           {me?.orgCode && (
             <div onClick={copyOrgCode} title="클릭하면 복사 · 어르신 앱 등록 시 입력" style={{marginTop:10,padding:'8px 10px',borderRadius:8,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
@@ -3202,7 +3229,7 @@ export default function App() {
             <div className="fade-in">
               <div className="weather-panel">
                 <div className="weather-panel-header">
-                  <div><div className="weather-panel-title">기상청 공공데이터 연동</div><div className="weather-panel-sub">날씨 경보 발령 시 자동으로 멘트에 삽입됩니다</div></div>
+                  <div><div className="weather-panel-title">기상청 공공데이터 연동</div><div className="weather-panel-sub">5분 주기 자동 갱신 · 관할: {me?.orgRegion || `${T.elder} 등록 지역 기준`} (주소 자동 매핑) · 날씨 경보 발령 시 자동으로 멘트에 삽입됩니다</div></div>
                   <button className={`btn-fetch-weather ${fetchingWeather?'btn-calling':''}`} onClick={fetchWeather} disabled={fetchingWeather}>{fetchingWeather ? '불러오는 중...' : '날씨 데이터 갱신'}</button>
                 </div>
                 <div className="weather-grid">
@@ -3465,7 +3492,7 @@ export default function App() {
 
           {page==='report' && (
             <div className="fade-in">
-              <div className="report-banner"><div className="report-banner-title">{new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">대구광역시 AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>PDF 다운로드</button></div></div>
+              <div className="report-banner"><div className="report-banner-title">{new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">{me?.orgName ? `${me.orgName} · ` : ''}AI 영실이 복지 서비스</div><div style={{display:'flex',gap:8}}><button className="btn-download" onClick={exportStatsCSV}>엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>PDF 다운로드</button></div></div>
               <div className="section" style={{marginBottom:16,borderLeft:'4px solid #246BEB'}}>
                 <div className="section-title">월간 실적 보고서 (지자체 보고용 엑셀)</div>
                 <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
@@ -4138,6 +4165,19 @@ export default function App() {
               ) : (
               <>
                 {adminMsg && <div className="success-banner" style={{marginBottom:16}}>{adminMsg}</div>}
+
+                {/* 기관 정보 — 주소·관할 지역 (기상 공공데이터 연동 기준, R1·R5) */}
+                {!isSuper && (
+                  <div className="section" style={{marginBottom:16}}>
+                    <div className="section-title">기관 정보</div>
+                    <div style={{display:'flex',gap:24,flexWrap:'wrap',alignItems:'center'}}>
+                      <div><div style={{fontSize:12,color:'#94a3b8',marginBottom:2}}>기관명</div><div style={{fontWeight:800}}>{me?.orgName||'-'}{me?.orgCode?` (${me.orgCode})`:''}</div></div>
+                      <div><div style={{fontSize:12,color:'#94a3b8',marginBottom:2}}>관할 지역</div><div style={{fontWeight:800,color:me?.orgRegion?'#16a34a':'#dc2626'}}>{me?.orgRegion||'미설정'}</div></div>
+                      <div style={{flex:1,minWidth:200}}><div style={{fontSize:12,color:'#94a3b8',marginBottom:2}}>주소</div><div style={{fontSize:14}}>{me?.orgAddress||'미입력 — 주소를 등록하면 관할 지역 기상특보가 자동 연동됩니다'}</div></div>
+                      <button className="btn-secondary" onClick={saveOrgAddress}>{me?.orgAddress?'주소 변경':'주소 등록'}</button>
+                    </div>
+                  </div>
+                )}
 
                 {/* 구성원 초대 링크 — 센터장: 센터장·전담직원·지원사 / 전담직원: 지원사만 */}
                 <div className="section" style={{marginBottom:16}}>
