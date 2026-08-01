@@ -520,9 +520,10 @@ export default function App() {
       const region = `${sido} ${d.sigungu}`.trim();
       try {
         const r = await authFetch(`${SERVER_URL}/org/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address, region }) });
-        const j = await r.json();
-        if (j.success) { setAdminMsg(`기관 주소가 저장되었습니다 — 관할: ${region} (기상 데이터 자동 연동)`); fetchMe(); fetchWeather(); }
-        else setAdminMsg(j.error || '주소 저장 실패');
+        const j = await r.json().catch(() => null); // 404 등 HTML 응답이어도 '네트워크 오류'로 뭉개지 않게
+        if (j && j.success) { setAdminMsg(`기관 주소가 저장되었습니다 — 관할: ${region} (기상 데이터 자동 연동)`); fetchMe(); fetchWeather(); }
+        else if (r.status === 404) setAdminMsg('서버에 주소 저장 기능이 아직 반영되지 않았습니다 — 서버 배포 후 다시 시도해 주세요');
+        else setAdminMsg((j && j.error) || `주소 저장 실패 (오류 코드 ${r.status})`);
       } catch { setAdminMsg('네트워크 오류 — 주소 저장 실패'); }
     } }).open();
     if (window.daum && window.daum.Postcode) return run();
@@ -810,6 +811,7 @@ export default function App() {
   const [scriptSaved, setScriptSaved]   = useState(false);
   const [fetchingWeather, setFetchingWeather] = useState(false);
   const [weatherTime, setWeatherTime] = useState('');
+  const [weatherStale, setWeatherStale] = useState(false); // 기상 연동 지연 — 마지막 성공 수신 데이터를 유지한 채 표시
   const [weatherData, setWeatherData]   = useState({});  // 서버 /weather 실데이터로 로드 (가짜 날씨 폐지)
   const [formErrors, setFormErrors] = useState({});
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -903,6 +905,8 @@ export default function App() {
 
   // R4 지역 라벨 하드코딩 금지 — 등록된 어르신 지역 + 기관 관할 지역에서 동적 생성
   const REGIONS = ['전체', ...[...new Set([...elders.map(e => (e.region || '').trim()), (me?.orgRegion || '').trim()])].filter(Boolean).sort()];
+  // 특보 등급 시맨틱: 경보급('매우 더움'·'많은 비'·'…경보')=danger(레드), 그 외 특보=warn(앰버), 없음=none
+  const alertSeverity = w => (!w || w.alert === 'none') ? 'none' : (/매우|많은|경보/.test(w.alertText || '') ? 'danger' : 'warn');
 
   const filteredElders = elders
     .filter(e => e.approved !== false)   // 승인 대기(앱 신청)는 별도 '승인 대기' 섹션에 표시
@@ -963,9 +967,11 @@ export default function App() {
         else if (hasCold)    { setActiveAlert('cold');     setAlertScript(ALERT_TEMPLATES.cold); }
         else if (hasRain)    { setActiveAlert('rain');     setAlertScript(ALERT_TEMPLATES.rain); }
         else                 { setActiveAlert('none');     setAlertScript(ALERT_TEMPLATES.none); }
-      }
+        setWeatherStale(false);
+      } else { setWeatherStale(true); }
     } catch (err) {
       console.error('날씨 API 오류:', err);
+      setWeatherStale(true);
     } finally { setFetchingWeather(false); }
   };
 
@@ -987,7 +993,7 @@ export default function App() {
     if (page === 'health') { fetchHealth(); fetchHealthHistory(); }
     if (page === 'report') fetchStats();
     if (page === 'calls' || page === 'dashboard' || page === 'elders' || page === 'detail' || page === 'health') fetchCalls();  // health: 행 확장 상세의 최근 7일 이력용
-    if (page === 'data') fetchPopulation();
+    if (page === 'data') { fetchPopulation(); fetchWeather(); }
     if (page === 'script') fetchWeather();
     if (page === 'casenotes') loadCaseNotes();
   };
@@ -3229,12 +3235,12 @@ export default function App() {
             <div className="fade-in">
               <div className="weather-panel">
                 <div className="weather-panel-header">
-                  <div><div className="weather-panel-title">기상청 공공데이터 연동</div><div className="weather-panel-sub">5분 주기 자동 갱신 · 관할: {me?.orgRegion || `${T.elder} 등록 지역 기준`} (주소 자동 매핑) · 날씨 경보 발령 시 자동으로 멘트에 삽입됩니다</div></div>
+                  <div><div className="weather-panel-title">기상청 공공데이터 연동</div><div className="weather-panel-sub">5분 주기 자동 갱신 · 관할: {me?.orgRegion || `${T.elder} 등록 지역 기준`} (주소 자동 매핑){weatherTime && ` · 마지막 갱신 ${weatherTime}`} · 날씨 경보 발령 시 자동으로 멘트에 삽입됩니다{weatherStale && <span style={{marginLeft:8,background:'#fffbeb',border:'1px solid #fde68a',color:'#b45309',padding:'1px 8px',borderRadius:6,fontWeight:700}}>연동 지연 — 마지막 수신 데이터 표시 중</span>}</div></div>
                   <button className={`btn-fetch-weather ${fetchingWeather?'btn-calling':''}`} onClick={fetchWeather} disabled={fetchingWeather}>{fetchingWeather ? '불러오는 중...' : '날씨 데이터 갱신'}</button>
                 </div>
                 <div className="weather-grid">
-                  {Object.entries(weatherData).map(([region, data]) => (
-                    <div key={region} className={`weather-card ${data.alert!=='none'?'weather-alert':''}`}>
+                  {Object.entries(weatherData).map(([region, data]) => { const sev = alertSeverity(data); return (
+                    <div key={region} className={`weather-card ${sev==='danger'?'weather-alert':sev==='warn'?'weather-warn':''}`}>
                       <div className="weather-region">{region}</div>
                       {data.noData ? (
                         <div style={{fontSize:15,color:'#94a3b8',padding:'20px 0',fontWeight:600}}>정보 없음</div>
@@ -3244,11 +3250,11 @@ export default function App() {
                           <div className="weather-temp">{data.temp}°C</div>
                           <div className="weather-condition">{data.condition}</div>
                           {weatherTime && <div className="weather-time" style={{fontSize:11,color:'#94a3b8',marginTop:3}}>{weatherTime}</div>}
-                          {data.alertText && <div className="weather-badge">{data.alertText}</div>}
+                          {data.alertText && <div className={`weather-badge ${sev==='warn'?'weather-badge--warn':''}`}>{data.alertText}</div>}
                         </>
                       )}
                     </div>
-                  ))}
+                  ); })}
                 </div>
               </div>
 
@@ -3941,8 +3947,24 @@ export default function App() {
             <div className="fade-in">
               <div className="data-banner">
                 <div><div className="data-banner-title">대구광역시 독거노인 현황</div><div className="data-banner-sub">출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
-                <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={fetchPopulation} disabled={popLoading}>{popLoading ? '불러오는 중...' : '데이터 갱신'}</button>
+                <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={() => { fetchPopulation(); fetchWeather(); }} disabled={popLoading}>{popLoading ? '불러오는 중...' : '데이터 갱신'}</button>
               </div>
+              {/* 발효 중 특보 배너 — "{특보명} 발효 중 · {지역} 외 N개 지역", 경보급=레드/주의보급=앰버 */}
+              {(() => {
+                const ALERT_LBL = {heatwave:'폭염경보', cold:'한파경보', dust:'미세먼지 나쁨', rain:'호우주의보', typhoon:'태풍경보', wildfire:'산불발생'};
+                const groups = {};
+                Object.entries(weatherData).forEach(([region, w]) => { if (w && w.alert && w.alert !== 'none') (groups[w.alert] = groups[w.alert] || []).push({region, sev: alertSeverity(w)}); });
+                return Object.entries(groups).map(([key, list]) => {
+                  const danger = list.some(x => x.sev === 'danger');
+                  const c = danger ? {bar:'#DC2626', bg:'#fef2f2', bd:'#fecaca', fg:'#b91c1c'} : {bar:'#F59E0B', bg:'#fffbeb', bd:'#fde68a', fg:'#b45309'};
+                  return (
+                    <div key={key} style={{border:`1px solid ${c.bd}`, borderLeft:`4px solid ${c.bar}`, background:c.bg, borderRadius:10, padding:'10px 16px', marginBottom:10, fontSize:14, fontWeight:700, color:c.fg, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+                      <span>{ALERT_LBL[key] || '기상특보'} 발효 중 · {list[0].region}{list.length > 1 ? ` 외 ${list.length - 1}개 지역` : ''}</span>
+                      <span style={{fontWeight:400, fontSize:12.5}}>아래 '기상특보 집중 케어 대상'에서 해당 지역 {T.elder}을 확인하세요</span>
+                    </div>
+                  );
+                });
+              })()}
               {popError && <div className="call-result-banner error">{popError}</div>}
               {popLoading && <div style={{textAlign:'center',padding:'40px',color:'#64748b',fontSize:16}}>행정안전부 공공데이터 불러오는 중...</div>}
               {popData && (
@@ -3977,7 +3999,13 @@ export default function App() {
                   </div>
                   <div className="section">
                     <div className="section-title">기상특보 집중 케어 대상</div>
-                    <div className="data-banner-sub" style={{marginBottom:14}}>기상청 공공데이터 경보가 발령된 지역의 어르신이에요. 오늘 안전 확인이 필요합니다.</div>
+                    <div style={{fontSize:12.5,color:'#64748b',marginBottom:14,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                      <span>기상청 공공데이터 경보가 발령된 지역의 어르신이에요. 오늘 안전 확인이 필요합니다.</span>
+                      <span>· 기상청 단기예보 · 5분 주기 자동 갱신 · 관할 {Object.keys(weatherData).length}개 지역 (주소 자동 매핑){weatherTime && ` · 마지막 갱신 ${weatherTime}`}</span>
+                      {weatherStale
+                        ? <span style={{background:'#fffbeb',border:'1px solid #fde68a',color:'#b45309',padding:'1px 8px',borderRadius:6,fontWeight:700,fontSize:12}}>연동 지연 — 마지막 수신 데이터 표시 중</span>
+                        : Object.keys(weatherData).length > 0 && <span style={{color:'#16a34a',fontWeight:700,fontSize:12}}>정상 연동</span>}
+                    </div>
                     {(() => {
                       const ALERTS = [
                         {key:'heatwave', icon:'🌡️', label:'폭염경보', color:'#ef4444', tip:'수분 섭취·외출 자제 안내'},
