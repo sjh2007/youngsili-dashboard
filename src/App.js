@@ -181,9 +181,11 @@ const getWeatherIcon = (c = '') => {
   if (c.includes('비'))     return '🌧️';
   if (c.includes('눈'))     return '❄️';
   if (c.includes('흐림'))   return '☁️';
-  if (c.includes('구름'))   return '⛅';
   if (c.includes('폭염'))   return '🥵';
-  return '☀️';
+  const h = new Date().getHours();
+  const night = h >= 19 || h < 6;   // 야간에는 해 대신 달 (하늘상태만으로는 시간대를 모름)
+  if (c.includes('구름'))   return night ? '☁️' : '⛅';
+  return night ? '🌙' : '☀️';
 };
 
 // 사이드바 아이콘 — Lucide 단일 세트 (P1-3: 이모지·자체 SVG 제거, stroke 1.75)
