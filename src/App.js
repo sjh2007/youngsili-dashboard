@@ -3235,7 +3235,7 @@ export default function App() {
             <div className="fade-in">
               <div className="weather-panel">
                 <div className="weather-panel-header">
-                  <div><div className="weather-panel-title">기상청 공공데이터 연동</div><div className="weather-panel-sub">5분 주기 자동 갱신 · 관할: {me?.orgRegion || `${T.elder} 등록 지역 기준`} (주소 자동 매핑){weatherTime && ` · 마지막 갱신 ${weatherTime}`} · 날씨 경보 발령 시 자동으로 멘트에 삽입됩니다{weatherStale && <span style={{marginLeft:8,background:'#fffbeb',border:'1px solid #fde68a',color:'#b45309',padding:'1px 8px',borderRadius:6,fontWeight:700}}>연동 지연 — 마지막 수신 데이터 표시 중</span>}</div></div>
+                  <div><div className="weather-panel-title">기상청 공공데이터 연동</div><div className="weather-panel-sub">5분 주기 자동 갱신 · 관할: {(() => { const sido = (me?.orgRegion || '').split(' ')[0]; const n = Object.keys(weatherData).length; return sido && n > 1 ? `${sido} 전역 ${n}개 지역` : (me?.orgRegion || `${T.elder} 등록 지역 기준`); })()} (기관 주소 자동 매핑){weatherTime && ` · 마지막 갱신 ${weatherTime}`} · 날씨 경보 발령 시 자동으로 멘트에 삽입됩니다{weatherStale && <span style={{marginLeft:8,background:'#fffbeb',border:'1px solid #fde68a',color:'#b45309',padding:'1px 8px',borderRadius:6,fontWeight:700}}>연동 지연 — 마지막 수신 데이터 표시 중</span>}</div></div>
                   <button className={`btn-fetch-weather ${fetchingWeather?'btn-calling':''}`} onClick={fetchWeather} disabled={fetchingWeather}>{fetchingWeather ? '불러오는 중...' : '날씨 데이터 갱신'}</button>
                 </div>
                 <div className="weather-grid">
