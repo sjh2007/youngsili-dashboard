@@ -1713,6 +1713,7 @@ export default function App() {
   // 건강 알림 → 일지 작성: 알림 시각 근처(±3시간)의 통화를 찾아 초안(요약)까지 채워서 열기.
   // 통화를 못 찾으면 감지 신호 문구만이라도 채움(빈 내용란 방지 — 담당자는 추가 작성만).
   const [draftingAlertId, setDraftingAlertId] = useState(null);
+  const [unackOpen, setUnackOpen] = useState(false);   // 건강 상태 미처리 알림 — 기본 5건만, 전체 펼치기/접기
   const ALERT_CAT_NOTE = { health: 'health', fall: 'safety', emotion: 'emotional', living: 'welfare', meal: 'meal', missed: 'safety', help: 'safety', safe: 'safety' };
   const openNoteFromAlert = async (alert) => {
     if (draftingAlertId) return;
@@ -3656,13 +3657,18 @@ export default function App() {
                 const cnt = c => un.filter(a=>(a.category||'health')===c).length;
                 return (
                 <div className="section" style={{marginBottom:20}}>
-                  <div className="section-title">미처리 알림 ({un.length}건) <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 조치 시작 → 조치 완료(또는 일지 작성)로 마감하세요</span></div>
+                  <div className="section-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                    <span>미처리 알림 ({un.length}건) <span style={{fontSize:12,fontWeight:600,color:'#94a3b8'}}>— 조치 시작 → 조치 완료(또는 일지 작성)로 마감하세요</span></span>
+                    {un.length > 5 && (
+                      <button className="banner-btn banner-btn--ghost alert-more" onClick={()=>setUnackOpen(v=>!v)}>{unackOpen ? '전체 접기 ▴' : '전체 펼치기 ▾'}</button>
+                    )}
+                  </div>
                   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
                     {['health','fall','emotion','living','meal','missed','help','safe'].map(c=> cnt(c)>0 && (
                       <span key={c} style={{fontSize:12.5,fontWeight:700,color:CAT[c].c,background:CAT[c].bg,border:'1px solid '+CAT[c].bd,padding:'3px 10px',borderRadius:20}}>{CAT[c].label} {cnt(c)}건</span>
                     ))}
                   </div>
-                  {un.map((alert,i) => {
+                  {(unackOpen ? un : un.slice(0, 5)).map((alert,i) => {
                     const m = CAT[alert.category] || CAT.health;
                     return (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:m.bg,borderLeft:'4px solid '+m.c,border:'1px solid '+m.bd,borderRadius:10,padding:'12px 16px',marginBottom:8,flexWrap:'wrap'}}>
@@ -3683,6 +3689,9 @@ export default function App() {
                     </div>
                     );
                   })}
+                  {!unackOpen && un.length > 5 && (
+                    <button className="banner-btn banner-btn--ghost alert-more" onClick={()=>setUnackOpen(true)}>외 {un.length - 5}건 모두 펼치기 ▾</button>
+                  )}
                 </div>
                 );
               })()}
