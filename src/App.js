@@ -1714,6 +1714,7 @@ export default function App() {
   // 통화를 못 찾으면 감지 신호 문구만이라도 채움(빈 내용란 방지 — 담당자는 추가 작성만).
   const [draftingAlertId, setDraftingAlertId] = useState(null);
   const [unackOpen, setUnackOpen] = useState(false);   // 건강 상태 미처리 알림 — 기본 5건만, 전체 펼치기/접기
+  const [unackCat, setUnackCat] = useState('all');     // 미처리 알림 카테고리 필터 — 칩 클릭으로 해당 건만
   const ALERT_CAT_NOTE = { health: 'health', fall: 'safety', emotion: 'emotional', living: 'welfare', meal: 'meal', missed: 'safety', help: 'safety', safe: 'safety' };
   const openNoteFromAlert = async (alert) => {
     if (draftingAlertId) return;
@@ -3429,7 +3430,13 @@ export default function App() {
                   <input type="date" value={callsTo} onChange={e=>setCallsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:13}}/>
                 </>)}
                 <button onClick={()=>fetchCalls()} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'불러오는 중':'새로고침'}</button>
-                <button onClick={()=>{const open=!callsAllOpen; setCallsAllOpen(open); setCallsDayOv(()=>{const o={}; callsHistory.forEach(c=>{o[c.date||(c.at?c.at.slice(0,10):'미상')]=open;}); return o;});}} className="btn-secondary" style={{fontSize:12,padding:'6px 12px',fontWeight:700}}>{callsAllOpen?'전체 접기 ▴':'전체 펼치기 ▾'}</button>
+                <button onClick={()=>{
+                  const open=!callsAllOpen; setCallsAllOpen(open);
+                  const dates = callsHistory.map(c=>c.date||(c.at?c.at.slice(0,10):'미상'));
+                  setCallsDayOv(()=>{const o={}; dates.forEach(d=>{o[d]=open;}); return o;});
+                  // 건강 상태 페이지와 동일한 '완전 펼침': 날짜 그룹뿐 아니라 각 날짜의 4건째 이후 행까지 함께
+                  setExpandedCallDays(open ? new Set(dates) : new Set());
+                }} className="banner-btn banner-btn--ghost alert-more" style={{height:'auto',padding:'6px 12px'}}>{callsAllOpen?'전체 접기 ▴':'전체 펼치기 ▾'}</button>
                 <span style={{fontSize:12,color:'#94a3b8'}}>15초마다 자동 갱신됩니다</span>
                 <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#246BEB':'#e2e8f0'),fontSize:13,width:120}}/>
                 <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#246BEB':'#e2e8f0'),fontSize:13,fontWeight:700,color:callsPhone?'#246BEB':'#334155',background:'#fff',cursor:'pointer'}}>
@@ -3664,11 +3671,17 @@ export default function App() {
                     )}
                   </div>
                   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                    {/* 카테고리 필터 칩 — 클릭 시 해당 건만 표시, '전체보기'로 복귀 */}
+                    <button onClick={()=>setUnackCat('all')} style={{fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'3px 12px',borderRadius:20,
+                      border:'1px solid '+(unackCat==='all'?'#246BEB':'#cbd5e1'),background:unackCat==='all'?'#246BEB':'#fff',color:unackCat==='all'?'#fff':'#64748b'}}>전체보기 {un.length}건</button>
                     {['health','fall','emotion','living','meal','missed','help','safe'].map(c=> cnt(c)>0 && (
-                      <span key={c} style={{fontSize:12.5,fontWeight:700,color:CAT[c].c,background:CAT[c].bg,border:'1px solid '+CAT[c].bd,padding:'3px 10px',borderRadius:20}}>{CAT[c].label} {cnt(c)}건</span>
+                      <button key={c} onClick={()=>setUnackCat(v=>v===c?'all':c)} style={{fontSize:12.5,fontWeight:700,cursor:'pointer',padding:'3px 10px',borderRadius:20,
+                        color:unackCat===c?'#fff':CAT[c].c,background:unackCat===c?CAT[c].c:CAT[c].bg,border:'1px solid '+(unackCat===c?CAT[c].c:CAT[c].bd)}}>{CAT[c].label} {cnt(c)}건</button>
                     ))}
                   </div>
-                  {(unackOpen ? un : un.slice(0, 5)).map((alert,i) => {
+                  {(()=>{ const list = unackCat==='all' ? un : un.filter(a=>(a.category||'health')===unackCat);
+                  return (<>
+                  {(unackOpen ? list : list.slice(0, 5)).map((alert,i) => {
                     const m = CAT[alert.category] || CAT.health;
                     return (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:m.bg,borderLeft:'4px solid '+m.c,border:'1px solid '+m.bd,borderRadius:10,padding:'12px 16px',marginBottom:8,flexWrap:'wrap'}}>
@@ -3689,9 +3702,11 @@ export default function App() {
                     </div>
                     );
                   })}
-                  {!unackOpen && un.length > 5 && (
-                    <button className="banner-btn banner-btn--ghost alert-more" onClick={()=>setUnackOpen(true)}>외 {un.length - 5}건 모두 펼치기 ▾</button>
+                  {!unackOpen && list.length > 5 && (
+                    <button className="banner-btn banner-btn--ghost alert-more" onClick={()=>setUnackOpen(true)}>외 {list.length - 5}건 모두 펼치기 ▾</button>
                   )}
+                  {list.length === 0 && <div style={{color:'#94a3b8',fontSize:14,padding:'14px 0',textAlign:'center'}}>이 분류의 미처리 알림이 없습니다.</div>}
+                  </>); })()}
                 </div>
                 );
               })()}
