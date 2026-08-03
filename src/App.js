@@ -625,7 +625,9 @@ export default function App() {
 
   // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
-  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); }, [authUser]); // eslint-disable-line
+  // authUser 확정 후 재조회 — 특히 fetchWeather: 마운트 시 첫 호출은 토큰 복원 전(비인증)이라
+  // 서버가 기본(대구) 지역을 반환함 → 로그인 확정 시점에 토큰 포함으로 다시 불러 기관 관할 지역 반영
+  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) fetchWeather(); }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'admin' && isStaffUp) { if (isSuper) fetchOrgs(); fetchAccounts(); fetchInvites(); setAdminMsg(''); } }, [page, isStaffUp, isSuper]); // eslint-disable-line
   // 어르신 등록/수정 폼: 담당 지원사 배정 드롭다운용 계정 목록
   useEffect(() => { if (page === 'register' && isStaffUp && accounts.length === 0) fetchAccounts(); }, [page, isStaffUp]); // eslint-disable-line
@@ -969,7 +971,8 @@ export default function App() {
         else if (hasCold)    { setActiveAlert('cold');     setAlertScript(ALERT_TEMPLATES.cold); }
         else if (hasRain)    { setActiveAlert('rain');     setAlertScript(ALERT_TEMPLATES.rain); }
         else                 { setActiveAlert('none');     setAlertScript(ALERT_TEMPLATES.none); }
-        setWeatherStale(false);
+        // 서버가 기상청 장애 시 stale:true(직전 성공 데이터 유지)로 내려줌 → '연동 지연' 표시
+        setWeatherStale(Object.values(data).some(w => w && w.stale));
       } else { setWeatherStale(true); }
     } catch (err) {
       console.error('날씨 API 오류:', err);
