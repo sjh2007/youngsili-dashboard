@@ -782,12 +782,14 @@ export default function App() {
   const [popLoading, setPopLoading] = useState(false);
   const [popError, setPopError]     = useState(null);
 
-  const fetchPopulation = async () => {
+  const fetchPopulation = async (retry = 0) => {
     setPopLoading(true); setPopError(null);
     try {
       const res = await authFetch(`${SERVER_URL}/population`);
       const data = await res.json();
       setPopData(data);
+      // 타 시도 첫 조회는 서버가 백그라운드 수집 → 잠시 후 자동 재조회 (최대 6회)
+      if (data && data.collecting && retry < 6) setTimeout(() => fetchPopulation(retry + 1), 12000);
     } catch { setPopError('데이터를 불러오지 못했습니다.'); }
     finally { setPopLoading(false); }
   };
@@ -3951,7 +3953,7 @@ export default function App() {
           {page==='data' && (
             <div className="fade-in">
               <div className="data-banner">
-                <div><div className="data-banner-title">대구광역시 독거노인 현황</div><div className="data-banner-sub">출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
+                <div><div className="data-banner-title">{popData?.sidoName || '대구광역시'} 독거노인 현황</div><div className="data-banner-sub">기관 주소 기준 자동 연동 · 출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && !popData.collecting && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
                 <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={() => { fetchPopulation(); fetchWeather(); }} disabled={popLoading}>{popLoading ? '불러오는 중...' : '데이터 갱신'}</button>
               </div>
               {/* 발효 중 특보 배너 — "{특보명} 발효 중 · {지역} 외 N개 지역", 경보급=레드/주의보급=앰버 */}
@@ -3972,19 +3974,24 @@ export default function App() {
               })()}
               {popError && <div className="call-result-banner error">{popError}</div>}
               {popLoading && <div style={{textAlign:'center',padding:'40px',color:'#64748b',fontSize:16}}>행정안전부 공공데이터 불러오는 중...</div>}
-              {popData && (
+              {popData?.collecting && !popLoading && (
+                <div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:12,padding:'14px 20px',marginBottom:20,fontSize:14,color:'#b45309',fontWeight:700}}>
+                  {popData.sidoName} 인구 통계를 처음 수집하고 있습니다 — 잠시 후 자동으로 표시됩니다 (수십 초 소요)
+                </div>
+              )}
+              {popData && !popData.collecting && (
                 <>
                   <div className="data-total-row">
-                    {[{num:popData.total.population.toLocaleString()+'명',label:'대구 전체 인구',color:'#0f172a'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인',color:'#246BEB'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인',color:'#f59e0b'},{num:elders.length+'명',label:'영실이 현재 관리',color:'#22c55e'},{num:(elders.length/popData.total.solitary*100).toFixed(2)+'%',label:'관리 비율',color:'#ef4444'},{num:popData.total.elderlyRatio+'%',label:'고령화율',color:'#7c3aed'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num" style={{color:d.color}}>{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
+                    {[{num:popData.total.population.toLocaleString()+'명',label:(popData.sidoName||'대구광역시')+' 전체 인구',color:'#0f172a'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인',color:'#246BEB'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인',color:'#f59e0b'},{num:elders.length+'명',label:'영실이 현재 관리',color:'#22c55e'},{num:(elders.length/popData.total.solitary*100).toFixed(2)+'%',label:'관리 비율',color:'#ef4444'},{num:popData.total.elderlyRatio+'%',label:'고령화율',color:'#7c3aed'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num" style={{color:d.color}}>{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
                   </div>
-                  {popData.total.elderlyRatio >= 20 && <div style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 20px',marginBottom:20,fontSize:14,color:'#dc2626',fontWeight:700}}>대구광역시 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
+                  {popData.total.elderlyRatio >= 20 && <div style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:12,padding:'14px 20px',marginBottom:20,fontSize:14,color:'#dc2626',fontWeight:700}}>{popData.sidoName||'대구광역시'} 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
                   <div className="section">
-                    <div className="section-title">구별 독거노인 현황</div>
+                    <div className="section-title">시군구별 독거노인 현황</div>
                     <table className="table">
-                      <thead><tr><th>구</th><th>전체 인구</th><th>65세 이상</th><th>고령화율</th><th>추정 독거노인</th><th>영실이 관리</th><th>관리 비율</th><th>커버리지</th></tr></thead>
+                      <thead><tr><th>시군구</th><th>전체 인구</th><th>65세 이상</th><th>고령화율</th><th>추정 독거노인</th><th>영실이 관리</th><th>관리 비율</th><th>커버리지</th></tr></thead>
                       <tbody>
                         {popData.regions.sort((a,b)=>b.solitary-a.solitary).map((d,i)=>{
-                          const managed=elders.filter(e=>(e.region||'').replace('대구광역시','').replace('대구','').trim()===d.region).length;
+                          const managed=elders.filter(e=>(e.region||'').includes(d.region)).length;
                           const managedRatio=d.solitary>0?(managed/d.solitary*100).toFixed(2):0;
                           const isHighAge=d.elderlyRatio>=20;
                           return (
