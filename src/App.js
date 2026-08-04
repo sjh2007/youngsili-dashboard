@@ -956,6 +956,9 @@ export default function App() {
   };
 
   const fetchWeather = async () => {
+    // 서버 v2에서 /weather가 인증 라우트로 승격됨 — 로그인 전 호출은 401이라
+    // 무의미한 '연동 지연' 표시를 유발한다. 토큰이 준비된 뒤에만 호출한다(로그인 확정 시 재호출됨).
+    if (authEnabled && !(auth && auth.currentUser)) return;
     setFetchingWeather(true);
     try {
       const res = await authFetch(`${SERVER_URL}/weather`);
