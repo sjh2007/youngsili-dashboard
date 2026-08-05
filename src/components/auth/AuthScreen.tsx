@@ -1,0 +1,428 @@
+// 로그인 / 회원가입(이메일 인증) / 인증대기 / 기관설정 / 초대 가입 — 영실이 색상
+import { useState, useEffect, type CSSProperties } from 'react';
+import { auth } from '../../firebase';
+import { errMsg } from '../../utils/api';
+import {
+  signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  sendEmailVerification, sendPasswordResetEmail,
+  setPersistence, browserLocalPersistence, browserSessionPersistence,
+} from 'firebase/auth';
+
+const NAVY = '#1e3a6e', BLUE = '#246BEB', GREEN = '#16a34a';
+const PW_RE = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,20}$/;
+
+const wrap = { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${NAVY},#0f1f3d)`, padding: 20 };
+const card = { background: '#fff', borderRadius: 20, padding: 36, width: 420, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' };
+const label = { fontSize: 13, fontWeight: 700, color: '#334155', margin: '14px 0 6px' };
+const input: CSSProperties = { width: '100%', padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', boxSizing: 'border-box', fontSize: 15 };
+const primaryBtn = { width: '100%', padding: 14, borderRadius: 10, border: 'none', background: BLUE, color: '#fff', fontWeight: 800, fontSize: 16, cursor: 'pointer', marginTop: 18 };
+const linkBtn = { background: 'none', border: 'none', color: BLUE, fontWeight: 700, cursor: 'pointer', fontSize: 13, padding: 0 };
+const errBox = { color: '#dc2626', fontSize: 13, marginTop: 10, background: '#fef2f2', padding: '8px 10px', borderRadius: 8 };
+
+export default function AuthScreen({ authUser, needsProvision, authFetch, serverUrl, onReload, onProvisioned }) {
+  const [tab, setTab] = useState('login');     // login | signup
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
+  // 로그인
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [keep, setKeep] = useState(false);  // P2-2: 어르신 건강정보 취급 시스템 — 자동 로그인 기본 해제
+  // ── 아이디·비밀번호 찾기 (디자인팀 로그인 개선안 v1.0) ──
+  const [mode, setMode] = useState('none'); // none | findId | findIdResult | findPw | findPwSent
+  const [fi, setFi] = useState({ name: '', phone: '' });
+  const [fiResult, setFiResult] = useState(null);
+  const [fpEmail, setFpEmail] = useState('');
+  // 회원가입
+  const [su, setSu] = useState<any>({ email: '', pw: '', pw2: '', org: '', orgType: 'senior', phone: '', referral: '', address: '', region: '' });
+  // 기관 주소(선택) — 다음(카카오) 우편번호 검색. region('서울 서대문구')은 기상 공공데이터 관할 산출에 사용
+  const openSignupAddress = () => {
+    const SIDO = { '서울특별시': '서울', '부산광역시': '부산', '대구광역시': '대구', '인천광역시': '인천', '광주광역시': '광주', '대전광역시': '대전', '울산광역시': '울산', '세종특별자치시': '세종', '경기도': '경기', '강원특별자치도': '강원', '강원도': '강원', '충청북도': '충북', '충청남도': '충남', '전북특별자치도': '전북', '전라북도': '전북', '전라남도': '전남', '경상북도': '경북', '경상남도': '경남', '제주특별자치도': '제주' };
+    const run = () => new window.daum.Postcode({ oncomplete: (d) => {
+      const sido = SIDO[d.sido] || d.sido;
+      setSu(s => ({ ...s, address: d.roadAddress || d.address, region: `${sido} ${d.sigungu}`.trim() }));
+    } }).open();
+    if (window.daum && window.daum.Postcode) return run();
+    const sc = document.createElement('script');
+    sc.src = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+    sc.onload = run;
+    sc.onerror = () => setErr('주소 검색을 불러오지 못했습니다. 네트워크를 확인해 주세요.');
+    document.body.appendChild(sc);
+  };
+  const [agree, setAgree] = useState({ tos: false, privacy: false, mkt: false });
+  // 기관설정(안전망)
+  const [orgName, setOrgName] = useState('');
+  // 초대 가입 (#invite=INV-XXXXXX): 링크로 들어온 구성원 — 기관·역할 자동 귀속
+  const ROLE_KO = { admin: '센터장(관리자)', staff: '전담직원', worker: '지원사' };
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteInfo, setInviteInfo] = useState(null);   // { valid, role, orgName, used, expired }
+  const [iv, setIv] = useState({ name: '', phone: '', email: '', pw: '', pw2: '' });
+  useEffect(() => {
+    const m = window.location.hash.match(/invite=([A-Za-z0-9-]+)/);
+    if (!m) return;
+    const code = m[1].toUpperCase();
+    setInviteCode(code);
+    fetch(`${serverUrl}/invites/${code}/info`).then(r => r.json()).then(setInviteInfo).catch(() => setInviteInfo({ valid: false }));
+  }, []); // eslint-disable-line
+  const acceptInvite = async () => {
+    const r = await authFetch(`${serverUrl}/invites/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: inviteCode, name: iv.name.trim(), phone: iv.phone }) });
+    const d = await r.json();
+    if (!d.success) throw new Error(errMsg(d, '초대 수락 실패'));
+    window.location.hash = '';   // 초대 해시 제거 → 대시보드로
+    onProvisioned && onProvisioned();
+  };
+  const doInviteSignup = async () => {
+    setErr('');
+    if (!iv.name.trim()) return setErr('이름을 입력하세요.');
+    if (!iv.email.trim()) return setErr('이메일을 입력하세요.');
+    if (!PW_RE.test(iv.pw)) return setErr('비밀번호는 영문+숫자+특수문자 조합 8~20자여야 합니다.');
+    if (iv.pw !== iv.pw2) return setErr('비밀번호가 일치하지 않습니다.');
+    setBusy(true);
+    try {
+      try {
+        await createUserWithEmailAndPassword(auth, iv.email.trim(), iv.pw);
+      } catch (e) {
+        if (e.code === 'auth/email-already-in-use') await signInWithEmailAndPassword(auth, iv.email.trim(), iv.pw);
+        else throw e;
+      }
+      await acceptInvite();
+    } catch (e) {
+      setErr(e.code === 'auth/invalid-email' ? '이메일 형식이 올바르지 않습니다.'
+        : /wrong-password|invalid-credential/.test(e.code || '') ? '이미 가입된 이메일입니다. 기존 비밀번호로 입력해 주세요.'
+        : (e.message || '가입 실패. 잠시 후 다시 시도해 주세요.'));
+    }
+    setBusy(false);
+  };
+
+  const Header = () => (
+    <div style={{ textAlign: 'center', marginBottom: 22 }}>
+      <img src="/youngsili.png" alt="영실이" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover' }} />
+      <div style={{ fontSize: 22, fontWeight: 900, color: NAVY, marginTop: 8 }}>AI 영실이 관제</div>
+      <div style={{ fontSize: 13, color: '#64748b' }}>기관 전용 돌봄 대시보드</div>
+    </div>
+  );
+
+  // (이메일 인증은 더 이상 차단하지 않음 — 대시보드 상단 리마인더 배너로 안내)
+
+  // ── 초대 링크로 진입 + 이미 로그인됨(기관 미소속) → 초대 수락만 ──
+  if (authUser && needsProvision && inviteCode && inviteInfo && inviteInfo.valid) {
+    const accept = async () => {
+      setErr(''); setBusy(true);
+      try { await acceptInvite(); } catch (e) { setErr(e.message || '초대 수락 실패'); }
+      setBusy(false);
+    };
+    return (
+      <div style={wrap}><div style={card}>
+        <Header />
+        <div style={{ fontSize: 18, fontWeight: 800, color: NAVY, textAlign: 'center' }}>✉️ {inviteInfo.orgName || '기관'} 초대</div>
+        <div style={{ fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8 }}>{ROLE_KO[inviteInfo.role] || '구성원'} 역할로 초대되었어요. 이름을 입력하고 합류하세요.</div>
+        <div style={label}>이름</div>
+        <input style={input} value={iv.name} onChange={e => setIv(s => ({ ...s, name: e.target.value }))} placeholder="실명 입력" />
+        <div style={label}>휴대폰 번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택)</span></div>
+        <input style={input} value={iv.phone} onChange={e => setIv(s => ({ ...s, phone: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="숫자만 입력" inputMode="numeric" />
+        {err && <div style={errBox}>{err}</div>}
+        <button style={{ ...primaryBtn, background: GREEN }} disabled={busy || !iv.name.trim()} onClick={accept}>{busy ? '합류 중…' : '초대 수락하고 시작하기 →'}</button>
+      </div></div>
+    );
+  }
+
+  // ── 기관 설정(가입 직후 provision 실패한 안전망) ──
+  if (authUser && needsProvision) {
+    const provision = async () => {
+      const name = orgName.trim();
+      if (!name) { setErr('기관·단체명을 입력하세요'); return; }
+      setErr(''); setBusy(true);
+      try {
+        const r = await authFetch(`${serverUrl}/signup/provision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgName: name }) });
+        const d = await r.json();
+        if (d.success) { onProvisioned && onProvisioned(); } else setErr(errMsg(d, '기관 생성 실패'));
+      } catch { setErr('네트워크 오류'); }
+      setBusy(false);
+    };
+    return (
+      <div style={wrap}><div style={card}>
+        <Header />
+        <div style={{ fontSize: 18, fontWeight: 800, color: NAVY, textAlign: 'center' }}>🏢 기관 정보 설정</div>
+        <div style={{ fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8 }}>마지막 단계예요. 기관·단체명을 입력하면 바로 시작합니다.</div>
+        <div style={label}>기관 · 단체명</div>
+        <input style={input} value={orgName} onChange={e => setOrgName(e.target.value)} placeholder="예) ○○구 노인복지관" onKeyDown={e => e.key === 'Enter' && provision()} />
+        {err && <div style={errBox}>{err}</div>}
+        <button style={{ ...primaryBtn, background: GREEN }} disabled={busy} onClick={provision}>{busy ? '설정 중…' : '시작하기 →'}</button>
+      </div></div>
+    );
+  }
+
+  // ── 3) 로그인 ──
+  const doLogin = async () => {
+    setErr(''); setBusy(true);
+    try {
+      await setPersistence(auth, keep ? browserLocalPersistence : browserSessionPersistence);
+      await signInWithEmailAndPassword(auth, email.trim(), pw);
+      // 이후 App이 authUser/emailVerified로 분기
+    } catch (e) {
+      setErr(/wrong-password|user-not-found|invalid-credential/.test(e.code || '') ? '이메일 또는 비밀번호가 올바르지 않습니다.' : '로그인 실패. 잠시 후 다시 시도해 주세요.');
+    }
+    setBusy(false);
+  };
+  // ── 아이디 찾기: 이름+휴대폰 대조 → 마스킹된 아이디 (SMS 인증번호는 문자 인프라 도입 시 추가) ──
+  const doFindId = async () => {
+    setErr('');
+    if (!fi.name.trim() || fi.phone.replace(/[^0-9]/g, '').length < 9) { setErr('이름과 휴대폰 번호를 정확히 입력해 주세요.'); return; }
+    setBusy(true);
+    try {
+      const r = await fetch(`${serverUrl}/auth/find-id`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: fi.name.trim(), phone: fi.phone }) });
+      const j = await r.json().catch(() => null);
+      if (j && j.found) { setFiResult(j); setMode('findIdResult'); }
+      else if (j && j.error) setErr(errMsg(j));
+      else setErr('일치하는 계정을 찾지 못했습니다. 입력 정보를 확인하거나 기관 관리자에게 문의하세요.');
+    } catch { setErr('네트워크 오류 — 잠시 후 다시 시도해 주세요.'); }
+    setBusy(false);
+  };
+  const maskEmail = (em) => { const [l, d] = String(em).split('@'); return d ? l.slice(0, Math.min(5, Math.max(1, l.length - 3))) + '***@' + d : em; };
+  const doFindPw = async (resend?: any) => {
+    const em = fpEmail.trim();
+    setErr('');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { setErr('아이디(이메일) 형식을 확인해 주세요.'); return; }
+    setBusy(true);
+    try { await sendPasswordResetEmail(auth, em); setMode('findPwSent'); setMsg(resend ? '재설정 메일을 다시 보냈습니다.' : ''); }
+    catch (e) {
+      if (e.code === 'auth/user-not-found') { setMode('findPwSent'); setMsg(''); } // 계정 존재 여부 노출 방지
+      else setErr('메일 발송에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+    setBusy(false);
+  };
+  const backToLogin = () => { setMode('none'); setErr(''); setMsg(''); };
+  const backLink = (
+    <div style={{ textAlign: 'center', marginTop: 18 }}>
+      <button style={{ ...linkBtn, color: '#64748b', fontWeight: 600 }} onClick={backToLogin}>← 로그인으로 돌아가기</button>
+    </div>
+  );
+
+  // ── 4) 회원가입 ──
+  const doSignup = async () => {
+    setErr(''); setMsg('');
+    if (!su.email.trim()) return setErr('이메일을 입력하세요.');
+    if (!PW_RE.test(su.pw)) return setErr('비밀번호는 영문+숫자+특수문자 조합 8~20자여야 합니다.');
+    if (su.pw !== su.pw2) return setErr('비밀번호가 일치하지 않습니다.');
+    if (!su.org.trim()) return setErr('기관·단체명을 입력하세요.');
+    if (!agree.tos || !agree.privacy) return setErr('필수 약관에 동의해 주세요.');
+    setBusy(true);
+    try {
+      await createUserWithEmailAndPassword(auth, su.email.trim(), su.pw);
+      // 기관 자동 생성 (운영자 승인 없이)
+      try {
+        await authFetch(`${serverUrl}/signup/provision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgName: su.org.trim(), orgType: su.orgType === 'etc' ? 'senior' : su.orgType, orgTypeEtc: su.orgType === 'etc' ? (su.orgTypeEtc || '기타') : '', phone: su.phone, referral: su.referral, address: su.address, region: su.region }) });
+      } catch { /* 실패 시 인증 후 기관설정 안전망에서 재시도 */ }
+      await sendEmailVerification(auth.currentUser);
+      // authUser가 생기고 emailVerified=false → 위 '인증 대기' 화면으로 전환됨
+    } catch (e) {
+      setErr(e.code === 'auth/email-already-in-use' ? '이미 가입된 이메일입니다. 로그인해 주세요.' : e.code === 'auth/invalid-email' ? '이메일 형식이 올바르지 않습니다.' : '가입 실패. 잠시 후 다시 시도해 주세요.');
+    }
+    setBusy(false);
+  };
+
+  const allAgree = agree.tos && agree.privacy && agree.mkt;
+  const toggleAll = () => { const v = !allAgree; setAgree({ tos: v, privacy: v, mkt: v }); };
+
+  // ── 초대 링크 가입 (#invite=…) — 기관 생성 없이 초대된 기관·역할로 합류 ──
+  if (inviteCode) {
+    return (
+      <div style={wrap}><div style={card}>
+        <Header />
+        {!inviteInfo ? (
+          <div style={{ textAlign: 'center', color: '#64748b', padding: 20 }}>초대 정보를 확인하는 중…</div>
+        ) : !inviteInfo.valid ? (
+          <div style={{ textAlign: 'center', padding: 10 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#dc2626' }}>{inviteInfo.used ? '이미 사용된 초대예요' : inviteInfo.expired ? '만료된 초대예요' : '유효하지 않은 초대예요'}</div>
+            <div style={{ fontSize: 14, color: '#475569', marginTop: 8 }}>관리자에게 새 초대 링크를 요청해 주세요.</div>
+            <button style={{ ...primaryBtn, marginTop: 20 }} onClick={() => { window.location.hash = ''; setInviteCode(''); }}>로그인 화면으로</button>
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: NAVY, textAlign: 'center' }}>✉️ {inviteInfo.orgName || '기관'} 초대</div>
+            <div style={{ fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 6 }}>
+              <b>{ROLE_KO[inviteInfo.role] || '구성원'}</b> 역할로 초대되었어요. 가입 정보를 입력해 주세요.
+            </div>
+            <div style={label}>이름</div>
+            <input style={input} value={iv.name} onChange={e => setIv(s => ({ ...s, name: e.target.value }))} placeholder="실명 입력" />
+            <div style={label}>휴대폰 번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택)</span></div>
+            <input style={input} value={iv.phone} onChange={e => setIv(s => ({ ...s, phone: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="숫자만 입력" inputMode="numeric" />
+            <div style={label}>아이디 (이메일)</div>
+            <input style={input} type="email" value={iv.email} onChange={e => setIv(s => ({ ...s, email: e.target.value }))} placeholder="example@example.com" autoComplete="off" />
+            <div style={label}>비밀번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>*영문+숫자+특수문자 8~20자</span></div>
+            <input style={input} type="password" value={iv.pw} onChange={e => setIv(s => ({ ...s, pw: e.target.value }))} autoComplete="new-password" placeholder="비밀번호 입력" />
+            <div style={label}>비밀번호 확인</div>
+            <input style={input} type="password" value={iv.pw2} onChange={e => setIv(s => ({ ...s, pw2: e.target.value }))} onKeyDown={e => e.key === 'Enter' && doInviteSignup()} autoComplete="new-password" placeholder="비밀번호 재입력" />
+            {err && <div style={errBox}>{err}</div>}
+            <button style={{ ...primaryBtn, background: GREEN }} disabled={busy} onClick={doInviteSignup}>{busy ? '합류 중…' : '가입하고 합류하기 →'}</button>
+            <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#64748b' }}>
+              이미 계정이 있으면 이메일·기존 비밀번호를 입력하면 바로 합류됩니다.
+            </div>
+          </div>
+        )}
+        <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#94a3b8' }}>© 2026 KRAFT · AI 영실이</div>
+      </div></div>
+    );
+  }
+
+  // ── 아이디 찾기 / 비밀번호 찾기 화면 (디자인 시안 31:2 · 31:23 · 32:2 · 32:15) ──
+  if (mode !== 'none') {
+    const FindHeader = ({ title, sub }) => (
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <img src="/youngsili.png" alt="영실이" style={{ width: 56, height: 56, borderRadius: 14, objectFit: 'cover' }} />
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginTop: 10 }}>{title}</div>
+        <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{sub}</div>
+      </div>
+    );
+    return (
+      <div style={wrap}><div style={card}>
+        {mode === 'findId' && (
+          <div>
+            <FindHeader title="아이디 찾기" sub="가입 시 등록한 담당자 정보로 확인합니다" />
+            <div style={label}>이름</div>
+            <input style={input} value={fi.name} onChange={e => setFi(s => ({ ...s, name: e.target.value }))} placeholder="담당자 이름" />
+            <div style={label}>휴대폰 번호</div>
+            <input style={input} value={fi.phone} onChange={e => setFi(s => ({ ...s, phone: e.target.value.replace(/[^0-9-]/g, '') }))} onKeyDown={e => e.key === 'Enter' && doFindId()} placeholder="010-0000-0000" inputMode="numeric" />
+            {err && <div style={errBox}>{err}</div>}
+            <button style={primaryBtn} disabled={busy} onClick={doFindId}>{busy ? '확인 중…' : '아이디 찾기'}</button>
+            {backLink}
+          </div>
+        )}
+        {mode === 'findIdResult' && fiResult && (
+          <div>
+            <FindHeader title="아이디 확인" sub="입력하신 정보와 일치하는 계정입니다" />
+            <div style={{ background: '#eef4ff', borderRadius: 12, padding: '18px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 12.5, color: '#64748b' }}>{fiResult.name} 님의 아이디</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', marginTop: 6 }}>{fiResult.maskedEmail}</div>
+              {fiResult.joinedAt && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>가입일 {fiResult.joinedAt}</div>}
+            </div>
+            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>보안을 위해 아이디 일부는 가려서 표시됩니다</div>
+            <button style={primaryBtn} onClick={backToLogin}>이 아이디로 로그인</button>
+            <button style={{ ...primaryBtn, background: '#fff', color: '#334155', border: '1px solid #cbd5e1', marginTop: 10 }} onClick={() => { setErr(''); setMode('findPw'); }}>비밀번호 찾기</button>
+            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 14 }}>일치하는 계정이 없다면 기관 관리자에게 문의하세요</div>
+          </div>
+        )}
+        {mode === 'findPw' && (
+          <div>
+            <FindHeader title="비밀번호 찾기" sub="가입한 아이디(이메일)로 재설정 링크를 보내드립니다" />
+            <div style={label}>아이디 (기관 이메일)</div>
+            <input style={input} type="email" value={fpEmail} onChange={e => setFpEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && doFindPw()} placeholder="example@center.or.kr" autoComplete="username" />
+            {err && <div style={errBox}>{err}</div>}
+            <button style={primaryBtn} disabled={busy} onClick={() => doFindPw()}>{busy ? '보내는 중…' : '재설정 링크 보내기'}</button>
+            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 14 }}>
+              아이디가 기억나지 않으면 <button style={{ ...linkBtn, fontSize: 12 }} onClick={() => { setErr(''); setMode('findId'); }}>아이디 찾기</button>를 먼저 진행하세요
+            </div>
+            {backLink}
+          </div>
+        )}
+        {mode === 'findPwSent' && (
+          <div>
+            <FindHeader title="메일을 확인해 주세요" sub="재설정 링크를 보내드렸어요" />
+            <div style={{ textAlign: 'center', margin: '6px 0 14px' }}>
+              <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#f0fdf4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: GREEN, fontWeight: 900 }}>✓</div>
+            </div>
+            <div style={{ textAlign: 'center', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{maskEmail(fpEmail.trim())} 로</div>
+            <div style={{ textAlign: 'center', fontSize: 13, color: '#64748b', marginTop: 4 }}>비밀번호 재설정 링크를 보냈습니다. 메일이 안 보이면 스팸함을 확인해 주세요.</div>
+            {msg && <div style={{ ...errBox, color: GREEN, background: '#f0fdf4', textAlign: 'center' }}>{msg}</div>}
+            {err && <div style={errBox}>{err}</div>}
+            <button style={{ ...primaryBtn, background: '#fff', color: '#334155', border: '1px solid #cbd5e1' }} disabled={busy} onClick={() => doFindPw(true)}>{busy ? '보내는 중…' : '메일이 안 왔나요? 다시 보내기'}</button>
+            {backLink}
+          </div>
+        )}
+      </div></div>
+    );
+  }
+
+  return (
+    <div style={wrap}><div style={card}>
+      <Header />
+      {/* 탭 — P2-2: 로그인 화면에서는 회원가입 진입을 하단 링크 1곳으로 (상·하단 중복 제거) */}
+      {tab === 'signup' && (
+        <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 12, padding: 4, marginBottom: 8 }}>
+          {[['login', '로그인'], ['signup', '회원가입']].map(([k, t]) => (
+            <button key={k} onClick={() => { setTab(k); setErr(''); setMsg(''); }}
+              style={{ flex: 1, padding: 10, borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 15, background: tab === k ? BLUE : 'transparent', color: tab === k ? '#fff' : '#64748b' }}>{t}</button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'login' ? (
+        <div>
+          <div style={label}>아이디 (이메일)</div>
+          <input style={input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@example.com" autoComplete="username" />
+          <div style={label}>비밀번호</div>
+          <input style={input} type="password" value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} placeholder="비밀번호 입력" autoComplete="current-password" />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', cursor: 'pointer' }}>
+              <input type="checkbox" checked={keep} onChange={e => setKeep(e.target.checked)} /> 로그인 상태 유지
+            </label>
+            <span style={{ fontSize: 13 }}>
+              <button style={linkBtn} onClick={() => { setErr(''); setMsg(''); setMode('findId'); }}>아이디 찾기</button>
+              <span style={{ color: '#cbd5e1', margin: '0 6px' }}>·</span>
+              <button style={linkBtn} onClick={() => { setErr(''); setMsg(''); setFpEmail(email); setMode('findPw'); }}>비밀번호 찾기</button>
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>공용 PC에서는 사용하지 마세요. 미사용 시 브라우저 종료로 세션이 만료됩니다.</div>
+          {err && <div style={errBox}>{err}</div>}
+          {msg && <div style={{ ...errBox, color: GREEN, background: '#f0fdf4' }}>{msg}</div>}
+          <button style={primaryBtn} disabled={busy} onClick={doLogin}>{busy ? '로그인 중…' : '로그인'}</button>
+          <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#64748b' }}>
+            기관 계정이 없으신가요? <button style={linkBtn} onClick={() => setTab('signup')}>기관 회원가입</button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div style={label}>아이디 <span style={{ color: BLUE, fontWeight: 600 }}>*실제 사용하는 이메일을 입력하세요(인증 메일 발송)</span></div>
+          <input style={input} type="email" value={su.email} onChange={e => setSu(s => ({ ...s, email: e.target.value }))} placeholder="example@example.com" autoComplete="off" />
+          <div style={label}>비밀번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>*영문+숫자+특수문자 8~20자</span></div>
+          <input style={input} type="password" value={su.pw} onChange={e => setSu(s => ({ ...s, pw: e.target.value }))} placeholder="비밀번호 입력" autoComplete="new-password" />
+          <div style={label}>비밀번호 확인</div>
+          <input style={input} type="password" value={su.pw2} onChange={e => setSu(s => ({ ...s, pw2: e.target.value }))} placeholder="비밀번호 재입력" autoComplete="new-password" />
+          <div style={label}>기관 · 단체명</div>
+          <input style={input} value={su.org} onChange={e => setSu(s => ({ ...s, org: e.target.value }))} placeholder="예) ○○구 노인복지관 / ○○장애인자립센터" />
+          <div style={label}>기관 주소 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택 · 관할 지역 기상특보 연동에 사용)</span></div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input style={{ ...input, flex: 1, background: '#f8fafc' }} value={su.address} readOnly placeholder="주소 검색을 눌러 선택" />
+            <button type="button" style={{ padding: '0 14px', borderRadius: 10, border: '1.5px solid ' + BLUE, background: '#fff', color: BLUE, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={openSignupAddress}>주소 검색</button>
+          </div>
+          {su.region && <div style={{ fontSize: 12, color: '#16a34a', marginTop: 4 }}>관할 지역: {su.region} (기상 데이터 자동 연동)</div>}
+          <div style={label}>기관 유형 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(화면 구성이 유형에 맞게 바뀝니다)</span></div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[['senior', '노인맞춤돌봄'], ['disability', '장애인활동지원'], ['etc', '기타 돌봄기관']].map(([k, t]) => (
+              <button key={k} type="button" onClick={() => setSu(s => ({ ...s, orgType: k }))}
+                style={{ flex: 1, padding: '11px 4px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                  border: su.orgType === k ? `2px solid ${BLUE}` : '1px solid #cbd5e1',
+                  background: su.orgType === k ? '#eff6ff' : '#fff', color: su.orgType === k ? BLUE : '#475569' }}>{t}</button>
+            ))}
+          </div>
+          {su.orgType === 'etc' && (
+            <input style={{ ...input, marginTop: 8 }} value={su.orgTypeEtc || ''} onChange={e => setSu(s => ({ ...s, orgTypeEtc: e.target.value }))}
+              placeholder="기관 유형을 적어 주세요 (예: 방문요양센터, 주야간보호)" />
+          )}
+          <div style={label}>휴대폰 번호</div>
+          <input style={input} value={su.phone} onChange={e => setSu(s => ({ ...s, phone: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="숫자만 입력" inputMode="numeric" />
+          <div style={label}>추천인 코드 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택)</span></div>
+          <input style={input} value={su.referral} onChange={e => setSu(s => ({ ...s, referral: e.target.value }))} placeholder="추천인 코드 입력" />
+          {/* 약관 */}
+          <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12, marginTop: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, cursor: 'pointer', color: NAVY }}>
+              <input type="checkbox" checked={allAgree} onChange={toggleAll} /> 약관 전체 동의
+            </label>
+            <div style={{ borderTop: '1px solid #e2e8f0', margin: '10px 0' }} />
+            {[['tos', '서비스 이용약관 동의 (필수)'], ['privacy', '개인정보 수집 동의 (필수)'], ['mkt', '혜택/이벤트 정보 수신 동의 (선택)']].map(([k, t]) => (
+              <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', padding: '4px 0', cursor: 'pointer' }}>
+                <input type="checkbox" checked={agree[k]} onChange={e => setAgree(a => ({ ...a, [k]: e.target.checked }))} /> {t}
+              </label>
+            ))}
+          </div>
+          {err && <div style={errBox}>{err}</div>}
+          <button style={{ ...primaryBtn, background: GREEN }} disabled={busy} onClick={doSignup}>{busy ? '가입 중…' : '가입하기'}</button>
+          <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#64748b' }}>
+            이미 계정이 있으신가요? <button style={linkBtn} onClick={() => setTab('login')}>로그인</button>
+          </div>
+        </div>
+      )}
+      <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#94a3b8' }}>© 2026 KRAFT · AI 영실이</div>
+    </div></div>
+  );
+}
