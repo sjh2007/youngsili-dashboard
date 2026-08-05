@@ -1,0 +1,30 @@
+# 개발/프로덕션 겸용 compose
+#   개발(핫리로드):  docker compose up dev      → http://localhost:3000
+#   프로덕션 확인:   docker compose up prod     → http://localhost:8080
+# 로컬 API 서버(4001)와 함께 쓰려면: REACT_APP_SERVER_URL=http://localhost:4001 docker compose up dev
+services:
+  dev:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - dev_node_modules:/app/node_modules
+    command: sh -c "npm ci --no-audit --no-fund && npm start"
+    environment:
+      - BROWSER=none
+      - CI=false
+      - CHOKIDAR_USEPOLLING=true   # Windows 볼륨 마운트에서 파일 변경 감지
+      - REACT_APP_SERVER_URL=${REACT_APP_SERVER_URL:-}
+    ports:
+      - "3000:3000"
+
+  prod:
+    build:
+      context: .
+      args:
+        REACT_APP_SERVER_URL: ${REACT_APP_SERVER_URL:-https://youngsili-server-production.up.railway.app}
+    ports:
+      - "8080:80"
+
+volumes:
+  dev_node_modules:

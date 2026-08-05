@@ -2,6 +2,7 @@
 // ⚙️ 계속 업데이트: 아래 HELP_ITEMS 배열에 항목을 추가/수정하면 바로 반영됩니다.
 //    업데이트 소식을 추가하면 ANNOUNCEMENTS 맨 앞에 넣고 App.js의 LATEST_NOTICE도 같은 id로 올리세요.
 import { useState, useMemo } from 'react';
+import { BookOpen, Search, X, ExternalLink, Megaphone, ChevronDown } from 'lucide-react';
 
 export const LATEST_NOTICE = 4;
 
@@ -49,9 +50,9 @@ const HELP_ITEMS = [
 
 const CATS = ['시작하기', '앱 설치·등록', '대시보드 사용', '위험·건강 알림', '계정·기관', '문제해결'];
 
-const Card = ({ children, style }) => <div className="section" style={{ marginBottom: 16, ...style }}>{children}</div>;
+const Card = ({ children, className = '' }: any) => <section className={`help-card ${className}`}>{children}</section>;
 
-export default function HelpGuide() {
+export default function HelpGuide(_props: any) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState({});
   const q = query.trim().toLowerCase();
@@ -65,71 +66,70 @@ export default function HelpGuide() {
     const link = it.link || (it.cat === '앱 설치·등록' ? SETUP_GUIDE_URL : null);
     if (link) {
       return (
-        <a href={link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none', border: '1px solid #bfdbfe', borderRadius: 10, marginBottom: 8, overflow: 'hidden', background: '#f8fbff' }}>
-          <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#1e3a6e' }}>
-            <span style={{ fontSize: 13, color: '#94a3b8' }}>{it.cat}</span>
-            <span style={{ flex: 1 }}>{it.q}</span>
-            <span style={{ color: '#2563eb', fontWeight: 800 }}>📄 자세히 보기 →</span>
+        <a href={link} target="_blank" rel="noopener noreferrer" className="help-item help-item--link">
+          <div className="help-item-head">
+            <span className="help-item-category">{it.cat}</span>
+            <span className="help-item-question">{it.q}</span>
+            <span className="help-item-more">자세히 보기 <ExternalLink size={16}/></span>
           </div>
-          <div style={{ padding: '0 14px 12px', color: '#475569', fontSize: 13, lineHeight: 1.5 }}>{it.a}</div>
+          <div className="help-item-answer">{it.a}</div>
         </a>
       );
     }
     const key = it.cat + i + it.q;
     const isOpen = !!open[key] || !!q;   // 검색 중엔 펼쳐서 보여줌
     return (
-      <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, marginBottom: 8, overflow: 'hidden', background: '#fff' }}>
-        <div onClick={() => setOpen(o => ({ ...o, [key]: !isOpen }))} style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#1e3a6e' }}>
-          <span style={{ fontSize: 13, color: '#94a3b8' }}>{it.cat}</span>
-          <span style={{ flex: 1 }}>{it.q}</span>
-          <span style={{ color: '#2563eb', fontSize: 18 }}>{isOpen ? '−' : '+'}</span>
-        </div>
-        {isOpen && <div style={{ padding: '0 14px 14px', color: '#475569', fontSize: 14, lineHeight: 1.6 }}>{it.a}</div>}
+      <div className={`help-item ${isOpen?'is-open':''}`}>
+        <button className="help-item-head" onClick={() => setOpen(o => ({ ...o, [key]: !isOpen }))} aria-expanded={isOpen}>
+          <span className="help-item-category">{it.cat}</span>
+          <span className="help-item-question">{it.q}</span>
+          <ChevronDown className="help-item-chevron" size={19}/>
+        </button>
+        {isOpen && <div className="help-item-answer">{it.a}</div>}
       </div>
     );
   };
 
   return (
-    <div className="fade-in" style={{ maxWidth: 900, lineHeight: 1.6 }}>
+    <div className="fade-in help-page">
       {/* 표지 */}
-      <Card style={{ background: 'linear-gradient(135deg,#1e3a6e,#2563eb)', color: '#fff' }}>
-        <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 4 }}>📖 도움말 보기</div>
-        <div style={{ fontSize: 14, opacity: 0.92 }}>궁금한 내용을 검색하거나 아래 항목에서 찾아보세요. 계속 업데이트됩니다.</div>
+      <Card className="help-hero">
+        <BookOpen size={30}/><div><h1>도움말 보기</h1>
+        <p>궁금한 내용을 검색하거나 업무별 안내에서 찾아보세요.</p></div>
       </Card>
 
       {/* 검색 */}
-      <div style={{ position: 'relative', marginBottom: 16 }}>
-        <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 18, color: '#94a3b8' }}>🔍</span>
+      <div className="help-search">
+        <Search size={20}/>
         <input
           className="form-input"
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="도움말 검색 (예: 전화 안옴, 기관코드, 승인, 권한…)"
-          style={{ width: '100%', padding: '14px 16px 14px 44px', fontSize: 15, borderRadius: 12 }}
         />
-        {query && <button onClick={() => setQuery('')} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 16 }}>✕</button>}
+        {query && <button onClick={() => setQuery('')} aria-label="검색어 지우기"><X size={18}/></button>}
       </div>
 
       {/* 앱 설치 상세 매뉴얼 링크 */}
-      <a href={SETUP_GUIDE_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <span style={{ fontSize: 28 }}>📱</span>
+      <a href={SETUP_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="help-setup-link">
+        <div>
+          <BookOpen size={24}/>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, color: '#1e3a6e' }}>앱 설치·등록 상세 안내 (그림 매뉴얼)</div>
-            <div style={{ fontSize: 13, color: '#475569', marginTop: 2 }}>어르신 폰 앱 설치부터 기관코드·등록 신청·승인까지 그림으로 단계별 안내</div>
+            <strong>앱 설치·등록 상세 안내</strong>
+            <p>어르신 폰 앱 설치부터 기관코드 입력, 등록 신청과 승인까지 단계별로 안내합니다.</p>
           </div>
-          <span style={{ color: '#2563eb', fontWeight: 800 }}>열기 →</span>
+          <span>안내 열기 <ExternalLink size={16}/></span>
         </div>
       </a>
 
       {/* 업데이트 소식 (검색 중엔 숨김) */}
       {!q && (
-        <Card style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-          <div className="section-title" style={{ fontSize: 16 }}>📢 업데이트 소식</div>
+        <Card className="help-announcements">
+          <h2><Megaphone size={20}/> 업데이트 소식</h2>
           {ANNOUNCEMENTS.map(a => (
             <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid #eef2f7' }}>
-              <span style={{ background: a.tag === '신규' ? '#16a34a' : '#2563eb', color: '#fff', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{a.tag}</span>
-              <div><span style={{ color: '#94a3b8', fontSize: 12, marginRight: 8 }}>{a.date}</span>{a.text}</div>
+              <span className="help-announcement-tag">{a.tag}</span>
+              <div><time>{a.date}</time>{a.text}</div>
             </div>
           ))}
         </Card>
@@ -138,7 +138,7 @@ export default function HelpGuide() {
       {/* 검색 결과 / 항목 목록 */}
       {q ? (
         <Card>
-          <div className="section-title" style={{ fontSize: 15 }}>🔍 "{query}" 검색 결과 ({filtered.length})</div>
+          <h2>“{query}” 검색 결과 <span>{filtered.length}건</span></h2>
           {filtered.length === 0
             ? <div style={{ color: '#94a3b8', padding: '20px 0', textAlign: 'center' }}>검색 결과가 없습니다. 다른 키워드로 찾아보거나 위 "상세 안내"를 확인하세요.</div>
             : filtered.map((it, i) => <Item key={i} it={it} i={i} />)}
@@ -149,14 +149,14 @@ export default function HelpGuide() {
           if (!items.length) return null;
           return (
             <Card key={cat}>
-              <div className="section-title" style={{ fontSize: 16 }}>{cat}</div>
+              <h2>{cat}</h2>
               {items.map((it, i) => <Item key={i} it={it} i={i} />)}
             </Card>
           );
         })
       )}
 
-      <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: '8px 0 24px' }}>
+      <div className="help-contact">
         더 궁금한 점은 kraft@krafte.net · 1877-1979 로 문의해 주세요.
       </div>
     </div>

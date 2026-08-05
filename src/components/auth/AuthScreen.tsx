@@ -1,22 +1,23 @@
 // 로그인 / 회원가입(이메일 인증) / 인증대기 / 기관설정 / 초대 가입 — 영실이 색상
-import { useState, useEffect } from 'react';
-import { auth } from './firebase';
+import { useState, useEffect, type CSSProperties } from 'react';
+import { auth } from '../../firebase';
+import { errMsg } from '../../utils/api';
 import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendEmailVerification, sendPasswordResetEmail,
   setPersistence, browserLocalPersistence, browserSessionPersistence,
 } from 'firebase/auth';
 
-const NAVY = '#1e3a6e', BLUE = '#246BEB', GREEN = '#16a34a';
+const NAVY = '#003675', BLUE = '#246beb', GREEN = '#1d7b38';
 const PW_RE = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,20}$/;
 
-const wrap = { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${NAVY},#0f1f3d)`, padding: 20 };
-const card = { background: '#fff', borderRadius: 20, padding: 36, width: 420, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' };
-const label = { fontSize: 13, fontWeight: 700, color: '#334155', margin: '14px 0 6px' };
-const input = { width: '100%', padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', boxSizing: 'border-box', fontSize: 15 };
-const primaryBtn = { width: '100%', padding: 14, borderRadius: 10, border: 'none', background: BLUE, color: '#fff', fontWeight: 800, fontSize: 16, cursor: 'pointer', marginTop: 18 };
-const linkBtn = { background: 'none', border: 'none', color: BLUE, fontWeight: 700, cursor: 'pointer', fontSize: 13, padding: 0 };
-const errBox = { color: '#dc2626', fontSize: 13, marginTop: 10, background: '#fef2f2', padding: '8px 10px', borderRadius: 8 };
+const wrap = { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f7fa', padding: 24 };
+const card = { background: '#fff', borderRadius: 16, padding: 40, width: 440, maxWidth: '100%', border: 'none', boxShadow: '0 8px 24px rgba(0,54,117,0.08)' };
+const label = { fontSize: 15, fontWeight: 700, color: '#222', margin: '16px 0 8px' };
+const input: CSSProperties = { width: '100%', height: 56, padding: '0 16px', borderRadius: 8, border: '1px solid #767676', boxSizing: 'border-box', fontSize: 17, color: '#333', outlineColor: BLUE };
+const primaryBtn = { width: '100%', height: 52, padding: '0 16px', borderRadius: 8, border: `1px solid ${BLUE}`, background: BLUE, color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', marginTop: 24 };
+const linkBtn = { background: 'none', border: 'none', color: '#164fba', fontWeight: 700, cursor: 'pointer', fontSize: 13, padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 };
+const errBox = { color: '#b42318', fontSize: 13, marginTop: 10, background: '#fff3f2', padding: '10px 12px', borderRadius: 4, borderLeft: '3px solid #d92d20' };
 
 export default function AuthScreen({ authUser, needsProvision, authFetch, serverUrl, onReload, onProvisioned }) {
   const [tab, setTab] = useState('login');     // login | signup
@@ -33,7 +34,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   const [fiResult, setFiResult] = useState(null);
   const [fpEmail, setFpEmail] = useState('');
   // 회원가입
-  const [su, setSu] = useState({ email: '', pw: '', pw2: '', org: '', orgType: 'senior', phone: '', referral: '', address: '', region: '' });
+  const [su, setSu] = useState<any>({ email: '', pw: '', pw2: '', org: '', orgType: 'senior', phone: '', referral: '', address: '', region: '' });
   // 기관 주소(선택) — 다음(카카오) 우편번호 검색. region('서울 서대문구')은 기상 공공데이터 관할 산출에 사용
   const openSignupAddress = () => {
     const SIDO = { '서울특별시': '서울', '부산광역시': '부산', '대구광역시': '대구', '인천광역시': '인천', '광주광역시': '광주', '대전광역시': '대전', '울산광역시': '울산', '세종특별자치시': '세종', '경기도': '경기', '강원특별자치도': '강원', '강원도': '강원', '충청북도': '충북', '충청남도': '충남', '전북특별자치도': '전북', '전라북도': '전북', '전라남도': '전남', '경상북도': '경북', '경상남도': '경남', '제주특별자치도': '제주' };
@@ -57,16 +58,22 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   const [inviteInfo, setInviteInfo] = useState(null);   // { valid, role, orgName, used, expired }
   const [iv, setIv] = useState({ name: '', phone: '', email: '', pw: '', pw2: '' });
   useEffect(() => {
-    const m = window.location.hash.match(/invite=([A-Za-z0-9-]+)/);
-    if (!m) return;
-    const code = m[1].toUpperCase();
-    setInviteCode(code);
-    fetch(`${serverUrl}/invites/${code}/info`).then(r => r.json()).then(setInviteInfo).catch(() => setInviteInfo({ valid: false }));
+    const read = () => {
+      const m = window.location.hash.match(/invite=([A-Za-z0-9-]+)/);
+      if (!m) return;
+      const code = m[1].toUpperCase();
+      setInviteCode(code);
+      setInviteInfo(null);
+      fetch(`${serverUrl}/invites/${code}/info`).then(r => r.json()).then(setInviteInfo).catch(() => setInviteInfo({ valid: false }));
+    };
+    read();
+    window.addEventListener('hashchange', read);   // 열려 있는 탭에 초대 링크를 붙여넣는 경우도 감지
+    return () => window.removeEventListener('hashchange', read);
   }, []); // eslint-disable-line
   const acceptInvite = async () => {
     const r = await authFetch(`${serverUrl}/invites/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: inviteCode, name: iv.name.trim(), phone: iv.phone }) });
     const d = await r.json();
-    if (!d.success) throw new Error(d.error || '초대 수락 실패');
+    if (!d.success) throw new Error(errMsg(d, '초대 수락 실패'));
     window.location.hash = '';   // 초대 해시 제거 → 대시보드로
     onProvisioned && onProvisioned();
   };
@@ -134,7 +141,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
       try {
         const r = await authFetch(`${serverUrl}/signup/provision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgName: name }) });
         const d = await r.json();
-        if (d.success) { onProvisioned && onProvisioned(); } else setErr(d.error || '기관 생성 실패');
+        if (d.success) { onProvisioned && onProvisioned(); } else setErr(errMsg(d, '기관 생성 실패'));
       } catch { setErr('네트워크 오류'); }
       setBusy(false);
     };
@@ -172,13 +179,13 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
       const r = await fetch(`${serverUrl}/auth/find-id`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: fi.name.trim(), phone: fi.phone }) });
       const j = await r.json().catch(() => null);
       if (j && j.found) { setFiResult(j); setMode('findIdResult'); }
-      else if (j && j.error) setErr(j.error);
+      else if (j && j.error) setErr(errMsg(j));
       else setErr('일치하는 계정을 찾지 못했습니다. 입력 정보를 확인하거나 기관 관리자에게 문의하세요.');
     } catch { setErr('네트워크 오류 — 잠시 후 다시 시도해 주세요.'); }
     setBusy(false);
   };
   const maskEmail = (em) => { const [l, d] = String(em).split('@'); return d ? l.slice(0, Math.min(5, Math.max(1, l.length - 3))) + '***@' + d : em; };
-  const doFindPw = async (resend) => {
+  const doFindPw = async (resend?: any) => {
     const em = fpEmail.trim();
     setErr('');
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { setErr('아이디(이메일) 형식을 확인해 주세요.'); return; }
