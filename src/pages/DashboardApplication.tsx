@@ -2511,7 +2511,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="logo" onClick={()=>goPage('dashboard')} style={{cursor:'pointer'}} title="대시보드 홈으로">
           <img src="/youngsili.png" alt="영실이" className="logo-icon" style={{width:42,height:42,borderRadius:12,objectFit:'cover',padding:0}} />
-          <div><div className="logo-title">영실이</div><div className="logo-sub">복지사 관리 시스템</div></div>
+          <div><div className="logo-title">영실이</div><div className="logo-sub">어르신 관리 시스템</div></div>
         </div>
         <nav className="nav">
           {/* 주요 행동 — 화면당 하나만 강조 (레퍼런스: 상단 고정 CTA) */}
