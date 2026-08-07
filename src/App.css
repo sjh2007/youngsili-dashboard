@@ -5212,7 +5212,7 @@ textarea, select {
   padding: 12px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto auto auto;
   align-items: center;
   gap: 8px 10px;
   color: #344054;
@@ -5288,6 +5288,28 @@ textarea, select {
 }
 .script-page .weather-compact-fire.is-warn { color: #7a5200; background: #fff1c7; }
 .script-page .weather-compact-fire.is-danger { color: #a4312a; background: #ffe1de; }
+
+/* 기상청 공식 특보 — 단기예보 추정(weather-compact-status)과 다른 소스임을 구분하기 위해
+   경보색이 아닌 신뢰색(파랑)으로 표시. 흔치 않은 이벤트라 발효 중일 때만 렌더됨(2026-08-07). */
+.script-page .weather-compact-official {
+  grid-column: 1 / -1;
+  grid-row: 5;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  overflow: hidden;
+  color: #0369a1;
+  background: #e0f2fe;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
 @media (max-width: 1500px) {
   .script-page .weather-compact-grid { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); }

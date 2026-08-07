@@ -47,6 +47,8 @@ export const MeSchema = loose({
   orgType: z.string().optional(),
   orgAddress: z.string().optional(),
   orgRegion: z.string().optional(),
+  autoForestFireCall: z.boolean().optional(),
+  autoWeatherAlertCall: z.boolean().optional(),
   emailVerified: z.boolean().optional(),
   needsProvision: z.boolean().optional(),
 });
@@ -100,6 +102,22 @@ export const WeatherRegionSchema = loose({
   noData: z.boolean().optional(),
 });
 export const WeatherMapSchema = z.record(z.string(), WeatherRegionSchema);
+
+// ── 기상특보 (/special-warning) — { 지역명: {...} } 맵, /weather와 동일 지역 key ──
+export const SpecialWarningItemSchema = loose({
+  type: z.string().optional(),
+  label: z.string().optional(),
+  level: z.string().optional(),
+  startTime: z.string().optional(),
+});
+export const SpecialWarningRegionSchema = loose({
+  areaCode: z.string().optional(),
+  areaName: z.string().optional(),
+  warnings: z.array(SpecialWarningItemSchema).optional(),
+  noData: z.boolean().optional(),
+  stale: z.boolean().optional(),
+});
+export const SpecialWarningMapSchema = z.record(z.string(), SpecialWarningRegionSchema);
 
 // ── 산불위험지수 (/forest-fire) — { 지역명: {...} } 맵, /weather와 동일 지역 key ──
 export const ForestFireRegionSchema = loose({

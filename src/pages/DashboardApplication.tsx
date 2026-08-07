@@ -3,7 +3,7 @@ import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from '../components/help/HelpGuide';
 import AuthScreen from '../components/auth/AuthScreen';
-import { ElderListSchema, MeSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, parseOr } from '../schemas';
+import { ElderListSchema, MeSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, parseOr } from '../schemas';
 import { CallTranscript, GroupHeader, PageErrorBoundary } from '../components/common';
 import { Button, Dialog, EmptyState, PageIntro, StatusBadge, Toolbar } from '../components/ui';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -488,6 +488,18 @@ export default function App() {
     s.onerror = () => notify('주소 검색을 불러오지 못했습니다. 네트워크를 확인해 주세요.');
     document.body.appendChild(s);
   };
+  const [alertSettingSaving, setAlertSettingSaving] = useState('');   // 저장 중인 키('autoForestFireCall' 등), 중복 클릭 방지용
+  // 경보 자동 안부콜 옵트인 — 기상특보·산불위험 감지 시 어르신 전원(또는 해당 지역)에게 자동 발신할지 켜고 끄기
+  const updateAlertSetting = async (key: 'autoForestFireCall' | 'autoWeatherAlertCall', value: boolean) => {
+    setAlertSettingSaving(key);
+    try {
+      const r = await authFetch(`${SERVER_URL}/org/alert-settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: value }) });
+      const j = await r.json().catch(() => null);
+      if (j && j.success) { setMe((m: any) => ({ ...m, [key]: value })); }
+      else notify(errMsg(j, '설정 저장 실패'));
+    } catch { notify('네트워크 오류 — 설정 저장 실패'); }
+    finally { setAlertSettingSaving(''); }
+  };
   const fetchOrgs = async () => {
     try { const r = await authFetch(`${SERVER_URL}/admin/orgs`); const d = await r.json(); setOrgs(Array.isArray(d) ? d : []); } catch { setOrgs([]); }
   };
@@ -580,7 +592,7 @@ export default function App() {
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
   // authUser 확정 후 재조회 — 특히 fetchWeather: 마운트 시 첫 호출은 토큰 복원 전(비인증)이라
   // 서버가 기본(대구) 지역을 반환함 → 로그인 확정 시점에 토큰 포함으로 다시 불러 기관 관할 지역 반영
-  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); } }, [authUser]); // eslint-disable-line
+  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); fetchSpecialWarning(); } }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'admin' && isStaffUp) { if (isSuper) fetchOrgs(); fetchAccounts(); fetchInvites(); setAdminMsg(''); } }, [page, isStaffUp, isSuper]); // eslint-disable-line
   // 어르신 등록/수정 폼: 담당 지원사 배정 드롭다운용 계정 목록
   useEffect(() => { if (page === 'register' && isStaffUp && accounts.length === 0) fetchAccounts(); }, [page, isStaffUp]); // eslint-disable-line
@@ -782,6 +794,7 @@ export default function App() {
   const [weatherStale, setWeatherStale] = useState(false); // 기상 연동 지연 — 마지막 성공 수신 데이터를 유지한 채 표시
   const [weatherData, setWeatherData]   = useState({});  // 서버 /weather 실데이터로 로드 (가짜 날씨 폐지)
   const [forestFireData, setForestFireData] = useState<Record<string, any>>({}); // 서버 /forest-fire — 날씨 카드와 동일 지역 key
+  const [specialWarningData, setSpecialWarningData] = useState<Record<string, any>>({}); // 서버 /special-warning — 기상청 공식 특보(단기예보 추정과 별개)
   const [formErrors, setFormErrors] = useState<any>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -959,6 +972,24 @@ export default function App() {
   useEffect(() => {
     fetchForestFire();
     const t = setInterval(whileVisible(() => fetchForestFire()), 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []); // eslint-disable-line
+
+  // 기상청 공식 특보 — 단기예보 기온 추정(weatherData.alertText)과 별개 소스. 발효 중일 때만 카드에 표시.
+  const fetchSpecialWarning = async () => {
+    try {
+      const res = await authFetch(`${SERVER_URL}/special-warning`);
+      if (res.ok) {
+        const data = parseOr(SpecialWarningMapSchema, await res.json(), null);
+        if (data) setSpecialWarningData(data);
+      }
+    } catch (err) {
+      console.error('기상특보 API 오류:', err);
+    }
+  };
+  useEffect(() => {
+    fetchSpecialWarning();
+    const t = setInterval(whileVisible(() => fetchSpecialWarning()), 5 * 60 * 1000);
     return () => clearInterval(t);
   }, []); // eslint-disable-line
 
@@ -3559,6 +3590,10 @@ export default function App() {
                         // 관심(평상시)은 조용히 회색, 주의부터 강조 — weather-compact-status의 is-warn/is-danger 재사용
                         const fireSeverity = fire?.grade === '심각' || fire?.grade === '경계' ? 'danger'
                           : fire?.grade === '주의' ? 'warn' : 'none';
+                        // 기상청 공식 특보 — 단기예보 추정(weather.alertText)과 다른 소스라 별도 표시.
+                        // 흔치 않은 이벤트라 발효 중일 때만 줄이 생김(날씨·산불처럼 항상 표시하지 않음).
+                        const official = (specialWarningData as Record<string, any>)[region];
+                        const officialWarnings = official?.warnings || [];
                         return (
                           <article key={region} className={`weather-compact-card is-${severity}`}>
                             <div className="weather-compact-region">{region}</div>
@@ -3575,6 +3610,12 @@ export default function App() {
                                 {/* 서버는 산림청 공식 4단계(관심·주의·경계·심각) 원문을 그대로 준다 — 최하단계 '관심'만
                                     일반 사용자에게 헷갈려서('관심 있음'처럼 읽힘) 표시용으로 '정상'으로 바꿔 보여준다 */}
                                 <span>산불위험 {fire.grade === '관심' ? '정상' : fire.grade}</span>
+                              </div>
+                            )}
+                            {officialWarnings.length > 0 && (
+                              <div className="weather-compact-official">
+                                <ShieldCheck size={12} strokeWidth={2} aria-hidden="true" />
+                                <span>기상청 공식 {officialWarnings.map((w: any) => w.label).join('·')}</span>
                               </div>
                             )}
                           </article>
@@ -4604,6 +4645,38 @@ export default function App() {
                       <div style={{flex:1,minWidth:200}}><div style={{fontSize:15,color:'#94a3b8',marginBottom:2}}>주소</div><div style={{fontSize:17}}>{me?.orgAddress||'미입력 — 주소를 등록하면 관할 지역 기상특보가 자동 연동됩니다'}</div></div>
                       <button className="btn-secondary" onClick={saveOrgAddress}>{me?.orgAddress?'주소 변경':'주소 등록'}</button>
                     </div>
+                  </div>
+                )}
+
+                {/* 경보 자동 안부콜 — 기본은 수동(대시보드 알림만), 켜면 감지 시 자동 발신 */}
+                {!isSuper && (
+                  <div className="section" style={{marginBottom:16}}>
+                    <div className="section-title">경보 자동 안부콜 설정</div>
+                    <div style={{fontSize:15,color:'#64748b',marginBottom:14}}>
+                      꺼두면(기본) 감지 시 대시보드 알림만 오고, 전화멘트 페이지에서 직접 발송을 눌러야 합니다.
+                      켜면 감지 즉시 서버가 자동으로 안부콜을 발신합니다.
+                    </div>
+                    {[
+                      { key: 'autoForestFireCall' as const, label: '산불위험 자동 안부콜',
+                        desc: '산불위험지수 경계·심각 감지 시, 해당 지역 어르신에게만 자동 대피 안내 통화' },
+                      { key: 'autoWeatherAlertCall' as const, label: '기상경보 자동 안부콜',
+                        desc: '폭염·한파·호우 등 감지 시 어르신 전원에게 자동 안부 통화' },
+                    ].map(row => (
+                      <label key={row.key} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderTop:'1px solid #f1f5f9',cursor:'pointer'}}>
+                        <input
+                          type="checkbox"
+                          checked={!!me?.[row.key]}
+                          disabled={alertSettingSaving === row.key}
+                          onChange={e => updateAlertSetting(row.key, e.target.checked)}
+                          style={{width:20,height:20,flexShrink:0}}
+                        />
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:800,fontSize:16}}>{row.label}{alertSettingSaving===row.key?' (저장 중…)':''}</div>
+                          <div style={{fontSize:14,color:'#94a3b8'}}>{row.desc}</div>
+                        </div>
+                        <span style={{fontSize:14,fontWeight:800,color:me?.[row.key]?'#16a34a':'#94a3b8'}}>{me?.[row.key]?'켜짐':'꺼짐'}</span>
+                      </label>
+                    ))}
                   </div>
                 )}
 
