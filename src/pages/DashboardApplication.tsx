@@ -490,7 +490,7 @@ export default function App() {
   };
   const [alertSettingSaving, setAlertSettingSaving] = useState('');   // 저장 중인 키('autoForestFireCall' 등), 중복 클릭 방지용
   // 경보 자동 안부콜 옵트인 — 기상특보·산불위험 감지 시 어르신 전원(또는 해당 지역)에게 자동 발신할지 켜고 끄기
-  const updateAlertSetting = async (key: 'autoForestFireCall' | 'autoWeatherAlertCall', value: boolean) => {
+  const updateAlertSetting = async (key: 'autoForestFireCall' | 'autoWeatherAlertCall' | 'autoDisasterCall', value: boolean) => {
     setAlertSettingSaving(key);
     try {
       const r = await authFetch(`${SERVER_URL}/org/alert-settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: value }) });
@@ -4663,6 +4663,8 @@ export default function App() {
                         desc: '산불위험지수 경계·심각 감지 시, 해당 지역 어르신에게만 자동 대피 안내 통화' },
                       { key: 'autoWeatherAlertCall' as const, label: '기상경보 자동 안부콜',
                         desc: '폭염·한파·호우 등 감지 시 어르신 전원에게 자동 안부 통화' },
+                      { key: 'autoDisasterCall' as const, label: '긴급재난문자 자동 안부콜',
+                        desc: '위급·긴급 재난문자 수신 시, 해당 지역 어르신에게만 자동 안내 통화 (야간 07~21시 외 발신 안 함)' },
                     ].map(row => (
                       <label key={row.key} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderTop:'1px solid #f1f5f9',cursor:'pointer'}}>
                         <input

@@ -49,6 +49,7 @@ export const MeSchema = loose({
   orgRegion: z.string().optional(),
   autoForestFireCall: z.boolean().optional(),
   autoWeatherAlertCall: z.boolean().optional(),
+  autoDisasterCall: z.boolean().optional(),
   emailVerified: z.boolean().optional(),
   needsProvision: z.boolean().optional(),
 });
