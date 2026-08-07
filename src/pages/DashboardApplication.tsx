@@ -3612,10 +3612,12 @@ export default function App() {
                                 <span>산불위험 {fire.grade === '관심' ? '정상' : fire.grade}</span>
                               </div>
                             )}
-                            {officialWarnings.length > 0 && (
-                              <div className="weather-compact-official">
+                            {official && !official.noData && (
+                              <div className={`weather-compact-official ${officialWarnings.length ? 'is-active' : 'is-none'}`}>
                                 <ShieldCheck size={12} strokeWidth={2} aria-hidden="true" />
-                                <span>기상청 공식 {officialWarnings.map((w: any) => w.label).join('·')}</span>
+                                <span>{officialWarnings.length
+                                  ? `기상청 공식 ${officialWarnings.map((w: any) => w.label).join('·')}`
+                                  : '공식특보 없음'}</span>
                               </div>
                             )}
                           </article>
