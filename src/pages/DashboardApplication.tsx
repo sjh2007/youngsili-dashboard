@@ -3,7 +3,7 @@ import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from '../components/help/HelpGuide';
 import AuthScreen from '../components/auth/AuthScreen';
-import { ElderListSchema, MeSchema, AlertListSchema, CallListSchema, parseOr } from '../schemas';
+import { ElderListSchema, MeSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, parseOr } from '../schemas';
 import { CallTranscript, GroupHeader, PageErrorBoundary } from '../components/common';
 import { Button, Dialog, EmptyState, PageIntro, StatusBadge, Toolbar } from '../components/ui';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -477,9 +477,9 @@ export default function App() {
         const r = await authFetch(`${SERVER_URL}/org/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address, region }) });
         const j = await r.json().catch(() => null); // 404 등 HTML 응답이어도 '네트워크 오류'로 뭉개지 않게
         if (j && j.success) { setAdminMsg(`기관 주소가 저장되었습니다 — 관할: ${region} (기상 데이터 자동 연동)`); fetchMe(); fetchWeather(); }
-        else if (r.status === 404) setAdminMsg('서버에 주소 저장 기능이 아직 반영되지 않았습니다 — 서버 배포 후 다시 시도해 주세요');
-        else setAdminMsg(errMsg(j, `주소 저장 실패 (오류 코드 ${r.status})`));
-      } catch { setAdminMsg('네트워크 오류 — 주소 저장 실패'); }
+        else if (r.status === 404) notify('서버에 주소 저장 기능이 아직 반영되지 않았습니다 — 서버 배포 후 다시 시도해 주세요');
+        else notify(errMsg(j, `주소 저장 실패 (오류 코드 ${r.status})`));
+      } catch { notify('네트워크 오류 — 주소 저장 실패'); }
     } }).open();
     if (window.daum && window.daum.Postcode) return run();
     const s = document.createElement('script');
@@ -781,6 +781,7 @@ export default function App() {
   const [weatherTime, setWeatherTime] = useState('');
   const [weatherStale, setWeatherStale] = useState(false); // 기상 연동 지연 — 마지막 성공 수신 데이터를 유지한 채 표시
   const [weatherData, setWeatherData]   = useState({});  // 서버 /weather 실데이터로 로드 (가짜 날씨 폐지)
+  const [forestFireData, setForestFireData] = useState<Record<string, any>>({}); // 서버 /forest-fire — 날씨 카드와 동일 지역 key
   const [formErrors, setFormErrors] = useState<any>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -939,6 +940,25 @@ export default function App() {
   useEffect(() => {
     fetchWeather();
     const t = setInterval(whileVisible(() => fetchWeather()), 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []); // eslint-disable-line
+
+  // 산불위험지수 — 날씨 카드와 같은 지역 key로 내려오므로 같은 카드 안에 이어 붙인다.
+  // 서버가 30분 캐시라 여기도 5분마다 다시 부를 필요는 없지만, fetchWeather와 같은 타이밍에 맞춰 갱신한다.
+  const fetchForestFire = async () => {
+    try {
+      const res = await authFetch(`${SERVER_URL}/forest-fire`);
+      if (res.ok) {
+        const data = parseOr(ForestFireMapSchema, await res.json(), null);
+        if (data) setForestFireData(data);
+      }
+    } catch (err) {
+      console.error('산불위험지수 API 오류:', err);
+    }
+  };
+  useEffect(() => {
+    fetchForestFire();
+    const t = setInterval(whileVisible(() => fetchForestFire()), 5 * 60 * 1000);
     return () => clearInterval(t);
   }, []); // eslint-disable-line
 
@@ -3535,6 +3555,10 @@ export default function App() {
                           : condition.includes('비') || condition.includes('소나기') ? CloudRain
                           : condition.includes('구름') || condition.includes('흐림') ? CloudSun
                           : Sun;
+                        const fire = (forestFireData as Record<string, any>)[region];
+                        // 관심(평상시)은 조용히 회색, 주의부터 강조 — weather-compact-status의 is-warn/is-danger 재사용
+                        const fireSeverity = fire?.grade === '심각' || fire?.grade === '경계' ? 'danger'
+                          : fire?.grade === '주의' ? 'warn' : 'none';
                         return (
                           <article key={region} className={`weather-compact-card is-${severity}`}>
                             <div className="weather-compact-region">{region}</div>
@@ -3545,6 +3569,12 @@ export default function App() {
                               <div className="weather-compact-reading"><strong>{weather?.temp ?? '-'}°C</strong><span>{condition}</span></div>
                             </div>
                             <div className={`weather-compact-status is-${severity}`}>{weather?.alertText || '특보 없음'}</div>
+                            {fire && !fire.noData && (
+                              <div className={`weather-compact-fire is-${fireSeverity}`}>
+                                <Flame size={12} strokeWidth={2} aria-hidden="true" />
+                                <span>산불위험 {fire.grade}</span>
+                              </div>
+                            )}
                           </article>
                         );
                       })}

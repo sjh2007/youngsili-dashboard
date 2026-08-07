@@ -101,6 +101,16 @@ export const WeatherRegionSchema = loose({
 });
 export const WeatherMapSchema = z.record(z.string(), WeatherRegionSchema);
 
+// ── 산불위험지수 (/forest-fire) — { 지역명: {...} } 맵, /weather와 동일 지역 key ──
+export const ForestFireRegionSchema = loose({
+  grade: z.string().optional(), // '관심'|'주의'|'경계'|'심각'|'정보 없음'
+  meanIndex: z.union([z.number(), z.null()]).optional(),
+  maxIndex: z.union([z.number(), z.null()]).optional(),
+  stale: z.boolean().optional(),
+  noData: z.boolean().optional(),
+});
+export const ForestFireMapSchema = z.record(z.string(), ForestFireRegionSchema);
+
 /**
  * zod 검증을 **차단용으로 쓸지** 여부.
  *
