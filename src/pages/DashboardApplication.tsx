@@ -3572,7 +3572,9 @@ export default function App() {
                             {fire && !fire.noData && (
                               <div className={`weather-compact-fire is-${fireSeverity}`}>
                                 <Flame size={12} strokeWidth={2} aria-hidden="true" />
-                                <span>산불위험 {fire.grade}</span>
+                                {/* 서버는 산림청 공식 4단계(관심·주의·경계·심각) 원문을 그대로 준다 — 최하단계 '관심'만
+                                    일반 사용자에게 헷갈려서('관심 있음'처럼 읽힘) 표시용으로 '정상'으로 바꿔 보여준다 */}
+                                <span>산불위험 {fire.grade === '관심' ? '정상' : fire.grade}</span>
                               </div>
                             )}
                           </article>
