@@ -101,6 +101,8 @@ export const WeatherRegionSchema = loose({
   pop: z.union([z.number(), z.string()]).optional(),
   stale: z.boolean().optional(),
   noData: z.boolean().optional(),
+  // 이 지역이 왜 목록에 있는지 — 'org'=기관 주소 지역, 'elder'=어르신 거주지, 'both'=둘 다
+  source: z.enum(['org', 'elder', 'both']).optional(),
 });
 export const WeatherMapSchema = z.record(z.string(), WeatherRegionSchema);
 

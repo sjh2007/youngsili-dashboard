@@ -3621,7 +3621,11 @@ export default function App() {
                   <button className={`btn-fetch-weather ${fetchingWeather?'btn-calling':''}`} onClick={fetchWeather} disabled={fetchingWeather}>{fetchingWeather ? '불러오는 중...' : '날씨 데이터 갱신'}</button>
                 </div>
                 {(() => {
-                  const entries = Object.entries(weatherData as Record<string, any>);
+                  // 기관 주소 지역 → 어르신 거주지 지역 순으로 묶어서 보여준다.
+                  // (기관 주소를 바꿔도 어르신 거주지 지역이 그대로 섞여 나와 헷갈린다는 문의 대응 — 2026-08-10)
+                  const SRC_ORDER = { org: 0, both: 1, elder: 2 };
+                  const entries = Object.entries(weatherData as Record<string, any>)
+                    .sort((a, b) => (SRC_ORDER[a[1]?.source] ?? 1) - (SRC_ORDER[b[1]?.source] ?? 1));
                   if (!entries.length) return <div className="weather-map-empty">표시할 관할 지역 날씨가 없습니다.</div>;
                   return (
                     <div className="weather-compact-grid">
@@ -3643,7 +3647,11 @@ export default function App() {
                         const officialWarnings = official?.warnings || [];
                         return (
                           <article key={region} className={`weather-compact-card is-${severity}`}>
-                            <div className="weather-compact-region">{region}</div>
+                            <div className="weather-compact-region">
+                              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{region}</span>
+                              {weather?.source === 'org' && <span className="weather-source-badge weather-source-org" title="기관 주소가 속한 지역">기관</span>}
+                              {weather?.source === 'elder' && <span className="weather-source-badge weather-source-elder" title={`${T.elder} 거주지 지역`}>{T.elder}</span>}
+                            </div>
                             <div className="weather-compact-main">
                               {isHeat
                                 ? <img className="weather-compact-hot" src="/hot-face.png" alt="폭염" />

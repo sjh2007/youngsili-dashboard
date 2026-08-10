@@ -5222,6 +5222,9 @@ textarea, select {
 }
 .script-page .weather-compact-region {
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   overflow: hidden;
   color: #475467;
   font-size: 14px;
@@ -5229,6 +5232,23 @@ textarea, select {
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 기관 주소 지역 vs 어르신 거주지 지역 구분 배지 — 주소 변경 후 두 출처가 섞여 보인다는 혼란 대응 */
+.weather-source-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 20px;
+  line-height: 1.6;
+}
+.weather-source-org {
+  color: #246BEB;
+  background: #dbeafe;
+}
+.weather-source-elder {
+  color: #16a34a;
+  background: #dcfce7;
 }
 .script-page .weather-compact-main {
   grid-column: 1 / -1;
