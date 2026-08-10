@@ -3,7 +3,7 @@ import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from '../components/help/HelpGuide';
 import AuthScreen from '../components/auth/AuthScreen';
-import { ElderListSchema, MeSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, parseOr } from '../schemas';
+import { ElderListSchema, MeSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
 import { CallTranscript, GroupHeader, PageErrorBoundary } from '../components/common';
 import { Button, Dialog, EmptyState, PageIntro, StatusBadge, Toolbar } from '../components/ui';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -795,6 +795,8 @@ export default function App() {
   const [weatherData, setWeatherData]   = useState({});  // 서버 /weather 실데이터로 로드 (가짜 날씨 폐지)
   const [forestFireData, setForestFireData] = useState<Record<string, any>>({}); // 서버 /forest-fire — 날씨 카드와 동일 지역 key
   const [specialWarningData, setSpecialWarningData] = useState<Record<string, any>>({}); // 서버 /special-warning — 기상청 공식 특보(단기예보 추정과 별개)
+  const [disasterMsgs, setDisasterMsgs] = useState<any[]>([]);           // 서버 /disaster-msg — 기관 관할지역 오늘자 긴급재난문자
+  const [disasterMsgConfigured, setDisasterMsgConfigured] = useState(true); // false면 행안부 키 미발급 — 배너 자체를 숨긴다
   const [formErrors, setFormErrors] = useState<any>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -993,6 +995,27 @@ export default function App() {
     return () => clearInterval(t);
   }, []); // eslint-disable-line
 
+  // 긴급재난문자 — 기관 관할지역 오늘자 목록. configured:false면 행안부 키 미발급(선구현 상태)이라 배너를 숨긴다.
+  const fetchDisasterMsg = async () => {
+    try {
+      const res = await authFetch(`${SERVER_URL}/disaster-msg`);
+      if (res.ok) {
+        const data = parseOr(DisasterMsgResponseSchema, await res.json(), null);
+        if (data) {
+          setDisasterMsgConfigured(data.configured !== false);
+          setDisasterMsgs(Array.isArray(data.messages) ? data.messages : []);
+        }
+      }
+    } catch (err) {
+      console.error('재난문자 API 오류:', err);
+    }
+  };
+  useEffect(() => {
+    fetchDisasterMsg();
+    const t = setInterval(whileVisible(() => fetchDisasterMsg()), 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []); // eslint-disable-line
+
   const goPage  = p => { setPage(p); setSelected(null); setCallResult(null); };
   // 헤더 새로고침 — 현재 페이지에 필요한 데이터만 다시 불러오기
   const refreshPage = () => {
@@ -1001,7 +1024,7 @@ export default function App() {
     if (page === 'health') { fetchHealth(); fetchHealthHistory(); }
     if (page === 'report') fetchStats();
     if (page === 'calls' || page === 'dashboard' || page === 'elders' || page === 'detail' || page === 'health') fetchCalls();  // health: 행 확장 상세의 최근 7일 이력용
-    if (page === 'data') { fetchPopulation(); fetchWeather(); }
+    if (page === 'data') { fetchPopulation(); fetchWeather(); fetchDisasterMsg(); }
     if (page === 'script') fetchWeather();
     if (page === 'casenotes') loadCaseNotes();
   };
@@ -1270,6 +1293,15 @@ export default function App() {
     etc:      { label: '기타', icon: '📄', color: '#64748b', bg: '#f1f5f9' },
   };
   const CASE_CAT_META = { safety:'안전', health:'건강', meal:'식사', emotional:'정서', welfare:'복지연계', etc:'기타' };
+  // 통화 종료 시 서버가 자동 생성한 일지 — 담당자가 열어 수정하면 status가 confirmed로 바뀐다.
+  // 서버가 레거시 문서에는 source:'manual'/status:'confirmed'를 채워 주므로 예전 일지는 걸리지 않는다.
+  const isAutoDraft = (n) => n && n.source === 'auto-call' && n.status !== 'confirmed';
+  const AutoDraftBadge = () => (
+    <span title="통화 내용으로 자동 작성된 초안입니다 — 담당자가 확인·수정해야 확정됩니다"
+      style={{fontSize:14,fontWeight:700,color:'#b45309',background:'#fef3c7',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:20}}>
+      자동기록 · 확인 필요
+    </span>
+  );
   // 주간업무 보고서(공식 양식)의 업무 구분 체크박스: □사회 □신체 □가사 □기타
   const CASE_TOPIC_META = { social:'사회', physical:'신체', housework:'가사', etc:'기타' };
 
@@ -1319,6 +1351,14 @@ export default function App() {
     setDraftingCallId(null);
   };
 
+  // 통화 행의 '일지 작성' — 통화 종료 시 서버가 만들어 둔 자동 일지가 있으면 그것을 열어 수정한다.
+  // (새로 만들면 같은 통화에 일지가 2건 생긴다. 자동 일지 문서 id는 auto_{callId} 규칙)
+  const openNoteForCall = (c) => {
+    const exist = c.callId && caseNotes.find(n => n.callId === c.callId);
+    if (exist) { openEditNote(exist); return; }
+    makeNoteDraft(c);
+  };
+
   // 일지 → 정부 노인맞춤돌봄시스템 붙여넣기용 텍스트 복사 (현장 최다 사용 흐름)
   const [copiedNoteId, setCopiedNoteId] = useState(null);
   const noteToText = (n) => {
@@ -1346,7 +1386,7 @@ export default function App() {
     const XLSX = await loadXLSX();
     const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
     const CAT_KO = { safety: '안전', health: '건강', meal: '식사', emotional: '정서', welfare: '생활지원', etc: '기타' };
-    const aoa = [['일시', '어르신', '유형', '분류', '내용', '조치사항', '후속필요', '후속기한', '작성자']];
+    const aoa = [['일시', '어르신', '유형', '분류', '내용', '조치사항', '후속필요', '후속기한', '작성자', '상태']];
     [...list].sort((a, b) => (a.visitedAt || '').localeCompare(b.visitedAt || '')).forEach(n => {
       aoa.push([
         n.visitedAt ? new Date(n.visitedAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '',
@@ -1354,11 +1394,12 @@ export default function App() {
         n.content || '', n.action || '',
         (n.followUp && n.followUp.needed) ? 'O' : '', (n.followUp && n.followUp.dueDate) || '',
         (n.authorEmail || '').split('@')[0],
+        isAutoDraft(n) ? '자동기록(확인 필요)' : '확인 완료',
       ]);
     });
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 60 }, { wch: 26 }, { wch: 8 }, { wch: 11 }, { wch: 12 }];
+    ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 60 }, { wch: 26 }, { wch: 8 }, { wch: 11 }, { wch: 12 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, '상담방문일지');
     XLSX.writeFile(wb, `영실이_상담방문일지_${new Date().toLocaleDateString('sv-SE')}.xlsx`);
   };
@@ -1871,6 +1912,7 @@ export default function App() {
       visitedDate: dateStrOf(d), visitedTime: timeStrOf(d),
       linkedAlertId: n.linkedAlertId || '',
       followUpNeeded: !!(n.followUp && n.followUp.needed), followUpDue: (n.followUp && n.followUp.dueDate) || '',
+      autoDraft: isAutoDraft(n),   // 저장 시 '확인 완료'로 확정된다는 안내용
     });
     setNoteModal({ note: n });
   };
@@ -2490,7 +2532,12 @@ export default function App() {
         return (
         <div className="modal-overlay" onClick={close}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600,width:'94%',textAlign:'left'}}>
-            <div className="modal-title" style={{textAlign:'left',marginBottom:18}}>{noteForm.id?'상담·방문 일지 수정':'새 상담·방문 일지'}</div>
+            <div className="modal-title" style={{textAlign:'left',marginBottom:noteForm.autoDraft?10:18}}>{noteForm.id?'상담·방문 일지 수정':'새 상담·방문 일지'}</div>
+            {noteForm.autoDraft && (
+              <div style={{fontSize:16,color:'#b45309',background:'#fef3c7',border:'1px solid #fde68a',borderRadius:10,padding:'10px 12px',marginBottom:16,lineHeight:1.5}}>
+                통화 내용으로 <b>자동 작성된 초안</b>입니다. 내용을 확인·수정한 뒤 저장하면 <b>내 이름으로 확정</b>됩니다.
+              </div>
+            )}
             <div style={{display:'flex',flexDirection:'column',gap:15,maxHeight:'66vh',overflowY:'auto',paddingRight:4}}>
               <div>
                 <label style={L}>어르신</label>
@@ -3876,7 +3923,7 @@ export default function App() {
                           {c.transcript && (
                             <button className="btn-secondary" style={{fontSize:15,padding:'4px 10px',marginLeft:'auto'}}
                               disabled={!!draftingCallId} title="통화 내용을 AI가 활동일지 초안으로 요약해 일지 작성 창에 채워줍니다"
-                              onClick={()=>makeNoteDraft(c)}>
+                              onClick={()=>openNoteForCall(c)}>
                               {draftingCallId===c.id ? '초안 생성 중…' : '일지 초안'}
                             </button>
                           )}
@@ -4270,11 +4317,14 @@ export default function App() {
               {(()=>{
                 const ym=new Date().toISOString().slice(0,7);
                 const tm=caseNotes.filter(n=>(n.visitedAt||'').slice(0,7)===ym);
+                // 실적 집계는 담당자가 확인한 일지만 센다 — 자동기록 초안이 방문·상담 실적으로 잡히면 안 된다
+                const done=tm.filter(n=>!isAutoDraft(n));
                 const stat=[
-                  {label:'이번달 가정방문',value:tm.filter(n=>n.type==='visit').length,color:'#246BEB'},
-                  {label:'이번달 전화상담',value:tm.filter(n=>n.type==='phone').length,color:'#16a34a'},
-                  {label:'이번달 전체 상담',value:tm.length,color:'#7c3aed'},
+                  {label:'이번달 가정방문',value:done.filter(n=>n.type==='visit').length,color:'#246BEB'},
+                  {label:'이번달 전화상담',value:done.filter(n=>n.type==='phone').length,color:'#16a34a'},
+                  {label:'이번달 전체 상담',value:done.length,color:'#7c3aed'},
                   {label:'미처리 후속',value:caseNotes.filter(n=>n.followUp&&n.followUp.needed&&!n.followUp.done).length,color:'#f59e0b'},
+                  {label:'확인 필요(자동기록)',value:caseNotes.filter(isAutoDraft).length,color:'#b45309'},
                 ];
                 return (
                   <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:16}}>
@@ -4343,6 +4393,7 @@ export default function App() {
                               <span style={{fontSize:15,color:'#64748b'}}>· {CASE_CAT_META[n.category]||'기타'}</span>
                               {(n.topics||[]).length>0 && <span style={{fontSize:15,fontWeight:700,color:'#7c3aed',background:'#f5f3ff',border:'1px solid #ddd6fe',borderRadius:12,padding:'2px 8px'}}>{(n.topics||[]).map(t=>CASE_TOPIC_META[t]).filter(Boolean).join('·')}</span>}
                               {n.linkedAlertId&&<span style={{fontSize:14,color:'#dc2626',fontWeight:700}}>알림 대응</span>}
+                              {isAutoDraft(n)&&<AutoDraftBadge/>}
                               {fu&&<span style={{fontSize:14,color:'#f59e0b',fontWeight:700}}>후속{n.followUp.dueDate?` ~${n.followUp.dueDate}`:''}</span>}
                               <span style={{flex:1}}/>
                               <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:15,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'복사됨':'복사'}</button>
@@ -4389,6 +4440,44 @@ export default function App() {
                     </div>
                   );
                 });
+              })()}
+              {/* 긴급재난문자 — 기관 관할지역 오늘자. 위급·긴급 단계만 상단에 강조, 안전안내는 목록에만 표시 */}
+              {disasterMsgConfigured && disasterMsgs.length > 0 && (() => {
+                const urgent = disasterMsgs.filter(m => /위급|긴급/.test(m.step || ''));
+                return (
+                  <>
+                    {urgent.length > 0 && (
+                      <div className="data-weather-alert" style={{background:'#fef2f2', color:'#b42318'}}>
+                        <span>긴급재난문자 {urgent.length}건 수신 · {urgent[0].regionText}</span>
+                        <span style={{fontWeight:400, fontSize:15}}>아래 목록에서 전체 내용을 확인하세요</span>
+                      </div>
+                    )}
+                    <section className="section" style={{marginBottom:20}}>
+                      <div className="script-editor-header" style={{marginBottom:10}}>
+                        <div className="section-title" style={{marginBottom:0}}>긴급재난문자 (관할지역 오늘자 {disasterMsgs.length}건)</div>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:360,overflowY:'auto'}}>
+                        {disasterMsgs.map(m => {
+                          const danger = /위급/.test(m.step || '');
+                          const warn = /긴급/.test(m.step || '');
+                          const c = danger ? {bg:'#fef2f2',fg:'#b42318',bd:'#fecaca'} : warn ? {bg:'#fff8e1',fg:'#92400e',bd:'#fde68a'} : {bg:'#f8fafc',fg:'#475569',bd:'#e2e8f0'};
+                          return (
+                            <div key={m.sn} style={{border:`1px solid ${c.bd}`,borderRadius:10,padding:'10px 12px',background:'#fff'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
+                                <span style={{fontSize:14,fontWeight:700,color:c.fg,background:c.bg,padding:'2px 8px',borderRadius:20}}>{m.step || '안내'}</span>
+                                <span style={{fontSize:14,color:'#94a3b8'}}>{m.category}</span>
+                                <span style={{fontSize:14,color:'#94a3b8'}}>· {m.regionText}</span>
+                                <span style={{flex:1}}/>
+                                <span style={{fontSize:14,color:'#94a3b8'}}>{m.at}</span>
+                              </div>
+                              <div style={{fontSize:16,color:'#1f2937',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{m.content}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  </>
+                );
               })()}
               {popError && <div className="call-result-banner error">{popError}</div>}
               {popLoading && <div style={{textAlign:'center',padding:'40px',color:'#64748b',fontSize:18}}>행정안전부 공공데이터 불러오는 중...</div>}
@@ -4548,6 +4637,12 @@ export default function App() {
                             <div style={{minWidth:96,color:'#64748b',fontSize:16}}>{c.date} {hm}</div>
                             <div style={{minWidth:64,color:'#64748b',fontSize:16}}>{Math.floor(dur/60)}분 {dur%60}초</div>
                             <div style={{minWidth:44,fontWeight:700,fontSize:16,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
+                            <button className="btn-small" disabled={!!draftingCallId||!c.transcript}
+                              title={c.transcript?'이 통화 내용을 일지 작성 창에 채워서 엽니다':'통화 내용이 없어 초안을 만들 수 없습니다'}
+                              onClick={()=>openNoteForCall(c)}
+                              style={{marginLeft:'auto',fontSize:15,fontWeight:700}}>
+                              {draftingCallId===c.id?'초안 생성 중…':'일지 작성'}
+                            </button>
                             <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
                           </div>
                         );
@@ -4573,6 +4668,7 @@ export default function App() {
                               <span style={{fontSize:14,fontWeight:700,color:tmeta.color,background:tmeta.bg,padding:'2px 8px',borderRadius:20}}>{tmeta.label}</span>
                               <span style={{fontSize:15,color:'#64748b'}}>{CASE_CAT_META[n.category]||'기타'}</span>
                               {n.linkedAlertId&&<span style={{fontSize:14,color:'#dc2626',fontWeight:700}}>알림 대응</span>}
+                              {isAutoDraft(n)&&<AutoDraftBadge/>}
                               <span style={{flex:1}}/>
                               <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:15,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'복사됨':'복사'}</button>
                               <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#246BEB',fontSize:15,fontWeight:700,cursor:'pointer'}}>수정</button>

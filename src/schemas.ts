@@ -130,6 +130,20 @@ export const ForestFireRegionSchema = loose({
 });
 export const ForestFireMapSchema = z.record(z.string(), ForestFireRegionSchema);
 
+// ── 긴급재난문자 (/disaster-msg) — 기관 관할지역 오늘자 목록. 키 미발급 시 configured:false ──
+export const DisasterMsgSchema = loose({
+  sn: z.string().optional(),
+  at: z.string().optional(),
+  content: z.string().optional(),
+  regionText: z.string().optional(),
+  step: z.string().optional(), // 위급재난 | 긴급재난 | 안전안내
+  category: z.string().optional(),
+});
+export const DisasterMsgResponseSchema = loose({
+  configured: z.boolean().optional(),
+  messages: z.array(DisasterMsgSchema).optional(),
+});
+
 /**
  * zod 검증을 **차단용으로 쓸지** 여부.
  *
