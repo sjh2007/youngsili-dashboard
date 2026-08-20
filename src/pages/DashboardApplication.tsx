@@ -46,12 +46,12 @@ const DEFAULT_SCRIPT = `{{호칭}}, 안녕하세요. 저 영실이인데요~
 그럼 저 영실이가 또 연락드릴게요. 건강하게 지내세요.`;
 
 const ALERT_TEMPLATES = {
-  heatwave: `오늘 {{지역}} 폭염경보가 발령되었어요. 야외 활동은 자제하시고, 물을 자주 드시고 시원한 곳에 계세요.`,
-  cold:     `오늘 {{지역}} 한파경보가 발령되었어요. 외출 시 따뜻하게 입으시고, 가급적 실내에 계세요.`,
-  dust:     `오늘 {{지역}} 미세먼지 농도가 매우 나쁨이에요. 외출 시 마스크를 꼭 착용하세요.`,
-  rain:     `오늘 {{지역}} 비가 많이 온다고 해요. 외출 시 우산을 챙기시고 미끄러운 곳을 조심하세요.`,
-  typhoon:  `{{지역}} 태풍 영향권에 들어있어요. 오늘은 밖에 나가지 마시고 안전한 실내에 계세요. 창문은 꼭 닫아 잠그시고, 창문에서 떨어진 곳에 계시는 게 좋아요. 정전이 될 수 있으니 손전등이나 휴대폰을 가까이 두세요. 몸이 불편하거나 걱정되는 일이 있으면 언제든 말씀해 주세요.`,
-  wildfire: `오늘 {{지역}} 인근에 산불이 발생했어요. 안내 방송에 귀 기울이시고, 대피 안내가 있으면 꼭 따르세요. 위급하면 119로 연락하세요.`,
+  heatwave: `{{기관명}}에서 전해드려요. 오늘 {{지역}}에 폭염경보가 발령되었어요. 한낮에는 밖에 나가지 마시고 시원한 곳에서 쉬세요. 목이 마르지 않아도 물을 자주 드시고, 선풍기나 에어컨을 켜 두세요. 어지럽거나 기운이 없으시면 바로 시원한 곳에 누워 쉬시고, {{보호자}}나 저희에게 꼭 알려주세요. 몸이 불편하시면 언제든 말씀해 주세요.`,
+  cold:     `{{기관명}}에서 전해드려요. 오늘 {{지역}}에 한파경보가 발령되었어요. 오늘은 되도록 밖에 나가지 마시고 따뜻한 실내에 계세요. 꼭 나가셔야 하면 모자와 장갑, 두꺼운 옷을 챙겨 입으세요. 보일러는 아끼지 마시고 따뜻하게 켜 두시고, 수도가 얼지 않게 물을 조금 틀어 두시면 좋아요. 미끄러운 길 조심하시고, 몸이 안 좋으시면 {{보호자}}나 저희에게 바로 알려주세요.`,
+  dust:     `{{기관명}}에서 전해드려요. 오늘 {{지역}} 미세먼지가 매우 나쁨이에요. 오늘은 되도록 밖에 나가지 마시고, 창문도 닫아 두세요. 꼭 나가셔야 하면 마스크를 꼭 쓰시고, 다녀오신 뒤에는 손과 얼굴을 씻으세요. 물을 자주 드시면 목이 덜 칼칼해요. 숨이 차거나 기침이 심해지면 {{보호자}}나 저희에게 꼭 알려주세요.`,
+  rain:     `{{기관명}}에서 전해드려요. 오늘 {{지역}}에 호우주의보가 내렸어요. 비가 많이 오니 오늘은 되도록 외출하지 마세요. 꼭 나가셔야 하면 우산을 챙기시고, 미끄러운 길과 물이 고인 곳을 조심하세요. 집 안에 물이 새거나 잠기면 무리해서 치우지 마시고 {{보호자}}나 저희에게 바로 알려주세요. 천둥 번개가 칠 때는 전기 제품을 잠시 꺼 두시는 게 안전해요.`,
+  typhoon:  `{{기관명}}에서 전해드려요. 지금 {{지역}}이 태풍 영향권에 들었어요. 오늘은 절대 밖에 나가지 마시고 안전한 실내에 계세요. 창문은 꼭 닫아 잠그시고, 창문에서 떨어진 곳에 계세요. 정전이 될 수 있으니 손전등과 휴대폰을 가까이 두시고, 휴대폰은 미리 충전해 두세요. 무섭거나 걱정되는 일이 있으면 {{보호자}}나 저희에게 언제든 연락하세요. 위급할 때는 119예요.`,
+  wildfire: `{{기관명}}에서 전해드려요. 오늘 {{지역}} 인근에 산불이 발생했어요. 창문을 닫아 연기가 들어오지 않게 하시고, 마을 안내 방송에 귀 기울여 주세요. 대피 안내가 있으면 신발과 겉옷, 휴대폰만 챙겨 바로 따라 나서세요. 혼자 움직이기 힘드시면 {{보호자}}나 저희에게 바로 연락 주시고, 위급하면 119에 전화하세요. 놀라지 마시고, 안내대로 하시면 안전해요.`,
   none:     ``,
 };
 
@@ -787,6 +787,10 @@ export default function App() {
   const [questions, setQuestions]          = useState(() => DEFAULT_QUESTIONS.map(q => ({ ...q })));
   const [questionsSaving, setQuestionsSaving] = useState(false);
   const [questionsMsg, setQuestionsMsg]    = useState('');
+  // 070 발신번호(전역) — KCT에 등록된 번호만 실발신됨. 빈 값이면 서버 환경변수 폴백.
+  const [pstnCallerId, setPstnCallerId]    = useState('');
+  const [pstnSaving, setPstnSaving]        = useState(false);
+  const [pstnMsg, setPstnMsg]              = useState('');
   const [alertTplSaving, setAlertTplSaving] = useState(false);
   const [alertTplSaved, setAlertTplSaved]  = useState(false);
   const [fetchingWeather, setFetchingWeather] = useState(false);
@@ -1195,7 +1199,26 @@ export default function App() {
     authFetch(`${SERVER_URL}/settings/questions`).then(r => r.json())
       .then(d => { if (d && Array.isArray(d.questions) && d.questions.length) setQuestions(d.questions); })
       .catch(() => {});
+    authFetch(`${SERVER_URL}/settings/pstn`).then(r => r.json())
+      .then(d => { if (d && typeof d.callerId === 'string') setPstnCallerId(d.callerId); })
+      .catch(() => {});
   }, [page]); // eslint-disable-line
+
+  const savePstnCallerId = async () => {
+    const v = pstnCallerId.replace(/[^0-9]/g, '');
+    if (!/^0\d{8,10}$/.test(v)) { setPstnMsg('0으로 시작하는 숫자 9~11자리로 입력해 주세요 (예: 07045014906)'); return; }
+    setPstnSaving(true); setPstnMsg('');
+    try {
+      const r = await authFetch(`${SERVER_URL}/settings/pstn`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callerId: v }),
+      });
+      const d = await r.json();
+      if (d && d.success) { setPstnCallerId(d.callerId); setPstnMsg('저장했습니다. 다음 발신부터 이 번호로 표시됩니다.'); }
+      else setPstnMsg(errMsg(d, '저장 실패'));
+    } catch { setPstnMsg('서버 연결 실패'); }
+    setPstnSaving(false);
+  };
 
   const setQuestionField = (key, field, value) =>
     setQuestions(prev => prev.map(q => q.key === key ? { ...q, [field]: value } : q));
@@ -1981,7 +2004,7 @@ export default function App() {
   // ── 단건 전화 ──
   // channel 'app'  = 앱 푸시(FCM) 우선, 실패 시 서버가 전화로 폴백
   // channel 'pstn' = 앱을 건너뛰고 070 번호로 바로 전화 (앱 미설치 어르신용)
-  const makeCall = async (elder, channel: 'app' | 'pstn' = 'app') => {
+  const makeCall = async (elder, channel: 'app' | 'pstn' = 'app', confirmPstn = false) => {
     setCallModal(null); setCalling(elder.id); setCallResult(null);
     const now = new Date();
     const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
@@ -1991,6 +2014,7 @@ export default function App() {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
           channel,
+          confirmPstn,
           phone:        elder.phone,
           elderName:    elder.name,
           elderTitle:   elder.title || '어르신',
@@ -2005,6 +2029,15 @@ export default function App() {
         }),
       });
       const data = await res.json();
+      // 앱 토큰이 아직 없는 어르신(방금 재등록 등) — 확인 없이 실전화로 조용히 넘어가던 문제(2026-08-20)
+      // 방지: 여기서 한 번 물어보고, 승낙하면 confirmPstn:true로 같은 요청을 다시 보낸다.
+      if (data.needsConfirm) {
+        setCalling(null);
+        if (window.confirm(data.error || '이 어르신은 앱 토큰이 없어요. 실제 전화로 걸까요?')) {
+          await makeCall(elder, channel, true);
+        }
+        return;
+      }
       if (data.success) {
         setElders(prev => prev.map(e => e.id===elder.id?{...e,lastCall:`오늘 ${timeStr}`}:e));
         if (selected?.id===elder.id) setSelected(prev=>({...prev,lastCall:`오늘 ${timeStr}`}));
@@ -2654,7 +2687,7 @@ export default function App() {
             const groups: any[] = isDisability ? [
               { label:'모니터링', items:[
                 {id:'dashboard', icon:'dashboard', label:'대시보드'},
-                {id:'elders',    icon:'elders',    label:`${T.elder} 관리`},
+                {id:'elders',    icon:'elders',    label:`${T.elder} 관리`, badge: pendingElders.length},
               ]},
               { label:'기록', items:[
                 {id:'calls',     icon:'calls',     label:'통화 기록'},
@@ -2670,7 +2703,7 @@ export default function App() {
               { label:'모니터링', items:[
                 {id:'dashboard', icon:'dashboard', label:'대시보드'},
                 {id:'health',    icon:'health',    label:'건강 상태', badge: alertCount},
-                {id:'elders',    icon:'elders',    label:`${T.elder} 관리`},
+                {id:'elders',    icon:'elders',    label:`${T.elder} 관리`, badge: pendingElders.length},
                 {id:'safety',    icon:'safety',    label:'안전확인 관리'},
               ]},
               { label:'기록', items:[
@@ -3624,7 +3657,11 @@ export default function App() {
                   // 기관 주소 지역 → 어르신 거주지 지역 순으로 묶어서 보여준다.
                   // (기관 주소를 바꿔도 어르신 거주지 지역이 그대로 섞여 나와 헷갈린다는 문의 대응 — 2026-08-10)
                   const SRC_ORDER = { org: 0, both: 1, elder: 2 };
+                  // 전화 멘트 관리는 복지관 주소 기준으로만 노출 — 등록된 어르신이 다른 시/도에 살아도
+                  // (예: 대구 소속 어르신 1명 때문에 대구 전역이 같이 뜨던 문제) 이 화면엔 안 섞이게 필터.
+                  // 어르신 지역 기반 정보는 다른 화면(대시보드 등)에서 그대로 사용되므로 원본 weatherData는 안 건드림.
                   const entries = Object.entries(weatherData as Record<string, any>)
+                    .filter(([, w]: any) => w?.source === 'org' || w?.source === 'both')
                     .sort((a, b) => (SRC_ORDER[a[1]?.source] ?? 1) - (SRC_ORDER[b[1]?.source] ?? 1));
                   if (!entries.length) return <div className="weather-map-empty">표시할 관할 지역 날씨가 없습니다.</div>;
                   return (
@@ -3648,7 +3685,12 @@ export default function App() {
                         return (
                           <article key={region} className={`weather-compact-card is-${severity}`}>
                             <div className="weather-compact-region">
-                              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{region}</span>
+                              {/* 도 소속 시/군의 읍면동(예: "경북 의성군 의성읍")은 3토큰이라 카드 폭에서 잘림 —
+                                  같은 시/군 카드끼리 모여 있어 앞부분은 중복이므로 마지막 토큰(읍면동명)만 표시.
+                                  광역시 자치구("대구 남구")는 원래도 2토큰이라 그대로 둠. 전체 이름은 title로 확인 가능 */}
+                              <span title={region} style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>
+                                {region.trim().split(/\s+/).length >= 3 ? region.trim().split(/\s+/).slice(-1)[0] : region}
+                              </span>
                               {weather?.source === 'org' && <span className="weather-source-badge weather-source-org" title="기관 주소가 속한 지역">기관</span>}
                               {weather?.source === 'elder' && <span className="weather-source-badge weather-source-elder" title={`${T.elder} 거주지 지역`}>{T.elder}</span>}
                             </div>
@@ -3855,6 +3897,28 @@ export default function App() {
 
                 <div style={{fontSize:16,color:'#334155',marginTop:14,lineHeight:1.6,background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:10,padding:'12px 14px'}}>
                   <b>격일</b>로 표시한 질문은 이틀에 한 번만 여쭤 통화가 길어지지 않게 합니다. 통화 중 <b>위험·정서·생활 신호</b>를 감지하면 자동으로 보호자·복지사·119 연락을 안내하고, <b>건강 상태</b> 메뉴에 알림이 뜹니다.
+                </div>
+
+                {/* ── 070 발신번호 설정 — 일반전화(PSTN) 발신 시 어르신 전화기에 표시되는 번호 ── */}
+                <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid #e2e8f0'}}>
+                  <div style={{fontSize:18,fontWeight:800,color:'#0f172a',marginBottom:6}}>일반전화 발신번호</div>
+                  <div style={{fontSize:15,color:'#64748b',marginBottom:10,lineHeight:1.6}}>
+                    앱이 없는 {T?.elder || '어르신'}께 일반전화(070)로 전화드릴 때 상대방 화면에 표시되는 번호입니다.<br/>
+                    <b style={{color:'#b45309'}}>통신사(KCT)에 등록된 070 번호만 실제 발신됩니다</b> — 미등록 번호를 저장하면 발신이 거부됩니다.
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                    <input
+                      value={pstnCallerId}
+                      onChange={e=>setPstnCallerId(e.target.value.replace(/[^0-9]/g,''))}
+                      placeholder="예: 07045014906"
+                      inputMode="numeric"
+                      style={{padding:'10px 14px',border:'1px solid #cbd5e1',borderRadius:10,fontSize:17,fontWeight:700,letterSpacing:1,width:220}}
+                    />
+                    <button className="btn-primary" onClick={savePstnCallerId} disabled={pstnSaving}>
+                      {pstnSaving?'저장 중...':'발신번호 저장'}
+                    </button>
+                    {pstnMsg && <span style={{fontSize:16,fontWeight:600,color:pstnMsg.includes('실패')||pstnMsg.includes('입력')?'#dc2626':'#16a34a'}}>{pstnMsg}</span>}
+                  </div>
                 </div>
               </div>
             </div>
