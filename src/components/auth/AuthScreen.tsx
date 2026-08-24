@@ -19,6 +19,22 @@ const primaryBtn = { width: '100%', height: 52, padding: '0 16px', borderRadius:
 const linkBtn = { background: 'none', border: 'none', color: '#164fba', fontWeight: 700, cursor: 'pointer', fontSize: 13, padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 };
 const errBox = { color: '#b42318', fontSize: 13, marginTop: 10, background: '#fff3f2', padding: '10px 12px', borderRadius: 4, borderLeft: '3px solid #d92d20' };
 
+/** 비밀번호 입력 + 표시 토글 — 로그인·회원가입·초대가입 공용 */
+function PwInput({ value, onChange, placeholder, autoComplete, onKeyDown }: any) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input style={{ ...input, paddingRight: 52 }} type={show ? 'text' : 'password'} value={value}
+             onChange={onChange} onKeyDown={onKeyDown} placeholder={placeholder} autoComplete={autoComplete} />
+      <button type="button" onClick={() => setShow(s => !s)} tabIndex={-1}
+              aria-label={show ? '비밀번호 숨기기' : '비밀번호 표시'} title={show ? '비밀번호 숨기기' : '비밀번호 표시'}
+              style={{ position: 'absolute', right: 6, top: 0, height: '100%', width: 42, background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#767676', padding: 0 }}>
+        {show ? '숨김' : '표시'}
+      </button>
+    </div>
+  );
+}
+
 export default function AuthScreen({ authUser, needsProvision, authFetch, serverUrl, onReload, onProvisioned }) {
   const [tab, setTab] = useState('login');     // login | signup
   const [busy, setBusy] = useState(false);
@@ -256,9 +272,9 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
             <div style={label}>아이디 (이메일)</div>
             <input style={input} type="email" value={iv.email} onChange={e => setIv(s => ({ ...s, email: e.target.value }))} placeholder="example@example.com" autoComplete="off" />
             <div style={label}>비밀번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>*영문+숫자+특수문자 8~20자</span></div>
-            <input style={input} type="password" value={iv.pw} onChange={e => setIv(s => ({ ...s, pw: e.target.value }))} autoComplete="new-password" placeholder="비밀번호 입력" />
+            <PwInput value={iv.pw} onChange={e => setIv(s => ({ ...s, pw: e.target.value }))} autoComplete="new-password" placeholder="비밀번호 입력" />
             <div style={label}>비밀번호 확인</div>
-            <input style={input} type="password" value={iv.pw2} onChange={e => setIv(s => ({ ...s, pw2: e.target.value }))} onKeyDown={e => e.key === 'Enter' && doInviteSignup()} autoComplete="new-password" placeholder="비밀번호 재입력" />
+            <PwInput value={iv.pw2} onChange={e => setIv(s => ({ ...s, pw2: e.target.value }))} onKeyDown={e => e.key === 'Enter' && doInviteSignup()} autoComplete="new-password" placeholder="비밀번호 재입력" />
             {err && <div style={errBox}>{err}</div>}
             <button style={{ ...primaryBtn, background: GREEN }} disabled={busy} onClick={doInviteSignup}>{busy ? '합류 중…' : '가입하고 합류하기 →'}</button>
             <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#64748b' }}>
@@ -357,7 +373,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
           <div style={label}>아이디 (이메일)</div>
           <input style={input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@example.com" autoComplete="username" />
           <div style={label}>비밀번호</div>
-          <input style={input} type="password" value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} placeholder="비밀번호 입력" autoComplete="current-password" />
+          <PwInput value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} placeholder="비밀번호 입력" autoComplete="current-password" />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', cursor: 'pointer' }}>
               <input type="checkbox" checked={keep} onChange={e => setKeep(e.target.checked)} /> 로그인 상태 유지
@@ -381,9 +397,9 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
           <div style={label}>아이디 <span style={{ color: BLUE, fontWeight: 600 }}>*실제 사용하는 이메일을 입력하세요(인증 메일 발송)</span></div>
           <input style={input} type="email" value={su.email} onChange={e => setSu(s => ({ ...s, email: e.target.value }))} placeholder="example@example.com" autoComplete="off" />
           <div style={label}>비밀번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>*영문+숫자+특수문자 8~20자</span></div>
-          <input style={input} type="password" value={su.pw} onChange={e => setSu(s => ({ ...s, pw: e.target.value }))} placeholder="비밀번호 입력" autoComplete="new-password" />
+          <PwInput value={su.pw} onChange={e => setSu(s => ({ ...s, pw: e.target.value }))} placeholder="비밀번호 입력" autoComplete="new-password" />
           <div style={label}>비밀번호 확인</div>
-          <input style={input} type="password" value={su.pw2} onChange={e => setSu(s => ({ ...s, pw2: e.target.value }))} placeholder="비밀번호 재입력" autoComplete="new-password" />
+          <PwInput value={su.pw2} onChange={e => setSu(s => ({ ...s, pw2: e.target.value }))} placeholder="비밀번호 재입력" autoComplete="new-password" />
           <div style={label}>기관 · 단체명</div>
           <input style={input} value={su.org} onChange={e => setSu(s => ({ ...s, org: e.target.value }))} placeholder="예) ○○구 노인복지관 / ○○장애인자립센터" />
           <div style={label}>기관 주소 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택 · 관할 지역 기상특보 연동에 사용)</span></div>

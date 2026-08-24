@@ -813,6 +813,7 @@ export default function App() {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkDone, setBulkDone]     = useState([]);
   const [bulkCurrent, setBulkCurrent] = useState(null);
+  const [bulkChannel, setBulkChannel] = useState<'app'|'pstn'>('app');   // 진행 중인 일괄 발신이 앱 알림인지 일반전화(070)인지
   const [dispatchHist, setDispatchHist] = useState([]);   // 발신 이력(날짜별) — 서버 dispatches
   const [histLoading, setHistLoading] = useState(false);
   const [histDays, setHistDays]     = useState(7);
@@ -834,6 +835,8 @@ export default function App() {
   const [batchIntervalSec, setBatchIntervalSec] = useState(90);  // 배치 간 대기(초)
   const [batchWait, setBatchWait]   = useState(0);    // 다음 배치까지 남은 초(카운트다운 표시)
   const bulkRef = useRef(false);
+  // 이번 일괄 발신이 경보 발신이었는지 — 부재중 재발신 때 같은 종류로 다시 걸기 위해 기억한다
+  const bulkWithAlertRef = useRef(false);
   // 상담·방문 일지(caseNotes)
   const [caseNotes, setCaseNotes]   = useState([]);
   const [caseLoading, setCaseLoading] = useState(false);
@@ -941,7 +944,21 @@ export default function App() {
         const hasRain     = Object.values(data as Record<string, any>).some(w => w.alert === 'rain');
         // 날씨로 경보가 자동 선택될 때도 **서버에 저장된 멘트**를 우선한다.
         // 기본값을 그대로 넣으면 담당자가 수정해 둔 멘트가 화면에서 사라진 것처럼 보인다.
-        const pick = (k) => { setActiveAlert(k); setAlertScript(tplText(k, ALERT_TEMPLATES[k])); };
+        //
+        // 2026-08-21: 경보 종류가 실제로 "바뀔 때"만 편집창을 갈아끼운다. 예전에는 5분마다
+        // 도는 날씨 갱신이 같은 경보인데도 매번 setAlertScript를 불러서, 담당자가 고치던
+        // 멘트가 저장 전에 날아가거나 저장 후에도 기본값으로 되돌아갔다.
+        // (tplText가 savedAlertTplRef를 보는 것도 같은 이유 — 이 인터벌은 deps가 []라
+        //  첫 렌더의 빈 savedAlertTpl을 계속 붙잡고 있어서 항상 기본값으로 떨어졌다.)
+        // 담당자가 경보를 직접 고르거나 멘트를 고치기 시작했으면 자동선택은 물러난다.
+        // 안 그러면 편집 중에 5분 타이머가 다른 경보로 화면을 바꿔 버린다.
+        const pick = (k) => {
+          if (alertUserTouchedRef.current) return;
+          setActiveAlert(k);
+          if (appliedAlertKeyRef.current === k) return;
+          appliedAlertKeyRef.current = k;
+          setAlertScript(tplText(k, ALERT_TEMPLATES[k]));
+        };
         if (hasHeatwave)     pick('heatwave');
         else if (hasCold)    pick('cold');
         else if (hasRain)    pick('rain');
@@ -1081,50 +1098,84 @@ export default function App() {
   const applySmartFilter = f => { setSmartFilter(f); setChecked([]); };
 
   // ── 일괄 발신 (FCM 앱 푸시) ──
-  const startBulkCall = async (customQueue?: any) => {
+  /**
+   * 발신 요청 바디.
+   *
+   * withAlert=false면 경보 필드를 아예 안 싣는다. activeAlert는 "전화 멘트 관리 화면에서
+   * 지금 편집 중인 경보"일 뿐인데, 날씨에 따라 자동으로 rain/heatwave 등이 잡힌다.
+   * 예전에는 그 값을 모든 발신에 그대로 실어서, 어르신 상세에서 그냥 전화를 걸어도
+   * 호우 경보 안내가 나가버렸다(2026-08-21 지적). 경보는 경보 발신 버튼으로만 나간다.
+   */
+  const bulkCallBody = (elder: any, channel: 'app'|'pstn', withAlert: boolean) => JSON.stringify({
+    channel, confirmPstn: channel === 'pstn',
+    phone:        elder.phone,
+    elderName:    elder.name,
+    elderTitle:   elder.title || '어르신',
+    region:       elder.region,
+    script:       mainScript,
+    ...(withAlert && activeAlert !== 'none' ? {
+      alertMessage: alertMsgFor(elder),
+      alertType: activeAlert,
+      alertStage: alertStageFor(),
+      // 경보 안내 뒤 안부 질문까지 이어갈지 (발신 확인 창에서 선택)
+      includeCare: alertIncludeCare,
+      shelter: activeAlert === 'wildfire' ? shelterName.trim() : '',   // 앱 긴급 안내 대피소 일치용
+      fireLoc: activeAlert === 'wildfire' ? fireLoc.trim() : '',       // 산불 발생 위치(위치질문 답변 일치용)
+    } : {}),
+  });
+
+  const dialElder = async (elder: any, channel: 'app'|'pstn', withAlert: boolean) => {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    try {
+      const res = await authFetch(`${SERVER_URL}/call/app`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: bulkCallBody(elder, channel, withAlert),
+      });
+      const data = await res.json();
+      setBulkDone(prev => [...prev, { id: elder.id, callId: data.callId, success: data.success, status: data.success ? 'ringing' : 'failed' }]);
+      if (data.success) {
+        setElders(prev => prev.map(e => e.id===elder.id ? {...e, lastCall:`오늘 ${timeStr}`} : e));
+      }
+    } catch {
+      setBulkDone(prev => [...prev, { id: elder.id, success: false, status: 'failed' }]);
+    }
+  };
+
+  const startBulkCall = async (customQueue?: any, channel: 'app'|'pstn' = 'app', withAlert = false) => {
     const queue = Array.isArray(customQueue) ? customQueue : elders.filter(e => checked.includes(e.id));
     if (queue.length === 0) return;
-    setBulkQueue(queue); setBulkDone([]); setBulkRunning(true); bulkRef.current = true;
-    for (let i = 0; i < queue.length; i++) {
-      const elder = queue[i];
-      if (!bulkRef.current) break;
-      setBulkCurrent(elder.id);
-      try {
-        const res = await authFetch(`${SERVER_URL}/call/app`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            phone:        elder.phone,
-            elderName:    elder.name,
-            elderTitle:   elder.title || '어르신',
-            region:       elder.region,
-            script:       mainScript,
-            alertMessage: alertMsgFor(elder),
-            alertType: activeAlert,
-            alertStage: alertStageFor(),
-            // 경보 안내 뒤 안부 질문까지 이어갈지 (발신 확인 창에서 선택)
-            includeCare: activeAlert !== 'none' && alertIncludeCare,
-            shelter: activeAlert === 'wildfire' ? shelterName.trim() : '',   // 앱 긴급 안내 대피소 일치용
-            fireLoc: activeAlert === 'wildfire' ? fireLoc.trim() : '',       // 산불 발생 위치(위치질문 답변 일치용)
-          }),
-        });
-        const data = await res.json();
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-        setBulkDone(prev => [...prev, { id: elder.id, callId: data.callId, success: data.success, status: data.success ? 'ringing' : 'failed' }]);
-        if (data.success) {
-          setElders(prev => prev.map(e => e.id===elder.id ? {...e, lastCall:`오늘 ${timeStr}`} : e));
-        }
-      } catch {
-        setBulkDone(prev => [...prev, { id: elder.id, success: false, status: 'failed' }]);
-      }
-      // 배치 분산: batchSize명마다 batchIntervalSec초 대기(AI서버 동시통화 부하 완화). 배치 내는 1.5초 간격
-      const isLast = i === queue.length - 1;
-      if (!isLast) {
-        if ((i + 1) % batchSize === 0) {
+    setBulkQueue(queue); setBulkDone([]); setBulkRunning(true); setBulkChannel(channel); bulkRef.current = true;
+    bulkWithAlertRef.current = withAlert;   // 부재중 재발신(resendMissed)이 같은 종류로 나가도록 기억
+
+    if (channel === 'pstn') {
+      // 일반전화(070)는 콜엔진이 동시 발신을 감당하므로 배치 안에서는 전부 한꺼번에 건다
+      // (앱 알림처럼 AI서버 부하 때문에 한 명씩 늦출 필요가 없다) — 배치 간격만 유지.
+      for (let i = 0; i < queue.length; i += batchSize) {
+        if (!bulkRef.current) break;
+        const batch = queue.slice(i, i + batchSize);
+        setBulkCurrent(batch[batch.length - 1]?.id ?? null);
+        await Promise.allSettled(batch.map(elder => dialElder(elder, 'pstn', withAlert)));
+        const isLastBatch = i + batchSize >= queue.length;
+        if (!isLastBatch && bulkRef.current) {
           for (let s = batchIntervalSec; s > 0 && bulkRef.current; s--) { setBatchWait(s); await new Promise(r => setTimeout(r, 1000)); }
           setBatchWait(0);
-        } else {
-          await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+    } else {
+      for (let i = 0; i < queue.length; i++) {
+        const elder = queue[i];
+        if (!bulkRef.current) break;
+        setBulkCurrent(elder.id);
+        await dialElder(elder, 'app', withAlert);
+        // 배치 분산: batchSize명마다 batchIntervalSec초 대기(AI서버 동시통화 부하 완화). 배치 내는 1.5초 간격
+        const isLast = i === queue.length - 1;
+        if (!isLast) {
+          if ((i + 1) % batchSize === 0) {
+            for (let s = batchIntervalSec; s > 0 && bulkRef.current; s--) { setBatchWait(s); await new Promise(r => setTimeout(r, 1000)); }
+            setBatchWait(0);
+          } else {
+            await new Promise(r => setTimeout(r, 1500));
+          }
         }
       }
     }
@@ -1151,7 +1202,7 @@ export default function App() {
   const resendMissed = () => {
     const ids = bulkDone.filter(d => d.status === 'missed').map(d => d.id);
     const queue = elders.filter(e => ids.includes(e.id));
-    if (queue.length > 0) startBulkCall(queue);
+    if (queue.length > 0) startBulkCall(queue, bulkChannel, bulkWithAlertRef.current);
   };
 
   // 발신 이력: 발신 페이지에서 서버 dispatches를 최근 N일치 불러와 날짜별로 표시(복지사/관리자가 언제 발신했는지 확인)
@@ -1252,6 +1303,13 @@ export default function App() {
     authFetch(`${SERVER_URL}/settings/alerts`).then(r => r.json())
       .then(d => setSavedAlertTpl((d && d.templates) || {})).catch(() => {});
   }, [page]); // eslint-disable-line
+  // 5분 날씨 인터벌(deps [])이 붙잡은 낡은 클로저에서도 최신 저장분을 읽게 하는 통로
+  const savedAlertTplRef = useRef({});
+  useEffect(() => { savedAlertTplRef.current = savedAlertTpl; }, [savedAlertTpl]);
+  // 편집창에 마지막으로 적용한 경보 종류 — 같은 경보가 다시 선택될 때 편집 중인 내용을 지키기 위함
+  const appliedAlertKeyRef = useRef(null);
+  // 담당자가 경보를 직접 고르거나 멘트를 고치면 true. 이후 날씨 자동선택은 화면을 건드리지 않는다.
+  const alertUserTouchedRef = useRef(false);
   // 편집 중인 멘트의 키 (산불은 단계별, 그 외는 경보 종류)
   const curAlertKey = () => activeAlert === 'wildfire' ? `wildfire_${wildfireStage}` : activeAlert;
 
@@ -1272,8 +1330,13 @@ export default function App() {
       : ALERT_TEMPLATES[activeAlert];
     setAlertScript(cur => (cur === def ? saved : cur));
   }, [savedAlertTpl, activeAlert, wildfireStage]); // eslint-disable-line
-  // 저장분 우선, 없으면 기본 텍스트
-  const tplText = (key, def) => (savedAlertTpl[key] && savedAlertTpl[key].trim()) ? savedAlertTpl[key] : def;
+  // 저장분 우선, 없으면 기본 텍스트.
+  // ref로 읽는 이유: 이 함수를 부르는 fetchWeather가 deps [] 인 5분 인터벌에 갇혀 있어,
+  // state로 읽으면 첫 렌더의 빈 값({})만 계속 보게 된다 → 저장해 둔 멘트가 매번 기본값으로 덮였다.
+  const tplText = (key, def) => {
+    const saved = savedAlertTplRef.current[key];
+    return saved && saved.trim() ? saved : def;
+  };
   // 현재 편집 멘트를 서버에 저장(기관 공유)
   const saveAlertTemplate = async () => {
     const key = curAlertKey();
@@ -1285,8 +1348,19 @@ export default function App() {
         body: JSON.stringify({ templates: { [key]: alertScript } }),
       });
       const d = await r.json();
-      if (d && d.templates) { setSavedAlertTpl(d.templates); setAlertTplSaved(true); setTimeout(() => setAlertTplSaved(false), 2500); }
-    } catch { /* noop */ }
+      if (d && d.templates) {
+        setSavedAlertTpl(d.templates);
+        // 저장분이 곧 화면 내용이 됐으니, 이제부터는 날씨 자동선택이 다시 들어와도 된다
+        alertUserTouchedRef.current = false;
+        setAlertTplSaved(true); setTimeout(() => setAlertTplSaved(false), 2500);
+      } else {
+        // 저장이 실패해도 아무 표시가 없어서 "저장했는데 새로고침하면 사라진다"로 보였다(2026-08-21)
+        alert('경보 멘트 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      }
+    } catch (e) {
+      alert('경보 멘트 저장에 실패했습니다. 네트워크 상태를 확인해 주세요.');
+      console.error('경보 멘트 저장 실패:', e);
+    }
     setAlertTplSaving(false);
   };
   // 저장분을 기본값으로 되돌리기(빈 값 저장 → 서버가 해당 키 삭제)
@@ -2012,6 +2086,10 @@ export default function App() {
     try {
       const res = await authFetch(`${SERVER_URL}/call/app`, {
         method:'POST', headers:{'Content-Type':'application/json'},
+        // 어르신 상세의 전화 버튼은 **평소 안부 통화**다. 경보 필드를 싣지 않는다 —
+        // 예전에는 activeAlert(전화 멘트 관리 화면에서 편집 중인 경보, 날씨로 자동 선택됨)를
+        // 그대로 실어서, 그냥 전화를 걸어도 호우 경보 안내가 나갔다(2026-08-21 지적).
+        // 경보 발신은 전화 멘트 관리 화면의 경보 발신 버튼으로만 나간다.
         body: JSON.stringify({
           channel,
           confirmPstn,
@@ -2020,12 +2098,6 @@ export default function App() {
           elderTitle:   elder.title || '어르신',
           region:       elder.region,
           script:       mainScript,
-          alertMessage: alertMsgFor(elder),
-          alertType: activeAlert,
-          alertStage: alertStageFor(),
-          includeCare: activeAlert !== 'none' && alertIncludeCare,
-          shelter: activeAlert === 'wildfire' ? shelterName.trim() : '',   // 앱 긴급 안내 대피소 일치용
-            fireLoc: activeAlert === 'wildfire' ? fireLoc.trim() : '',       // 산불 발생 위치(위치질문 답변 일치용)
         }),
       });
       const data = await res.json();
@@ -2276,13 +2348,17 @@ export default function App() {
       </>} />}
       {bulkConfirm && <Dialog open title={`${bulkConfirm.count}명에게 지금 전화를 발신합니다`} alert tone={bulkConfirm.isAlert?'danger':'default'} className="modal--confirm" onClose={()=>setBulkConfirm(null)} actions={<>
               <Button onClick={()=>setBulkConfirm(null)}>취소</Button>
-              <Button variant="primary" onClick={()=>{ const q = bulkConfirm.queue; setBulkConfirm(null); startBulkCall(q); }}>발신 시작</Button>
+              <Button variant="primary" onClick={()=>{ const q = bulkConfirm.queue; const ch = bulkConfirm.channel || 'app'; const wa = !!bulkConfirm.isAlert; setBulkConfirm(null); startBulkCall(q, ch, wa); }}>발신 시작</Button>
             </>}>
             <div className="confirm-facts">
               <div className="confirm-row"><span>대상</span><b>{bulkConfirm.count}명</b></div>
               <div className="confirm-row"><span>내용</span><b>{bulkConfirm.alertLabel || '일반 안부 통화'}</b></div>
               {bulkConfirm.count > batchSize && (
-                <div className="confirm-row"><span>발신 방식</span><b>{batchSize}명씩 {batchIntervalSec}초 간격</b></div>
+                <div className="confirm-row"><span>발신 방식</span><b>
+                  {bulkConfirm.channel === 'pstn'
+                    ? `${batchSize}명씩 동시 발신, 배치 간 ${batchIntervalSec}초 대기`
+                    : `${batchSize}명씩 ${batchIntervalSec}초 간격`}
+                </b></div>
               )}
             </div>
             {/* 경보 통화만 선택지가 생긴다 — 경보만 전할지, 안부 질문까지 이어갈지 */}
@@ -2311,7 +2387,9 @@ export default function App() {
             <div className={`confirm-warn ${bulkConfirm.isAlert ? 'is-alert' : ''}`}>
               {bulkConfirm.isAlert
                 ? '경보 멘트는 어르신에게 대피·안전 행동을 안내합니다. 대상과 단계를 반드시 확인해 주세요.'
-                : '발신하면 어르신 휴대폰에 실제로 수신 알림이 갑니다. 시작 후에는 남은 발신만 중단할 수 있습니다.'}
+                : bulkConfirm.channel === 'pstn'
+                  ? '발신하면 어르신 전화로 실제 전화가 걸립니다. 시작 후에는 남은 발신만 중단할 수 있습니다.'
+                  : '발신하면 어르신 휴대폰에 실제로 수신 알림이 갑니다. 시작 후에는 남은 발신만 중단할 수 있습니다.'}
             </div>
           </Dialog>}
       {callModal && <Dialog open title={<>{callModal.name} 어르신 앱으로<br/>수신 알림을 보내시겠습니까?</>} description="영실이 앱 → 수신화면 표시 → 받기 클릭 → AI 영실이 대화" onClose={()=>setCallModal(null)} actions={<>
@@ -3316,10 +3394,16 @@ export default function App() {
                     </span>
                   )}
                   {!bulkRunning
-                    ? <button className={`btn-bulk-call ${checked.length===0?'btn-disabled':''}`} disabled={checked.length===0}
-                        onClick={()=>setBulkConfirm({ count: checked.length, queue: null, isAlert: activeAlert && activeAlert!=='none', alertLabel: activeAlert && activeAlert!=='none' ? `경보 멘트 (${activeAlert})` : null })}>
-                        앱 알림 발신 ({checked.length}명)
-                      </button>
+                    ? <>
+                        <button className={`btn-bulk-call ${checked.length===0?'btn-disabled':''}`} disabled={checked.length===0}
+                          onClick={()=>setBulkConfirm({ count: checked.length, queue: null, channel: 'app', isAlert: false, alertLabel: null })}>
+                          앱 알림 발신 ({checked.length}명)
+                        </button>
+                        <button className={`btn-bulk-call ${checked.length===0?'btn-disabled':''}`} disabled={checked.length===0}
+                          onClick={()=>setBulkConfirm({ count: checked.length, queue: null, channel: 'pstn', isAlert: false, alertLabel: null })}>
+                          일반전화 동시발신 ({checked.length}명)
+                        </button>
+                      </>
                     : <button className="btn-bulk-stop" onClick={stopBulkCall}>발신 중단</button>
                   }
                 </div>
@@ -3328,7 +3412,7 @@ export default function App() {
               {(bulkRunning || bulkDone.length > 0) && (
                 <div className="bulk-progress-box">
                   <div className="bulk-progress-header">
-                    <span className="bulk-progress-title">{bulkRunning?'앱 알림 발신 중...':'발신 완료'}</span>
+                    <span className="bulk-progress-title">{bulkRunning?(bulkChannel==='pstn'?'일반전화 발신 중...':'앱 알림 발신 중...'):'발신 완료'}</span>
                     <span className="bulk-progress-count">{bulkDone.length} / {bulkQueue.length}</span>
                   </div>
                   <div className="bulk-bar-wrap"><div className="bulk-bar" style={{width:`${bulkQueue.length?bulkDone.length/bulkQueue.length*100:0}%`}}/></div>
@@ -3544,6 +3628,13 @@ export default function App() {
                   <span className="bulkbar-count">{selectedElders.size}명 선택됨</span>
                   <div className="bulkbar-actions">
                     <button className="btn-secondary btn-xs" onClick={()=>setSelectedElders(new Set())}>선택 해제</button>
+                    {bulkRunning && bulkChannel==='pstn'
+                      ? <button className="btn-secondary btn-xs" onClick={stopBulkCall}>발신 중단 ({bulkDone.length}/{bulkQueue.length})</button>
+                      : <button className="btn-secondary btn-xs" disabled={bulkRunning} onClick={()=>{
+                          const queue = elders.filter(e=>selectedElders.has(e.id));
+                          setBulkConfirm({ count: queue.length, queue, channel: 'pstn', isAlert: false, alertLabel: null });
+                        }}>일반전화 동시발신</button>
+                    }
                     <button className="btn-danger btn-xs" onClick={deleteSelectedElders}>선택 삭제</button>
                   </div>
                 </div>
@@ -3730,7 +3821,7 @@ export default function App() {
                 <div className="alert-ment-intro">경보 유형을 선택하고 안내 문구를 확인한 뒤 발신 대상을 지정하세요.</div>
                 <div className="alert-template-grid">
                   {[{id:'none',Icon:CircleCheck,label:'경보 없음'},{id:'heatwave',Icon:Sun,label:'폭염경보'},{id:'cold',Icon:Snowflake,label:'한파경보'},{id:'dust',Icon:Wind,label:'미세먼지 나쁨'},{id:'rain',Icon:CloudRain,label:'호우주의보'},{id:'typhoon',Icon:Wind,label:'태풍경보'},{id:'wildfire',Icon:Flame,label:'산불발생'}].map(t => (
-                    <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} onClick={() => { setActiveAlert(t.id); if (t.id==='wildfire') { setWildfireStage('prepare'); setAlertScript(tplText('wildfire_prepare', WILDFIRE_STAGES[0].text)); } else { setAlertScript(tplText(t.id, ALERT_TEMPLATES[t.id])); } }}>
+                    <button key={t.id} className={`alert-template-btn ${activeAlert===t.id?'alert-template-active':''}`} onClick={() => { alertUserTouchedRef.current = true; appliedAlertKeyRef.current = t.id; setActiveAlert(t.id); if (t.id==='wildfire') { setWildfireStage('prepare'); setAlertScript(tplText('wildfire_prepare', WILDFIRE_STAGES[0].text)); } else { setAlertScript(tplText(t.id, ALERT_TEMPLATES[t.id])); } }}>
                       <t.Icon size={21}/><span>{t.label}</span>
                     </button>
                   ))}
@@ -3760,7 +3851,7 @@ export default function App() {
                 {activeAlert !== 'none' && (
                   <div className="alert-script-edit">
                     <label className="form-label">경보 멘트 수정{activeAlert==='wildfire'?' (선택한 단계)':''}</label>
-                    <textarea className="script-textarea" value={alertScript} onChange={e => { setAlertScript(e.target.value); setAlertTplSaved(false); }} rows={activeAlert==='wildfire'?5:3}/>
+                    <textarea className="script-textarea" value={alertScript} onChange={e => { alertUserTouchedRef.current = true; setAlertScript(e.target.value); setAlertTplSaved(false); }} rows={activeAlert==='wildfire'?5:3}/>
                     <div className="var-hint">
                       사용 가능 변수: <code>{'{{지역}}'}</code> <code>{'{{보호자}}'}</code> <code>{'{{기관명}}'}</code>{activeAlert==='wildfire'&&<> <code>{'{{대피소}}'}</code></>}
                       <span style={{display:'block',marginTop:4,color:'#94a3b8'}}>
@@ -3844,10 +3935,18 @@ export default function App() {
                       })}
                     </div>
                     {!bulkRunning ? (
-                      <button className="btn-call" disabled={checked.length===0} style={{opacity:checked.length===0?0.5:1,cursor:checked.length===0?'not-allowed':'pointer'}}
-                        onClick={()=>setBulkConfirm({ count: checked.length, queue: null, isAlert: true, alertLabel: `경보 멘트 — ${(ALERT_TEMPLATES[activeAlert]!==undefined||activeAlert==='wildfire') ? activeAlert : activeAlert}${activeAlert==='wildfire' ? ` / ${wildfireStage}` : ''}` })}>
-                        선택한 {checked.length}명에게 이 경보 멘트로 발신
-                      </button>
+                      // 앱 알림 / 일반전화(070) 두 경로를 따로 고른다 — 경보는 앱 미설치 어르신에게도
+                      // 닿아야 해서 일반전화 발신이 필수다(2026-08-21).
+                      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                        <button className="btn-call" disabled={checked.length===0} style={{opacity:checked.length===0?0.5:1,cursor:checked.length===0?'not-allowed':'pointer'}}
+                          onClick={()=>setBulkConfirm({ count: checked.length, queue: null, channel: 'app', isAlert: true, alertLabel: `경보 멘트 — ${activeAlert}${activeAlert==='wildfire' ? ` / ${wildfireStage}` : ''}` })}>
+                          선택한 {checked.length}명에게 앱 알림으로 발신
+                        </button>
+                        <button className="btn-call" disabled={checked.length===0} style={{opacity:checked.length===0?0.5:1,cursor:checked.length===0?'not-allowed':'pointer'}}
+                          onClick={()=>setBulkConfirm({ count: checked.length, queue: null, channel: 'pstn', isAlert: true, alertLabel: `경보 멘트 — ${activeAlert}${activeAlert==='wildfire' ? ` / ${wildfireStage}` : ''}` })}>
+                          선택한 {checked.length}명에게 일반전화로 발신
+                        </button>
+                      </div>
                     ) : (
                       <div style={{display:'flex',alignItems:'center',gap:12}}><span style={{fontWeight:700,color:'#246BEB'}}>발신 중... ({bulkDone.length}/{bulkQueue.length})</span><button className="btn-secondary" onClick={stopBulkCall}>중지</button></div>
                     )}
@@ -3903,8 +4002,7 @@ export default function App() {
                 <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid #e2e8f0'}}>
                   <div style={{fontSize:18,fontWeight:800,color:'#0f172a',marginBottom:6}}>일반전화 발신번호</div>
                   <div style={{fontSize:15,color:'#64748b',marginBottom:10,lineHeight:1.6}}>
-                    앱이 없는 {T?.elder || '어르신'}께 일반전화(070)로 전화드릴 때 상대방 화면에 표시되는 번호입니다.<br/>
-                    <b style={{color:'#b45309'}}>통신사(KCT)에 등록된 070 번호만 실제 발신됩니다</b> — 미등록 번호를 저장하면 발신이 거부됩니다.
+                    앱이 없는 {T?.elder || '어르신'}께 일반전화(070)로 전화드릴 때 상대방 화면에 표시되는 번호입니다.
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                     <input
