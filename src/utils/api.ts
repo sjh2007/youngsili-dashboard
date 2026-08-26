@@ -1,7 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, authEnabled } from '../firebase';
 
-export const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'https://youngsili-server-production.up.railway.app';
+export const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'https://api.krafte.net';
 
 /**
  * Firebase 세션 복원을 기다린다 (앱 수명당 한 번).
