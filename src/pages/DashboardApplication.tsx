@@ -1097,6 +1097,27 @@ export default function App() {
   const uncheckAll  = () => setChecked([]);
   const applySmartFilter = f => { setSmartFilter(f); setChecked([]); };
 
+  // 2026-08-25: 경보 문구를 고르거나 고치는 즉시(발신 버튼 누르기 훨씬 전에) TTS를 미리
+  // 만들어 캐시해둔다 — Gemini TTS가 문구 길이에 따라 18~20초 걸려서, 실제 발신 시점에야
+  // 만들면 어르신이 전화 받고도 한참 무음을 듣게 된다(실사용 발견). 여기서 미리 만들어두면
+  // 담당자가 확인하고 발신 버튼을 누르기까지의 시간(보통 수십 초~수 분)을 벌 수 있다.
+  // 입력마다 쏘면 낭비이므로 800ms 동안 추가 수정이 없을 때만 요청한다(디바운스).
+  const alertPrewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (alertPrewarmTimerRef.current) clearTimeout(alertPrewarmTimerRef.current);
+    if (activeAlert === 'none' || !alertScript.trim()) return;
+    alertPrewarmTimerRef.current = setTimeout(() => {
+      const targets = (checked.length ? elders.filter(e => checked.includes(e.id)) : smartElders.slice(0, 1));
+      const texts = Array.from(new Set(targets.map(alertMsgFor).filter(Boolean)));
+      texts.forEach(text => {
+        authFetch(`${SERVER_URL}/call/alert-tts-prewarm`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+        }).catch(() => {});
+      });
+    }, 800);
+    return () => { if (alertPrewarmTimerRef.current) clearTimeout(alertPrewarmTimerRef.current); };
+  }, [activeAlert, alertScript, shelterName, fireLoc, checked]);
+
   // ── 일괄 발신 (FCM 앱 푸시) ──
   /**
    * 발신 요청 바디.
