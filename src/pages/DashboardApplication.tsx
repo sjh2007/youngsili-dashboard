@@ -14,7 +14,7 @@ import { LayoutGrid, Activity, Users, ShieldCheck, Phone, CalendarDays, MessageS
          PencilLine, FileText, BarChart3, Database, Building2, BookOpen, RotateCw,
          AlertCircle, AlertTriangle, CheckCircle2, ArrowLeft, ArrowRight, Plus,
          UserRound, UserRoundCheck, X, Search, Copy, LogOut, ChevronDown, List,
-         Sun, Snowflake, CloudRain, CloudSun, Wind, Flame, CircleCheck, Clock } from 'lucide-react';
+         Sun, Snowflake, CloudRain, CloudSun, Wind, Flame, CircleCheck, Clock, Terminal } from 'lucide-react';
 
 // REACT_APP_SERVER_URL(.env.local)로 로컬 서버 테스트 가능 — 미설정 시 운영 서버
 const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', jumin:'', caregiver:'', caregiverPhone:'', assignedTo:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', careGroup:'', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
@@ -107,6 +107,7 @@ const NAV_LUCIDE = {
   dashboard: LayoutGrid, health: Activity, elders: Users, safety: ShieldCheck,
   calls: Phone, report: BarChart3, schedule: CalendarDays, script: MessageSquare,
   casenotes: PencilLine, forms: FileText, data: Database, admin: Building2, help: BookOpen,
+  console: Terminal,
 };
 const NavIcon = ({ name }) => {
   const I = NAV_LUCIDE[name] || LayoutGrid;
@@ -198,6 +199,10 @@ export default function App() {
   const [alertsData, setAlertsData]     = useState([]);
   const [alertCount, setAlertCount]     = useState(0);
   const [healthLoading, setHealthLoading] = useState(false);
+  // 영실이 콘솔(총괄 관리자 전용) — 3개 서버 헬스체크 + 전체 기관 진행 중인 통화
+  const [consoleHealth, setConsoleHealth] = useState(null);   // {status, components:[{name,ok,latencyMs,detail}]}
+  const [consoleCalls, setConsoleCalls]   = useState([]);
+  const [consoleLoading, setConsoleLoading] = useState(false);
   // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
   const [orgs, setOrgs]           = useState([]);
@@ -588,6 +593,25 @@ export default function App() {
     }
   };
 
+  // silent=true면 로딩 표시 없이 조용히 갱신(자동 폴링용) — 총괄 관리자 전용(비-superadmin은 401)
+  const fetchConsole = async (silent = false) => {
+    if (!silent) setConsoleLoading(true);
+    try {
+      const [hRes, cRes] = await Promise.all([
+        authFetch(`${SERVER_URL}/console/health`),
+        authFetch(`${SERVER_URL}/console/calls/active`),
+      ]);
+      const hData = await hRes.json();
+      const cData = await cRes.json();
+      if (hData && Array.isArray(hData.components)) setConsoleHealth(hData);
+      if (Array.isArray(cData)) setConsoleCalls(cData);
+    } catch (err) {
+      console.error('콘솔 데이터 오류:', err);
+    } finally {
+      if (!silent) setConsoleLoading(false);
+    }
+  };
+
   // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
   // authUser 확정 후 재조회 — 특히 fetchWeather: 마운트 시 첫 호출은 토큰 복원 전(비인증)이라
@@ -610,6 +634,12 @@ export default function App() {
     if (page !== 'health') return;
     fetchHealth();
     const t = setInterval(whileVisible(() => fetchHealth(true)), 15000);   // 건강 리포트도 15초 자동 갱신(알림과 동일)
+    return () => clearInterval(t);
+  }, [page]); // eslint-disable-line
+  useEffect(() => {
+    if (page !== 'console') return;
+    fetchConsole();
+    const t = setInterval(whileVisible(() => fetchConsole(true)), 15000);   // 운영 모니터링도 15초 자동 갱신
     return () => clearInterval(t);
   }, [page]); // eslint-disable-line
   // authUser 의존 추가: 새로고침으로 #report 직행 시 로그인 복원 전 무토큰 401로 통계가 0건 고정되던 버그
@@ -2819,6 +2849,12 @@ export default function App() {
                 {id:'data', icon:'data', label:'공공데이터 현황'},
               ]},
             ];
+            // 영실이 콘솔 — 기관 무관, 서비스 전체를 총괄하는 계정(SUPERADMIN_EMAILS)에게만 노출
+            if (isSuper) {
+              groups.push({ label:'영실이 콘솔', items:[
+                {id:'console', icon:'console', label:'시스템 모니터링'},
+              ]});
+            }
             // 관리·도움말은 하단 분리 영역(레퍼런스의 휴지통 자리)으로 뺀다
             const bottomItems = [
               ...(isStaffUp ? [{id:'admin', icon:'admin', label: isSuper?'기관 관리':'구성원 관리'}] : []),
@@ -2899,6 +2935,7 @@ export default function App() {
               :page==='report'?'리포트 / 통계':page==='data'?'공공데이터 현황':page==='health'?'건강 상태'
               :page==='casenotes'?'상담·방문 일지':page==='forms'?'보고서·서식'
               :page==='admin'?(isSuper?'기관 관리 (운영자)':'구성원 관리'):page==='help'?'도움말 보기'
+              :page==='console'?'영실이 콘솔 — 시스템 모니터링'
               :page==='detail'?`${T.elder} 상세 정보`:page==='register'?(editMode?`${T.elder} 정보 수정`:`${T.elder} 신규 등록`):'';
             return (
               <div>
@@ -4874,6 +4911,94 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* 영실이 콘솔(총괄 관리자 전용) — GCP 콘솔 참고: 좌측 카드형 상태 요약 + 초록/빨강 인디케이터 +
+              깔끔한 데이터 테이블. 기관 대시보드와 완전히 별개 화면이라 여기서 뭘 해도 기관 데이터엔 영향 없다. */}
+          {page==='console' && (
+            <div className="fade-in">
+              <section className="section" style={{marginBottom:20}}>
+                <div className="section-title" style={{marginBottom:14}}>
+                  시스템 상태
+                  {consoleHealth && (
+                    <span style={{
+                      marginLeft:10, fontSize:13, fontWeight:600, padding:'2px 10px', borderRadius:12,
+                      background: consoleHealth.status==='ok' ? '#e6f4ea' : '#fce8e6',
+                      color: consoleHealth.status==='ok' ? '#1e8e3e' : '#c5221f',
+                    }}>{consoleHealth.status==='ok' ? '정상' : '이상 감지'}</span>
+                  )}
+                </div>
+                <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
+                  {(consoleHealth?.components || []).map((c) => (
+                    <div key={c.name} style={{
+                      border:'1px solid #dadce0', borderRadius:8, padding:'14px 16px',
+                      background:'#fff', display:'flex', flexDirection:'column', gap:6,
+                    }}>
+                      <div style={{display:'flex', alignItems:'center', gap:8}}>
+                        <span style={{
+                          width:9, height:9, borderRadius:'50%', flexShrink:0,
+                          background: c.ok ? '#1e8e3e' : '#d93025',
+                        }}/>
+                        <span style={{fontWeight:600, fontSize:15, color:'#202124'}}>{c.name}</span>
+                      </div>
+                      <div style={{fontSize:13, color: c.ok ? '#5f6368' : '#c5221f'}}>
+                        {c.ok ? `정상 응답 (${c.latencyMs}ms)` : (c.detail || '응답 없음')}
+                      </div>
+                    </div>
+                  ))}
+                  {!consoleHealth && !consoleLoading && (
+                    <div style={{color:'#5f6368', fontSize:14}}>데이터 없음</div>
+                  )}
+                </div>
+              </section>
+
+              <section className="section">
+                <div className="script-editor-header" style={{marginBottom:10}}>
+                  <div className="section-title" style={{marginBottom:0}}>
+                    지금 진행 중인 통화 ({consoleCalls.length}건, 기관 전체)
+                  </div>
+                  <button className={`btn-download ${consoleLoading?'btn-calling':''}`} onClick={()=>fetchConsole()} disabled={consoleLoading}>
+                    {consoleLoading ? '불러오는 중...' : '새로고침'}
+                  </button>
+                </div>
+                {consoleCalls.length === 0 ? (
+                  <div style={{color:'#5f6368', fontSize:14, padding:'20px 4px'}}>진행 중인 통화가 없습니다</div>
+                ) : (
+                  <div style={{overflowX:'auto'}}>
+                    <table style={{width:'100%', borderCollapse:'collapse', fontSize:14}}>
+                      <thead>
+                        <tr style={{textAlign:'left', color:'#5f6368', borderBottom:'1px solid #dadce0'}}>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>어르신</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>기관</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>채널</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>상태</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>경과 시간</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>통화 ID</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {consoleCalls.map((c) => (
+                          <tr key={c.callId} style={{borderBottom:'1px solid #f1f3f4'}}>
+                            <td style={{padding:'10px'}}>{c.name || '(이름 없음)'}</td>
+                            <td style={{padding:'10px', color:'#5f6368'}}>{c.orgId}</td>
+                            <td style={{padding:'10px'}}>{c.channel === 'pstn' ? '070' : '앱'}</td>
+                            <td style={{padding:'10px'}}>
+                              <span style={{
+                                fontSize:12, fontWeight:600, padding:'2px 8px', borderRadius:10,
+                                background: c.status==='answered' ? '#e6f4ea' : '#fff8e1',
+                                color: c.status==='answered' ? '#1e8e3e' : '#754d00',
+                              }}>{c.status==='answered' ? '통화 중' : '발신 중'}</span>
+                            </td>
+                            <td style={{padding:'10px'}}>{c.elapsedSec}초</td>
+                            <td style={{padding:'10px', fontFamily:'monospace', fontSize:12, color:'#5f6368'}}>{c.callId}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
             </div>
           )}
 
