@@ -203,6 +203,12 @@ export default function App() {
   const [consoleHealth, setConsoleHealth] = useState(null);   // {status, components:[{name,ok,latencyMs,detail}]}
   const [consoleCalls, setConsoleCalls]   = useState([]);
   const [consoleLoading, setConsoleLoading] = useState(false);
+  // 통화 이력(기관 무관, 최근 200건) — 별도 로딩/필터 상태(진행 중인 통화 폴링과 분리)
+  const [consoleHistory, setConsoleHistory] = useState([]);
+  const [consoleHistoryLoading, setConsoleHistoryLoading] = useState(false);
+  const [consoleHistoryOrg, setConsoleHistoryOrg]   = useState('');
+  const [consoleHistoryFrom, setConsoleHistoryFrom] = useState('');
+  const [consoleHistoryTo, setConsoleHistoryTo]     = useState('');
   // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
   const [orgs, setOrgs]           = useState([]);
@@ -612,6 +618,24 @@ export default function App() {
     }
   };
 
+  // 통화 이력 — 필터(기관/기간) 변경 또는 "조회" 클릭 시 수동 호출(진행 중 통화처럼 자동 폴링하지 않음)
+  const fetchConsoleHistory = async () => {
+    setConsoleHistoryLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (consoleHistoryOrg) params.set('org', consoleHistoryOrg);
+      if (consoleHistoryFrom) params.set('from', consoleHistoryFrom);
+      if (consoleHistoryTo) params.set('to', consoleHistoryTo);
+      const r = await authFetch(`${SERVER_URL}/console/calls/history?${params.toString()}`);
+      const d = await r.json();
+      setConsoleHistory(Array.isArray(d?.calls) ? d.calls : []);
+    } catch (err) {
+      console.error('콘솔 통화 이력 오류:', err);
+    } finally {
+      setConsoleHistoryLoading(false);
+    }
+  };
+
   // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
   // authUser 확정 후 재조회 — 특히 fetchWeather: 마운트 시 첫 호출은 토큰 복원 전(비인증)이라
@@ -639,6 +663,8 @@ export default function App() {
   useEffect(() => {
     if (page !== 'console') return;
     fetchConsole();
+    fetchConsoleHistory();
+    if (orgs.length === 0) fetchOrgs();   // 통화 이력 기관 필터 드롭다운용(기관 관리 화면과 공유)
     const t = setInterval(whileVisible(() => fetchConsole(true)), 15000);   // 운영 모니터링도 15초 자동 갱신
     return () => clearInterval(t);
   }, [page]); // eslint-disable-line
@@ -4994,6 +5020,67 @@ export default function App() {
                             <td style={{padding:'10px', fontFamily:'monospace', fontSize:12, color:'#5f6368'}}>{c.callId}</td>
                           </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              <section className="section" style={{marginTop:20}}>
+                <div className="script-editor-header" style={{marginBottom:10}}>
+                  <div className="section-title" style={{marginBottom:0}}>
+                    통화 이력 ({consoleHistory.length}건, 기관 전체)
+                  </div>
+                  <button className={`btn-download ${consoleHistoryLoading?'btn-calling':''}`} onClick={fetchConsoleHistory} disabled={consoleHistoryLoading}>
+                    {consoleHistoryLoading ? '조회 중...' : '조회'}
+                  </button>
+                </div>
+                <div style={{display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', marginBottom:14}}>
+                  <select className="form-input" style={{width:180, margin:0}} value={consoleHistoryOrg} onChange={e=>setConsoleHistoryOrg(e.target.value)}>
+                    <option value="">기관 전체</option>
+                    {orgs.map(o => <option key={o.orgId} value={o.orgId}>{o.name}</option>)}
+                  </select>
+                  <input type="date" className="form-input" style={{width:160, margin:0}} value={consoleHistoryFrom} onChange={e=>setConsoleHistoryFrom(e.target.value)} />
+                  <span style={{color:'#5f6368'}}>~</span>
+                  <input type="date" className="form-input" style={{width:160, margin:0}} value={consoleHistoryTo} onChange={e=>setConsoleHistoryTo(e.target.value)} />
+                  <span style={{fontSize:12, color:'#5f6368'}}>기본: 최근 30일 · 최근 200건</span>
+                </div>
+                {consoleHistory.length === 0 ? (
+                  <div style={{color:'#5f6368', fontSize:14, padding:'20px 4px'}}>
+                    {consoleHistoryLoading ? '불러오는 중...' : '조회된 통화 이력이 없습니다'}
+                  </div>
+                ) : (
+                  <div style={{overflowX:'auto'}}>
+                    <table style={{width:'100%', borderCollapse:'collapse', fontSize:14}}>
+                      <thead>
+                        <tr style={{textAlign:'left', color:'#5f6368', borderBottom:'1px solid #dadce0'}}>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>어르신</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>전화번호</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>기관</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>채널</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>상태</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>시간</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>통화시간</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {consoleHistory.map((c) => {
+                          const R = RISK_CONFIG[c.riskLevel] || {};
+                          const org = orgs.find(o => o.orgId === c.orgId);
+                          return (
+                            <tr key={c.id} style={{borderBottom:'1px solid #f1f3f4'}}>
+                              <td style={{padding:'10px'}}>{c.elderName || '(이름 없음)'}</td>
+                              <td style={{padding:'10px', color:'#5f6368'}}>{c.phone}</td>
+                              <td style={{padding:'10px', color:'#5f6368'}}>{org?.name || c.orgId || '-'}</td>
+                              <td style={{padding:'10px'}}>{c.channel === 'pstn' ? '070' : '앱'}</td>
+                              <td style={{padding:'10px'}}>
+                                <span className={`result-pill ${c.riskLevel==='critical'?'pill-danger':c.riskLevel==='urgent'?'pill-warning':'pill-normal'}`}>{R.label || '정상'}</span>
+                              </td>
+                              <td style={{padding:'10px', color:'#5f6368'}}>{c.at ? new Date(c.at).toLocaleString('ko-KR') : (c.date || '-')}</td>
+                              <td style={{padding:'10px'}}>{c.durationSec ? `${c.durationSec}초` : '-'}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
