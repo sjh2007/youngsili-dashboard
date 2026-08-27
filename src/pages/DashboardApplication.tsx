@@ -2309,10 +2309,14 @@ export default function App() {
     if(colIdx.name===undefined||colIdx.phone===undefined){ notify('양식에 "이름"과 "전화번호" 열이 있어야 합니다. CSV 양식을 받아 사용해 주세요.'); return; }
     const existPhones = new Set(elders.map(e=>String(e.phone||'').replace(/\D/g,'')));
     const seen = new Set();
+    // 엑셀에서 전화번호 열이 숫자로 인식되면 앞자리 0이 사라진다(01012345678→1012345678) —
+    // 대시보드 미리보기는 통과해도 서버(isValidMobile, 010은 11자리 고정)가 거부해서
+    // "이유 모를 등록 실패"로 보이던 문제(2026-08-27 실사용 지적). 010/011~019 패턴이면 복원한다.
+    const restoreLeadingZero = (d) => /^1[016789]\d{6,8}$/.test(d) ? '0'+d : d;
     const parsed = rows.slice(1).map((r,ri)=>{
       const get=k=>colIdx[k]!==undefined?String(r[colIdx[k]]||'').trim():'';
-      const name=get('name'); const phone=get('phone').replace(/\D/g,''); const gender=/남/.test(get('gender'))?'male':'female';
-      const rec={ name, phone, age:get('age').replace(/\D/g,''), gender, title:get('title')||(gender==='male'?'할아버지':'할머니'), region:get('region'), caregiver:get('caregiver'), callTime:/^\d{1,2}:\d{2}$/.test(get('callTime'))?get('callTime'):'09:00', guardian:get('guardian'), guardianPhone:get('guardianPhone').replace(/\D/g,''), disease:get('disease'), medicine:get('medicine'), careGroup:/중점/.test(get('careGroup'))?'intensive':/일반/.test(get('careGroup'))?'general':'' };
+      const name=get('name'); const phone=restoreLeadingZero(get('phone').replace(/\D/g,'')); const gender=/남/.test(get('gender'))?'male':'female';
+      const rec={ name, phone, age:get('age').replace(/\D/g,''), gender, title:get('title')||(gender==='male'?'할아버지':'할머니'), region:get('region'), caregiver:get('caregiver'), callTime:/^\d{1,2}:\d{2}$/.test(get('callTime'))?get('callTime'):'09:00', guardian:get('guardian'), guardianPhone:restoreLeadingZero(get('guardianPhone').replace(/\D/g,'')), disease:get('disease'), medicine:get('medicine'), careGroup:/중점/.test(get('careGroup'))?'intensive':/일반/.test(get('careGroup'))?'general':'' };
       let st='ok', why='';
       if(!name){st='error';why='이름 없음';}
       else if(!phone||phone.length<9){st='error';why='전화번호 오류';}
@@ -2326,13 +2330,21 @@ export default function App() {
   const confirmCsvImport = async () => {
     const rows = csvImport.rows.filter(r=>r._status==='ok'||(r._status==='dup'&&csvOverwrite));
     if(rows.length===0){ notify('등록할 유효한 행이 없습니다.'); return; }
-    setCsvSaving(true); let ok=0, fail=0;
+    setCsvSaving(true); let ok=0, fail=0; const failReasons=[];
     for(const r of rows){
       const saved={...EMPTY_FORM, name:r.name, phone:r.phone, age:r.age, gender:r.gender, title:r.title, region:r.region, caregiver:r.caregiver, callTime:r.callTime, guardian:r.guardian, guardianPhone:r.guardianPhone, disease:r.disease, medicine:r.medicine, careGroup:r.careGroup||'', ...(CARE_GROUPS[r.careGroup]?{callCycle:'custom',callDays:[...CARE_GROUPS[r.careGroup].days]}:{}), id:Date.now()+Math.floor(Math.random()*100000), status:'normal', lastCall:'아직 없음', callActive:true };
-      try{ const res=await authFetch(`${SERVER_URL}/elders/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(saved)}); const d=await res.json(); (d&&d.success)?ok++:fail++; }catch{ fail++; }
+      // 실패 사유를 그냥 삼키면(2026-08-27 이전) "몇 명 실패"만 보이고 왜인지 알 길이 없었다 —
+      // 서버 에러 메시지를 행 번호와 함께 모아서 보여준다(실사용 지적: 원인 불명 CSV 등록 실패).
+      try{
+        const res=await authFetch(`${SERVER_URL}/elders/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(saved)});
+        const d=await res.json();
+        if(d&&d.success) ok++;
+        else { fail++; failReasons.push(`${r._row}행(${r.name}): ${d?.error?.message||d?.message||'등록 실패'}`); }
+      }catch(e){ fail++; failReasons.push(`${r._row}행(${r.name}): ${e?.message||'네트워크 오류'}`); }
     }
     setCsvSaving(false); setCsvImport(null); await fetchElders();
-    notify(`등록 완료: 성공 ${ok}명${fail?` · 실패 ${fail}명`:''}`, fail ? 'info' : 'success');
+    if(fail && failReasons.length) console.warn('[CSV 일괄등록] 실패 상세:', failReasons);
+    notify(`등록 완료: 성공 ${ok}명${fail?` · 실패 ${fail}명 (${failReasons.slice(0,3).join('; ')}${failReasons.length>3?' 등':''})`:''}`, fail ? 'info' : 'success');
   };
   const inp = field => ({ value:form[field]??'', onChange:e=>setForm(f=>({...f,[field]:e.target.value})), className:`form-input ${formErrors[field]?'input-error':''}` });
 
