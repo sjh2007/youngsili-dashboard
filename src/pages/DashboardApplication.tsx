@@ -4007,8 +4007,11 @@ export default function App() {
                       </div>
                     </div>
                     <div className="alert-region-filters">
-                      {[...new Set(elders.map(e=>e.region))].sort().map(r => {
-                        const inR = elders.filter(e=>e.region===r);
+                      {/* 2026-08-27: 어르신 region이 비어있으면(총괄 계정은 여러 기관 전체를 보므로
+                          이 케이스를 마주칠 확률이 높다) undefined.replace()에서 그대로 죽어 화면이
+                          빈 화면이 되던 버그 수정(실사용 지적) — 빈 지역은 별도 표시로 묶는다. */}
+                      {[...new Set(elders.map(e=>e.region||'(지역 미설정)'))].sort().map(r => {
+                        const inR = elders.filter(e=>(e.region||'(지역 미설정)')===r);
                         const allOn = inR.length>0 && inR.every(e=>checked.includes(e.id));
                         const someOn = inR.some(e=>checked.includes(e.id));
                         return (
