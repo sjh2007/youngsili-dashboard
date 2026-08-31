@@ -793,6 +793,45 @@ body {
 
 /* ── 전화 관리 추가 스타일 ── */
 
+/* 토스트 — notify() 공용. 화면을 가리지 않고 하단에 잠시 떴다 자동으로 사라진다 */
+.toast-viewport {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1e293b;
+  color: #f8fafc;
+  padding: 14px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 12px 32px rgba(15,23,42,0.28);
+  max-width: min(420px, 86vw);
+  cursor: pointer;
+  animation: toastIn 0.22s ease;
+}
+.toast--hiding { animation: toastOut 0.18s ease forwards; }
+.toast--success svg { color: #4ade80; flex-shrink: 0; }
+.toast--error svg { color: #f87171; flex-shrink: 0; }
+.toast--info svg { color: #60a5fa; flex-shrink: 0; }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(10px); }
+}
+
 /* 모달 */
 .modal-overlay {
   position: fixed; inset: 0;

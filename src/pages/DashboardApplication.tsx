@@ -183,9 +183,22 @@ export default function App() {
   const [alertIncludeCare, setAlertIncludeCare] = useState(false);
   // 사이드바: 메뉴 검색 + 그룹 접기(접힘 상태는 브라우저에 기억)
   const [navQuery, setNavQuery] = useState('');
-  // 알림: 브라우저 alert(상단 고정) 대신 화면 중앙 Dialog로 표시
-  const [notice, setNotice] = useState<string|null>(null);
-  const notify = (message: unknown, _tone: 'info'|'success'|'error' = 'error') => setNotice(String(message));
+  // 알림: 화면을 가리는 중앙 Dialog 대신 하단 토스트(자동 소멸)로 표시
+  const [toast, setToast] = useState<{ message: string; tone: 'info'|'success'|'error'; hiding?: boolean } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>|null>(null);
+  const toastHideTimer = useRef<ReturnType<typeof setTimeout>|null>(null);
+  const dismissToast = () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    if (toastHideTimer.current) clearTimeout(toastHideTimer.current);
+    setToast(t => t ? { ...t, hiding: true } : null);
+    toastHideTimer.current = setTimeout(() => setToast(null), 200);
+  };
+  const notify = (message: unknown, tone: 'info'|'success'|'error' = 'error') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    if (toastHideTimer.current) clearTimeout(toastHideTimer.current);
+    setToast({ message: String(message), tone });
+    toastTimer.current = setTimeout(dismissToast, 3200);
+  };
   const [navFold, setNavFold] = useState<any>(() => { try { return JSON.parse(localStorage.getItem('navFold') || '{}'); } catch { return {}; } });
   const toggleNavGroup = (label: string) => setNavFold(prev => {
     const next = { ...prev, [label]: !prev[label] };
@@ -2628,10 +2641,15 @@ export default function App() {
   return (
     <div className="app">
       {/* 일괄 발신 확인 — 실제 전화가 나가는 되돌릴 수 없는 행위. 대상 수·멘트 종류를 다시 보여준다. */}
-      {/* 중앙 알림 모달 — notify() 공용 */}
-      {notice && <Dialog open alert className="modal--confirm" title="알림" description={notice} onClose={()=>setNotice(null)} actions={
-        <button className="btn-primary" onClick={()=>setNotice(null)}>확인</button>
-      } />}
+      {/* 하단 토스트 — notify() 공용. 화면을 가리지 않고 잠시 떴다 자동으로 사라진다 */}
+      {toast && (
+        <div className="toast-viewport">
+          <div className={`toast toast--${toast.tone} ${toast.hiding ? 'toast--hiding' : ''}`} role="status" onClick={dismissToast}>
+            {toast.tone === 'success' ? <CheckCircle2 size={18}/> : toast.tone === 'info' ? <AlertCircle size={18}/> : <AlertTriangle size={18}/>}
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
       {/* 결제 접수 완료 — 실제 크레딧 반영은 서버 웹훅이 비동기로 처리하므로 "완료"가 아니라
           "접수" 상태를 보여준다(과장 방지). 결제 실패/네트워크 오류는 여전히 공용 notify()로. */}
       {paymentSuccess !== null && (
