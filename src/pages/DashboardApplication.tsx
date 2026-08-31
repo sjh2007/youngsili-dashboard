@@ -557,7 +557,10 @@ export default function App() {
         orderName: topup.orderName,
         totalAmount: topup.amount,
         currency: 'KRW',
-        payMethod: 'CARD',
+        // 2026-08-31 실측: 연결된 채널이 카드결제가 아니라 간편결제(카카오페이) 전용 채널이라
+        // payMethod:'CARD'는 prepare 단계에서 400(payMethod violates EQUALS("EASY_PAY"))이 났다.
+        // 채널 구성이 바뀌면(카드 채널 추가 시) 이 값도 같이 바꿔야 한다.
+        payMethod: 'EASY_PAY',
         // 일부 PG는 customer.fullName(또는 email)이 없으면 prepare 단계에서 400을 낸다.
         customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객' },
       });
