@@ -3,7 +3,7 @@ import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from '../components/help/HelpGuide';
 import AuthScreen from '../components/auth/AuthScreen';
-import { ElderListSchema, MeSchema, BillingBalanceSchema, TopupResponseSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
+import { ElderListSchema, MeSchema, BillingBalanceSchema, TopupResponseSchema, SubscribeRegisterResponseSchema, SubscriptionStatusSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
 import { CallTranscript, GroupHeader, PageErrorBoundary } from '../components/common';
 import { Button, Dialog, EmptyState, PageIntro, StatusBadge, Toolbar } from '../components/ui';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -259,6 +259,9 @@ export default function App() {
   const [consoleAuditLoading, setConsoleAuditLoading] = useState(false);
   const [consoleAuditActor, setConsoleAuditActor]     = useState('');
   const [orgSuspending, setOrgSuspending] = useState('');   // 정지/재개 처리 중인 orgId(버튼 중복 클릭 방지)
+  // 정기결제 현황(전체 기관, 총괄 관리자 전용) — 정액제 자동결제(빌링키) 등록 여부·다음 청구일·최근 오류
+  const [consoleSubs, setConsoleSubs] = useState([]);
+  const [consoleSubsLoading, setConsoleSubsLoading] = useState(false);
   // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
   const [billing, setBilling]     = useState(null);   // {creditBalance: number|null} — null(미조회) 이면 차단 화면 안 띄움
@@ -267,6 +270,8 @@ export default function App() {
   const [topupBusy, setTopupBusy] = useState(false); // 포트원 결제 요청 처리 중(버튼 중복 클릭 방지)
   const [paymentSuccess, setPaymentSuccess] = useState(null); // 결제 접수 완료 모달 {amount, desc}(null이면 모달 숨김)
   const [subscribeBusy, setSubscribeBusy] = useState(null); // 결제 요청 처리 중인 planKey(중복 클릭 방지)
+  const [subStatus, setSubStatus] = useState(null); // GET /billing/subscription — {plan, autoRenew, nextChargeAt, lastChargeError, elderCount, monthlyAmount}
+  const [subCancelBusy, setSubCancelBusy] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
@@ -590,13 +595,26 @@ export default function App() {
       setTopupBusy(false);
     }
   };
-  // 정액제 결제(포트원) — 금액은 서버가 (단가 × 등록 어르신 수)로 계산해 응답으로 내려준다.
+  // 정액제 자동결제(빌링키) 현재 상태 — 다음 청구일·최근 오류 등. 업그레이드 모달을 열 때/결제 확정 후 갱신한다.
+  const fetchSubscriptionStatus = async () => {
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/subscription`);
+      if (r.ok) setSubStatus(parseOr(SubscriptionStatusSchema, await r.json(), null));
+    } catch {}
+  };
+  // 정액제 자동결제 등록 — 1단계(빌링키 발급 요청) → PortOne.js `requestIssueBillingKey()`로 결제수단
+  // 등록 → 2단계(서버가 빌링키 재검증 후 첫 결제를 그 자리에서 승인, 다음 달부터는 서버 크론이 자동 재청구).
   // 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동 폴백한다.
   const startSubscription = async (planKey, planName) => {
     if (subscribeBusy) return;
     setSubscribeBusy(planKey);
     try {
-      const r = await authFetch(`${SERVER_URL}/billing/subscribe`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ planKey }) });
+      // 다른 플랜으로 자동결제 중이었다면 먼저 해지 — 안 그러면 두 플랜이 동시에 자동 청구된다.
+      if (subStatus?.autoRenew && subStatus.plan !== planKey) {
+        await authFetch(`${SERVER_URL}/billing/subscribe/cancel`, { method: 'POST' }).catch(() => {});
+      }
+
+      const r = await authFetch(`${SERVER_URL}/billing/subscribe/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ planKey }) });
       const d = await r.json().catch(()=>({}));
       if (r.status === 501) {
         setShowUpgradeModal(false);
@@ -604,29 +622,52 @@ export default function App() {
         return;
       }
       if (!r.ok) { notify(errMsg(d, '결제 요청 실패')); return; }
-      const sub = parseOr(TopupResponseSchema, d, null);
-      if (!sub) { notify('결제 요청 응답을 처리할 수 없습니다'); return; }
+      const reg = parseOr(SubscribeRegisterResponseSchema, d, null);
+      if (!reg) { notify('결제 요청 응답을 처리할 수 없습니다'); return; }
 
-      const { requestPayment } = await import('@portone/browser-sdk/v2');
-      const response = await requestPayment({
-        storeId: sub.storeId,
-        channelKey: sub.channelKey,
-        paymentId: sub.paymentId,
-        orderName: sub.orderName,
-        totalAmount: sub.amount,
-        currency: 'KRW',
-        payMethod: 'EASY_PAY',
+      const { requestIssueBillingKey } = await import('@portone/browser-sdk/v2');
+      const response = await requestIssueBillingKey({
+        storeId: reg.storeId,
+        channelKey: reg.channelKey,
+        billingKeyMethod: 'EASY_PAY',
+        issueId: reg.issueId,
+        issueName: reg.issueName,
         customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객' },
       });
-      if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
+      if (response?.code !== undefined) { notify(`자동결제 등록 실패: ${response.message || response.code}`); return; }
+
+      const confirmRes = await authFetch(`${SERVER_URL}/billing/subscribe/confirm`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ issueId: reg.issueId, billingKey: response.billingKey }),
+      });
+      const confirmData = await confirmRes.json().catch(()=>({}));
+      if (!confirmRes.ok) { notify(errMsg(confirmData, '결제 승인 실패')); return; }
 
       setShowUpgradeModal(false);
-      setPaymentSuccess({ amount: sub.amount, desc: `"${planName}" 플랜 결제 요청이 접수됐습니다.` });
-      [3000, 7000, 15000].forEach(ms => setTimeout(fetchBillingBalance, ms));
+      setPaymentSuccess({ amount: confirmData.amount, desc: `"${planName}" 플랜 자동결제가 등록되고 첫 결제가 완료됐습니다. 다음 달부터 자동으로 청구됩니다.` });
+      fetchMe();
+      fetchSubscriptionStatus();
     } catch {
       notify('네트워크 오류 — 결제 요청 실패');
     } finally {
       setSubscribeBusy(null);
+    }
+  };
+  // 정액제 자동결제 해지 — 다음 달부터 청구되지 않는다(이미 낸 이번 달 요금은 환불되지 않음)
+  const cancelSubscription = async () => {
+    if (subCancelBusy) return;
+    if (!window.confirm('자동결제를 해지할까요? 다음 달부터 청구되지 않습니다.')) return;
+    setSubCancelBusy(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/subscribe/cancel`, { method: 'POST' });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { notify(errMsg(d, '해지 실패')); return; }
+      notify('자동결제가 해지됐습니다.', 'success');
+      fetchSubscriptionStatus();
+    } catch {
+      notify('네트워크 오류 — 해지 실패');
+    } finally {
+      setSubCancelBusy(false);
     }
   };
   // 기관 주소 변경 (R5: 저장 즉시 관할·기상 데이터 재생성 — 재로그인 불필요)
@@ -832,6 +873,19 @@ export default function App() {
     }
   };
 
+  // 정기결제 현황(전체 기관, 총괄 관리자 전용) — 정액제 자동결제(빌링키) 등록 여부·다음 청구일·최근 오류
+  const fetchConsoleSubscriptions = async () => {
+    setConsoleSubsLoading(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/subscriptions`);
+      const d = await r.json();
+      setConsoleSubs(Array.isArray(d?.orgs) ? d.orgs : []);
+    } catch (err) {
+      console.error('콘솔 정기결제 현황 오류:', err);
+    } finally {
+      setConsoleSubsLoading(false);
+    }
+  };
   // 마운트 시 + 어르신/대시보드 진입 시 서버에서 어르신 목록 로드
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
   // authUser 확정 후 재조회 — 특히 fetchWeather: 마운트 시 첫 호출은 토큰 복원 전(비인증)이라
@@ -864,6 +918,7 @@ export default function App() {
     const t = setInterval(whileVisible(() => fetchConsole(true)), 15000);   // 운영 모니터링도 15초 자동 갱신
     return () => clearInterval(t);
   }, [page]); // eslint-disable-line
+  useEffect(() => { if (page === 'consoleSubscriptions') fetchConsoleSubscriptions(); }, [page]); // eslint-disable-line
   // authUser 의존 추가: 새로고침으로 #report 직행 시 로그인 복원 전 무토큰 401로 통계가 0건 고정되던 버그
   // (elders 등은 로그인 시 재로드되는데 stats만 빠져 있었음 — 로그인 복원되면 자동 재조회)
   useEffect(() => { if (page === 'report') fetchStats(); }, [page, statsRange, statsFrom, statsTo, authUser]); // eslint-disable-line
@@ -2724,9 +2779,24 @@ export default function App() {
               <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
                 예산을 매월 고정해야 하는 기관을 위한 인·월 정액 요금제입니다(앱 설치 방식 기준, VAT 별도).
               </p>
+              {subStatus?.autoRenew && (
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:12,padding:'12px 16px',marginBottom:16,flexWrap:'wrap'}}>
+                  <div style={{fontSize:14,color:'#1e3a6e'}}>
+                    <b>{UPGRADE_PLANS.find(p=>p.key===subStatus.plan)?.name || subStatus.plan}</b> 플랜 자동결제 중
+                    {subStatus.nextChargeAt && <> · 다음 청구일 {new Date(subStatus.nextChargeAt).toLocaleDateString('ko-KR')}</>}
+                    {subStatus.monthlyAmount != null && <> · {subStatus.monthlyAmount.toLocaleString()}원/월</>}
+                    {subStatus.lastChargeError && <div style={{color:'#c5221f',marginTop:4}}>최근 청구 실패: {subStatus.lastChargeError}</div>}
+                  </div>
+                  <button className="btn-secondary" style={{fontSize:13,padding:'6px 14px',color:'#c5221f',flexShrink:0}} disabled={subCancelBusy} onClick={cancelSubscription}>
+                    {subCancelBusy ? '처리 중...' : '자동결제 해지'}
+                  </button>
+                </div>
+              )}
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(190px, 1fr))',gap:14}}>
-                {UPGRADE_PLANS.map(p=>(
-                  <div key={p.key} style={{border:p.recommended?'2px solid #246BEB':'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:12}}>
+                {UPGRADE_PLANS.map(p=>{
+                  const isCurrent = subStatus?.autoRenew && subStatus.plan === p.key;
+                  return (
+                  <div key={p.key} style={{border:isCurrent?'2px solid #1e8e3e':p.recommended?'2px solid #246BEB':'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:12}}>
                     <div style={{fontWeight:800,fontSize:16,color:'#0f172a'}}>{p.name}</div>
                     <div><span style={{fontWeight:900,fontSize:22,color:'#0f172a'}}>{p.price}</span><span style={{fontSize:13,color:'#94a3b8',marginLeft:4}}>/{p.unit}</span></div>
                     <ul style={{margin:0,padding:0,listStyle:'none',display:'flex',flexDirection:'column',gap:6,flex:1}}>
@@ -2736,17 +2806,22 @@ export default function App() {
                         </li>
                       ))}
                     </ul>
-                    <button
-                      className="btn-primary"
-                      style={{width:'100%'}}
-                      disabled={subscribeBusy === p.key}
-                      onClick={()=> p.key === 'trial'
-                        ? (()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); })()
-                        : startSubscription(p.key, p.name)
-                      }
-                    >{subscribeBusy === p.key ? '처리 중...' : '신청'}</button>
+                    {isCurrent ? (
+                      <div style={{width:'100%',textAlign:'center',fontSize:13,fontWeight:700,color:'#1e8e3e',background:'#e6f4ea',borderRadius:10,padding:'9px 0'}}>자동결제 중</div>
+                    ) : (
+                      <button
+                        className="btn-primary"
+                        style={{width:'100%'}}
+                        disabled={subscribeBusy === p.key}
+                        onClick={()=> p.key === 'trial'
+                          ? (()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); })()
+                          : startSubscription(p.key, p.name)
+                        }
+                      >{subscribeBusy === p.key ? '처리 중...' : '신청'}</button>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
               <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정액제 세부 조건은 담당 매니저에게 문의해 주세요.</p>
             </>)}
@@ -3216,6 +3291,7 @@ export default function App() {
             if (isSuper) {
               groups.push({ label:'영실이 콘솔', items:[
                 {id:'console', icon:'console', label:'시스템 모니터링'},
+                {id:'consoleSubscriptions', icon:'console', label:'정기결제 현황'},
               ]});
             }
             // 관리·도움말은 하단 분리 영역(레퍼런스의 휴지통 자리)으로 뺀다
@@ -3292,7 +3368,7 @@ export default function App() {
             <button
               className="sidebar-org-code sidebar-credit-charge"
               style={{width:'100%', display:'flex', alignItems:'center', justifyContent:'center', textAlign:'center', fontWeight:700, color:'#246BEB'}}
-              onClick={()=>setShowUpgradeModal(true)}
+              onClick={()=>{ setShowUpgradeModal(true); fetchSubscriptionStatus(); }}
             >업그레이드</button>
           )}
           {authEnabled&&authUser&&<button className="sidebar-logout" onClick={doLogout}><LogOut size={15}/> 로그아웃</button>}
@@ -3319,6 +3395,7 @@ export default function App() {
               :page==='casenotes'?'상담·방문 일지':page==='forms'?'보고서·서식'
               :page==='admin'?(isSuper?'기관 관리 (운영자)':'구성원 관리'):page==='help'?'도움말 보기'
               :page==='console'?'영실이 콘솔 — 시스템 모니터링'
+              :page==='consoleSubscriptions'?'영실이 콘솔 — 정기결제 현황'
               :page==='detail'?`${T.elder} 상세 정보`:page==='register'?(editMode?`${T.elder} 정보 수정`:`${T.elder} 신규 등록`):'';
             return (
               <div>
@@ -5609,6 +5686,62 @@ export default function App() {
                             <td style={{padding:'10px'}}>{l.actorEmail || '-'}</td>
                             <td style={{padding:'10px', fontFamily:'monospace', fontSize:12}}>{l.action}</td>
                             <td style={{padding:'10px', color:'#5f6368', fontSize:12}}>{l.detail ? JSON.stringify(l.detail) : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {page==='consoleSubscriptions' && (
+            <div className="fade-in">
+              <section className="section">
+                <div className="script-editor-header" style={{marginBottom:10}}>
+                  <div className="section-title" style={{marginBottom:0}}>
+                    정기결제 현황 ({consoleSubs.length}개 기관)
+                    <span style={{marginLeft:10, fontSize:12, fontWeight:500, color:'#94a3b8'}}>정액제 자동결제(포트원 빌링키) 등록 여부·다음 청구일 — 조회 전용</span>
+                  </div>
+                  <button className={`btn-download ${consoleSubsLoading?'btn-calling':''}`} onClick={fetchConsoleSubscriptions} disabled={consoleSubsLoading}>
+                    {consoleSubsLoading ? '조회 중...' : '새로고침'}
+                  </button>
+                </div>
+                {consoleSubs.length === 0 ? (
+                  <div style={{color:'#5f6368', fontSize:14, padding:'20px 4px'}}>
+                    {consoleSubsLoading ? '불러오는 중...' : '기관 데이터가 없습니다'}
+                  </div>
+                ) : (
+                  <div style={{overflowX:'auto'}}>
+                    <table style={{width:'100%', borderCollapse:'collapse', fontSize:14}}>
+                      <thead>
+                        <tr style={{textAlign:'left', color:'#5f6368', borderBottom:'1px solid #dadce0'}}>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>기관명</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>요금제</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>대상자</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>월 청구액</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>자동결제</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>다음 청구일</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>최근 오류</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {consoleSubs.map(s => (
+                          <tr key={s.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
+                            <td style={{padding:'10px'}}>{s.orgName || s.orgId}</td>
+                            <td style={{padding:'10px'}}>{s.plan || '미설정'}</td>
+                            <td style={{padding:'10px'}}>{s.elderCount}명</td>
+                            <td style={{padding:'10px'}}>{s.monthlyAmount != null ? `${s.monthlyAmount.toLocaleString()}원` : '-'}</td>
+                            <td style={{padding:'10px'}}>
+                              <span style={{
+                                fontSize:12, fontWeight:600, padding:'2px 10px', borderRadius:12,
+                                background: s.autoRenew ? '#e6f4ea' : '#f1f3f4',
+                                color: s.autoRenew ? '#1e8e3e' : '#5f6368',
+                              }}>{s.autoRenew ? '등록됨' : '미등록'}</span>
+                            </td>
+                            <td style={{padding:'10px', color:'#5f6368'}}>{s.nextChargeAt ? new Date(s.nextChargeAt).toLocaleDateString('ko-KR') : '-'}</td>
+                            <td style={{padding:'10px', color: s.lastChargeError ? '#c5221f' : '#5f6368', fontSize:12}}>{s.lastChargeError || '-'}</td>
                           </tr>
                         ))}
                       </tbody>

@@ -14,6 +14,6 @@ export const RISK_CONFIG = {
   normal:   { label: '정상', color: '#22c55e' },
 };
 // SPA 페이지 목록 (URL 해시 라우팅 — F5 시 현재 페이지 유지)
-export const PAGES = ['dashboard','elders','safety','schedule','script','calls','health','casenotes','forms','report','data','admin','help','console'];
+export const PAGES = ['dashboard','elders','safety','schedule','script','calls','health','casenotes','forms','report','data','admin','help','console','consoleSubscriptions'];
 
 // 페이지 렌더 오류가 앱 전체를 흰 화면으로 만들지 않게 방어. 오류 시 메시지 표시 + 메뉴 이동(resetKey) 시 복구.

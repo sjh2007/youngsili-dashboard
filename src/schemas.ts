@@ -72,6 +72,30 @@ export const TopupResponseSchema = loose({
 });
 export type TopupResponse = z.infer<typeof TopupResponseSchema>;
 
+// POST /billing/subscribe/register — 정액제 자동결제 등록 1단계 응답. 프론트가 이 값으로
+// PortOne.js `requestIssueBillingKey()`를 연다.
+export const SubscribeRegisterResponseSchema = loose({
+  issueId: z.string(),
+  storeId: z.string(),
+  channelKey: z.string(),
+  issueName: z.string(),
+  amount: z.number(),
+});
+export type SubscribeRegisterResponse = z.infer<typeof SubscribeRegisterResponseSchema>;
+
+// GET /billing/subscription, GET /console/subscriptions의 orgs[] 원소 — 정액제/자동결제 현재 상태
+export const SubscriptionStatusSchema = loose({
+  orgId: z.string(),
+  orgName: z.string().optional(),
+  plan: z.string().nullable(),
+  elderCount: z.number(),
+  monthlyAmount: z.number().nullable(),
+  autoRenew: z.boolean(),
+  nextChargeAt: z.string().nullable(),
+  lastChargeError: z.string().nullable(),
+});
+export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>;
+
 // ── 알림 (/alerts) ──
 // id: Firestore 문서 id(문자열)로 내려오지만 메모리 실시간 알림은 숫자(Date.now()) — 둘 다 받는다.
 // at: 서버가 createdAt(Timestamp)을 ISO 문자열로 바꿔 내려준다. 값이 없으면 빈 문자열.
