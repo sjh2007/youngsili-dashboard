@@ -252,7 +252,8 @@ export default function App() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false); // 요금제 정책 v1.0(2026-08-28) §5 기준 정액제 안내
   const [upgradeTab, setUpgradeTab] = useState('metered'); // 'metered'(정량제, 주력) | 'flat'(정액제, 보조)
   const [topupBusy, setTopupBusy] = useState(false); // 포트원 결제 요청 처리 중(버튼 중복 클릭 방지)
-  const [paymentSuccessAmount, setPaymentSuccessAmount] = useState(null); // 결제 접수 완료 모달에 표시할 금액(null이면 모달 숨김)
+  const [paymentSuccess, setPaymentSuccess] = useState(null); // 결제 접수 완료 모달 {amount, desc}(null이면 모달 숨김)
+  const [subscribeBusy, setSubscribeBusy] = useState(null); // 결제 요청 처리 중인 planKey(중복 클릭 방지)
   const [customAmount, setCustomAmount] = useState('');
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
@@ -568,12 +569,51 @@ export default function App() {
       if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
 
       setShowUpgradeModal(false);
-      setPaymentSuccessAmount(amount);
+      setPaymentSuccess({ amount, desc: `${amount.toLocaleString()}원 충전 요청이 접수됐습니다.` });
       [3000, 7000, 15000].forEach(ms => setTimeout(fetchBillingBalance, ms));
     } catch {
       notify('네트워크 오류 — 결제 요청 실패');
     } finally {
       setTopupBusy(false);
+    }
+  };
+  // 정액제 결제(포트원) — 금액은 서버가 (단가 × 등록 어르신 수)로 계산해 응답으로 내려준다.
+  // 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동 폴백한다.
+  const startSubscription = async (planKey, planName) => {
+    if (subscribeBusy) return;
+    setSubscribeBusy(planKey);
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/subscribe`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ planKey }) });
+      const d = await r.json().catch(()=>({}));
+      if (r.status === 501) {
+        setShowUpgradeModal(false);
+        notify(`"${planName}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success');
+        return;
+      }
+      if (!r.ok) { notify(errMsg(d, '결제 요청 실패')); return; }
+      const sub = parseOr(TopupResponseSchema, d, null);
+      if (!sub) { notify('결제 요청 응답을 처리할 수 없습니다'); return; }
+
+      const { requestPayment } = await import('@portone/browser-sdk/v2');
+      const response = await requestPayment({
+        storeId: sub.storeId,
+        channelKey: sub.channelKey,
+        paymentId: sub.paymentId,
+        orderName: sub.orderName,
+        totalAmount: sub.amount,
+        currency: 'KRW',
+        payMethod: 'EASY_PAY',
+        customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객' },
+      });
+      if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
+
+      setShowUpgradeModal(false);
+      setPaymentSuccess({ amount: sub.amount, desc: `"${planName}" 플랜 결제 요청이 접수됐습니다.` });
+      [3000, 7000, 15000].forEach(ms => setTimeout(fetchBillingBalance, ms));
+    } catch {
+      notify('네트워크 오류 — 결제 요청 실패');
+    } finally {
+      setSubscribeBusy(null);
     }
   };
   // 기관 주소 변경 (R5: 저장 즉시 관할·기상 데이터 재생성 — 재로그인 불필요)
@@ -2594,18 +2634,18 @@ export default function App() {
       } />}
       {/* 결제 접수 완료 — 실제 크레딧 반영은 서버 웹훅이 비동기로 처리하므로 "완료"가 아니라
           "접수" 상태를 보여준다(과장 방지). 결제 실패/네트워크 오류는 여전히 공용 notify()로. */}
-      {paymentSuccessAmount !== null && (
-        <div className="modal-overlay" onClick={()=>setPaymentSuccessAmount(null)}>
+      {paymentSuccess !== null && (
+        <div className="modal-overlay" onClick={()=>setPaymentSuccess(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:380,width:'92%',textAlign:'center',padding:'36px 28px'}}>
             <div style={{width:56,height:56,borderRadius:'50%',background:'#ecfdf5',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 18px'}}>
               <CheckCircle2 size={30} color="#16a34a"/>
             </div>
             <div style={{fontWeight:800,fontSize:18,color:'#0f172a',marginBottom:8}}>결제가 접수됐습니다</div>
             <div style={{fontSize:15,color:'#64748b',lineHeight:1.6,marginBottom:24}}>
-              <b style={{color:'#0f172a'}}>{paymentSuccessAmount.toLocaleString()}원</b> 충전 요청이 접수됐습니다.<br/>
-              결제 확인 후 잔액에 자동 반영됩니다.
+              {paymentSuccess.desc}<br/>
+              결제 확인 후 반영됩니다.
             </div>
-            <button className="btn-primary" style={{width:'100%'}} onClick={()=>setPaymentSuccessAmount(null)}>확인</button>
+            <button className="btn-primary" style={{width:'100%'}} onClick={()=>setPaymentSuccess(null)}>확인</button>
           </div>
         </div>
       )}
@@ -2681,8 +2721,12 @@ export default function App() {
                     <button
                       className="btn-primary"
                       style={{width:'100%'}}
-                      onClick={()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); }}
-                    >신청</button>
+                      disabled={subscribeBusy === p.key}
+                      onClick={()=> p.key === 'trial'
+                        ? (()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); })()
+                        : startSubscription(p.key, p.name)
+                      }
+                    >{subscribeBusy === p.key ? '처리 중...' : '신청'}</button>
                   </div>
                 ))}
               </div>
