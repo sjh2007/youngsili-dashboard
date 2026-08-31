@@ -91,6 +91,8 @@ export default function ConsoleApp() {
   const [orgBusy, setOrgBusy] = useState('');
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [authCheckError, setAuthCheckError] = useState('');   // 네트워크/CORS 등 판정 자체가 실패한 경우 — "권한 없음"과 구분해야 함
+  const [authCheckRetry, setAuthCheckRetry] = useState(0);
 
   useEffect(() => {
     if (!authEnabled) { setAuthChecked(true); return; }
@@ -98,22 +100,29 @@ export default function ConsoleApp() {
     return unsub;
   }, []);
 
-  // 로그인 성공 후 superadmin 여부 확인 — 별도 API 없이 /console/health 403 여부로 판정
+  // 로그인 성공 후 superadmin 여부 확인 — 별도 API 없이 /console/health 403 여부로 판정.
+  // 주의: fetch 자체가 실패(CORS·네트워크 오류 등)한 경우를 403(진짜 권한 없음)과 반드시
+  // 구분해야 한다 — 둘 다 "권한 없음"으로 뭉개면 실제로는 superadmin인 계정도 인프라
+  // 문제(CORS_ORIGINS 미등록 등) 때문에 "권한 없음" 오진을 받는다(2026-08-31 실사용 발견).
   useEffect(() => {
-    if (!authUser) { setAuthorized(null); return; }
+    if (!authUser) { setAuthorized(null); setAuthCheckError(''); return; }
     let cancelled = false;
     (async () => {
+      setAuthCheckError('');
       try {
         const r = await authFetch(`${SERVER_URL}/console/health`);
         if (cancelled) return;
         if (r.status === 403) { setAuthorized(false); return; }
+        if (!r.ok) { setAuthCheckError(`서버 오류(${r.status}) — 권한 판정 실패`); return; }
         const d = await r.json().catch(() => null);
         setAuthorized(true);
         if (d && Array.isArray(d.components)) setHealth(d);
-      } catch { if (!cancelled) setAuthorized(false); }
+      } catch (e: any) {
+        if (!cancelled) setAuthCheckError(`네트워크 오류로 권한을 확인하지 못했습니다: ${e?.message || e}`);
+      }
     })();
     return () => { cancelled = true; };
-  }, [authUser]);
+  }, [authUser, authCheckRetry]);
 
   const fetchHealth = async () => {
     setLoadingHealth(true);
@@ -202,6 +211,19 @@ export default function ConsoleApp() {
 
   if (!authChecked) return null;
   if (!authUser) return <LoginScreen />;
+  if (authCheckError) {
+    return (
+      <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0f172a',padding:24}}>
+        <div style={{background:'#fff',borderRadius:16,padding:40,width:420,maxWidth:'100%',textAlign:'center'}}>
+          <div style={{fontSize:40}}>⚠️</div>
+          <div style={{fontSize:18,fontWeight:800,color:'#0f172a',marginTop:12}}>권한 확인 실패</div>
+          <div style={{fontSize:14,color:'#64748b',marginTop:8}}>{authCheckError}</div>
+          <button className="btn-primary" style={{marginTop:20,marginRight:8}} onClick={()=>setAuthCheckRetry(n=>n+1)}>다시 시도</button>
+          <button className="btn-secondary" style={{marginTop:20}} onClick={()=>signOut(auth as any)}>로그아웃</button>
+        </div>
+      </div>
+    );
+  }
   if (authorized === null) return null; // 권한 확인 중 — 깜빡임 방지로 빈 화면
   if (authorized === false) return <AccessDenied email={authUser.email} onLogout={() => signOut(auth as any)} />;
 
