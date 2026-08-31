@@ -2812,15 +2812,15 @@ export default function App() {
                     {isCurrent ? (
                       <div style={{width:'100%',textAlign:'center',fontSize:13,fontWeight:700,color:'#1e8e3e',background:'#e6f4ea',borderRadius:10,padding:'9px 0'}}>자동결제 중</div>
                     ) : (
+                      // 2026-08-31: 연결된 채널이 카카오페이 정기결제(빌링키) 승인이 안 된 상태라
+                      // startSubscription()(실제 자동결제 등록)을 호출하면 PG 오류가 그대로 사용자에게
+                      // 노출된다. 채널이 정기결제를 지원하게 되기 전까지는 안전하게 접수 안내로 되돌린다
+                      // — startSubscription/백엔드 빌링키 로직 자체는 그대로 남겨둔다(테스트 통과 상태).
                       <button
                         className="btn-primary"
                         style={{width:'100%'}}
-                        disabled={subscribeBusy === p.key}
-                        onClick={()=> p.key === 'trial'
-                          ? (()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); })()
-                          : startSubscription(p.key, p.name)
-                        }
-                      >{subscribeBusy === p.key ? '처리 중...' : '신청'}</button>
+                        onClick={()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); }}
+                      >신청</button>
                     )}
                   </div>
                   );
