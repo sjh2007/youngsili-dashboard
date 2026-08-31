@@ -3,7 +3,7 @@ import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from '../components/help/HelpGuide';
 import AuthScreen from '../components/auth/AuthScreen';
-import { ElderListSchema, MeSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
+import { ElderListSchema, MeSchema, BillingBalanceSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
 import { CallTranscript, GroupHeader, PageErrorBoundary } from '../components/common';
 import { Button, Dialog, EmptyState, PageIntro, StatusBadge, Toolbar } from '../components/ui';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -231,6 +231,7 @@ export default function App() {
   const [orgSuspending, setOrgSuspending] = useState('');   // 정지/재개 처리 중인 orgId(버튼 중복 클릭 방지)
   // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
+  const [billing, setBilling]     = useState(null);   // {creditBalance: number|null} — null(미조회) 이면 차단 화면 안 띄움
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
   const [newOrgType, setNewOrgType] = useState('senior');   // 기관 유형 (화면 분기 기준)
@@ -275,6 +276,7 @@ export default function App() {
   const [healthHistFrom, setHealthHistFrom] = useState('');
   const [healthHistTo, setHealthHistTo]   = useState('');
   const [reportCalls, setReportCalls]     = useState([]);     // 리포트용 통화 실데이터 (calls)
+  const [reportDispatches, setReportDispatches] = useState([]); // 리포트용 발신 이력(종료 사유 도넛용)
 
   // 위험 키워드 → 위험도 (키워드 칩 색상용; 서버 KEYWORDS와 동기화)
   const KW_LEVEL = {
@@ -315,12 +317,14 @@ export default function App() {
       const span = to.getTime() - from.getTime();
       const prevTo = new Date(from.getTime() - 1);
       const prevFrom = new Date(prevTo.getTime() - span);
-      const [cur, prev, callsRes] = await Promise.all([
+      const [cur, prev, callsRes, dispRes] = await Promise.all([
         authFetch(`${SERVER_URL}/stats?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
         authFetch(`${SERVER_URL}/stats?from=${prevFrom.toISOString()}&to=${prevTo.toISOString()}`).then(r => r.json()),
         authFetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
+        authFetch(`${SERVER_URL}/call/dispatches?from=${from.toISOString()}&to=${to.toISOString()}`).then(r => r.json()),
       ]);
       setStatsData(cur); setStatsPrev(prev); setReportCalls(callsRes.calls || []);
+      setReportDispatches(Array.isArray(dispRes.dispatches) ? dispRes.dispatches : []);
     } catch { setStatsData({ available: false }); setStatsPrev(null); }
     finally { setStatsLoading(false); }
   };
@@ -497,6 +501,14 @@ export default function App() {
   const fetchMe = async () => {
     try { const r = await authFetch(`${SERVER_URL}/me`); if (r.ok) { const m = parseOr(MeSchema, await r.json(), null); if (m) setMe(m); } } catch {}
   };
+  // 선불 충전식 크레딧 잔액(1단계) — superadmin은 소속 기관이 없어(orgId='*') 조회 대상이 아니다.
+  // /billing/balance는 @BillingExempt라 잔액 0이어도 조회는 항상 성공한다(막힌 이유를 보여줘야 하므로).
+  const fetchBillingBalance = async () => {
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/balance`);
+      if (r.ok) setBilling(parseOr(BillingBalanceSchema, await r.json(), null));
+    } catch {}
+  };
   // 기관 주소 변경 (R5: 저장 즉시 관할·기상 데이터 재생성 — 재로그인 불필요)
   const saveOrgAddress = () => {
     const SIDO = {'서울특별시':'서울','부산광역시':'부산','대구광역시':'대구','인천광역시':'인천','광주광역시':'광주','대전광역시':'대전','울산광역시':'울산','세종특별자치시':'세종','경기도':'경기','강원특별자치도':'강원','강원도':'강원','충청북도':'충북','충청남도':'충남','전북특별자치도':'전북','전라북도':'전북','전라남도':'전남','경상북도':'경북','경상남도':'경남','제주특별자치도':'제주'};
@@ -544,6 +556,21 @@ export default function App() {
       if (r.ok) { notify(`"${org.name}" 기관을 ${verb}했습니다.`, 'success'); fetchOrgs(); }
       else { const d = await r.json().catch(()=>({})); notify(errMsg(d, `${verb} 실패`)); }
     } catch { notify('네트워크 오류 — 기관 상태 변경 실패'); }
+    finally { setOrgSuspending(''); }
+  };
+  // 크레딧 수동 충전(1단계, 포트원 연동 전) — 금액은 window.prompt로 간단히 입력받는다
+  const creditOrg = async (org) => {
+    const input = window.prompt(`"${org.name}" 기관에 충전할 금액(원)을 입력하세요.`, '1000');
+    if (input === null) return;
+    const amount = parseInt(input, 10);
+    if (!Number.isInteger(amount) || amount <= 0) { notify('1원 이상의 정수를 입력해 주세요'); return; }
+    setOrgSuspending(org.orgId); // 처리중 표시는 정지/충전 버튼이 공유(동시에 하나만 가능)
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/orgs/${org.orgId}/credit`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount }) });
+      const d = await r.json().catch(()=>({}));
+      if (r.ok) { notify(`"${org.name}"에 ${amount.toLocaleString()}원 충전했습니다 (잔액 ${Number(d.creditBalance).toLocaleString()}원).`, 'success'); fetchOrgs(); }
+      else notify(errMsg(d, '충전 실패'));
+    } catch { notify('네트워크 오류 — 충전 실패'); }
     finally { setOrgSuspending(''); }
   };
   const fetchAccounts = async () => {
@@ -689,7 +716,7 @@ export default function App() {
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
   // authUser 확정 후 재조회 — 특히 fetchWeather: 마운트 시 첫 호출은 토큰 복원 전(비인증)이라
   // 서버가 기본(대구) 지역을 반환함 → 로그인 확정 시점에 토큰 포함으로 다시 불러 기관 관할 지역 반영
-  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); fetchSpecialWarning(); } }, [authUser]); // eslint-disable-line
+  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); fetchSpecialWarning(); fetchBillingBalance(); } }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'admin' && isStaffUp) { if (isSuper) fetchOrgs(); fetchAccounts(); fetchInvites(); setAdminMsg(''); } }, [page, isStaffUp, isSuper]); // eslint-disable-line
   // 어르신 등록/수정 폼: 담당 지원사 배정 드롭다운용 계정 목록
   useEffect(() => { if (page === 'register' && isStaffUp && accounts.length === 0) fetchAccounts(); }, [page, isStaffUp]); // eslint-disable-line
@@ -2468,6 +2495,27 @@ export default function App() {
   // 이메일 미인증은 차단하지 않음(리마인더 배너로 안내). 미로그인/기관미설정만 차단.
   if (authEnabled && (!authUser || me?.needsProvision)) {
     return <AuthScreen authUser={authUser} needsProvision={me?.needsProvision} authFetch={authFetch} serverUrl={SERVER_URL} onReload={reloadUser} onProvisioned={fetchMe} />;
+  }
+  // 선불 충전식 크레딧(1단계) — 잔액 0 이하면 서버(OrgGuard)가 다른 요청을 전부 403으로
+  // 막으므로, 화면도 "왜 막혔는지"를 바로 보여주고 다른 메뉴 진입을 막는다. superadmin(orgId='*')과
+  // 잔액 미조회(billing===null, 로딩 중이거나 구기관=무제한)는 차단하지 않는다.
+  if (me && me.role !== 'superadmin' && billing && typeof billing.creditBalance === 'number' && billing.creditBalance <= 0) {
+    return (
+      <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8fafc',padding:20}}>
+        <div style={{maxWidth:420,background:'#fff',borderRadius:16,padding:'40px 32px',textAlign:'center',boxShadow:'0 4px 20px rgba(0,0,0,0.06)'}}>
+          <div style={{fontSize:40,marginBottom:12}}>💳</div>
+          <h2 style={{margin:'0 0 8px',fontSize:20,fontWeight:800,color:'#0f172a'}}>충전 잔액이 없습니다</h2>
+          <p style={{color:'#64748b',fontSize:15,lineHeight:1.6,margin:'0 0 24px'}}>
+            {me.orgName || '소속 기관'}의 이용 크레딧이 모두 소진되어 서비스 이용이 일시 중단되었습니다.<br/>
+            담당자에게 문의해 충전 후 이용해 주세요.
+          </p>
+          <div style={{background:'#f1f5f9',borderRadius:10,padding:'12px 16px',fontSize:14,color:'#334155',marginBottom:20}}>
+            현재 잔액: <b>{billing.creditBalance.toLocaleString()}원</b>
+          </div>
+          <button className="btn-secondary" onClick={()=>{fetchBillingBalance();}}>새로고침</button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -4385,6 +4433,37 @@ export default function App() {
                   );
                 })()}
               </div>
+              <div className="section">
+                <div className="section-title">통화 종료 사유 <span style={{fontSize:15,fontWeight:600,color:'#94a3b8'}}>— 위 위험 키워드 통계와 같은 기간 기준</span></div>
+                {(()=>{
+                  // dispatches는 발신 시도 단위 기록(진행 중 상태 ringing/answered/needs_confirm 포함) —
+                  // 도넛은 "끝난" 통화만 집계해야 하므로 종결 상태(completed/missed/failed)만 사용.
+                  const terminal = reportDispatches.filter(d => ['completed','missed','failed'].includes(d.status));
+                  const nDone = terminal.filter(d => d.status === 'completed').length;
+                  const nMissed = terminal.filter(d => d.status === 'missed').length;
+                  const nFailed = terminal.filter(d => d.status === 'failed').length;
+                  const total = terminal.length;
+                  if (total === 0) return <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{statsLoading?'불러오는 중...':'이 기간엔 종료된 통화 발신 이력이 없습니다.'}</div>;
+                  const pct = (n) => n / total * 283;
+                  return (
+                    <div className="donut-wrap">
+                      <div className="donut-chart">
+                        <svg viewBox="0 0 120 120" width="160" height="160">
+                          <circle cx="60" cy="60" r="45" fill="none" stroke="#f0fdf4" strokeWidth="18"/>
+                          <circle cx="60" cy="60" r="45" fill="none" stroke="#22c55e" strokeWidth="18" strokeDasharray={`${pct(nDone)} 283`} strokeDashoffset="0" transform="rotate(-90 60 60)"/>
+                          <circle cx="60" cy="60" r="45" fill="none" stroke="#f59e0b" strokeWidth="18" strokeDasharray={`${pct(nMissed)} 283`} strokeDashoffset={`-${pct(nDone)}`} transform="rotate(-90 60 60)"/>
+                          <circle cx="60" cy="60" r="45" fill="none" stroke="#ef4444" strokeWidth="18" strokeDasharray={`${pct(nFailed)} 283`} strokeDashoffset={`-${pct(nDone)+pct(nMissed)}`} transform="rotate(-90 60 60)"/>
+                          <text x="60" y="55" textAnchor="middle" fontSize="14" fontWeight="900" fill="#0f172a">{total}</text>
+                          <text x="60" y="70" textAnchor="middle" fontSize="9" fill="#94a3b8">종료 통화</text>
+                        </svg>
+                      </div>
+                      <div className="donut-legend">
+                        {[{label:'정상 종료',count:nDone,color:'#22c55e'},{label:'부재중(무응답)',count:nMissed,color:'#f59e0b'},{label:'발신 실패(시스템 오류)',count:nFailed,color:'#ef4444'}].map(item=>(<div key={item.label} className="donut-legend-item"><div className="donut-dot" style={{background:item.color}}/><div><div className="donut-label">{item.label}</div><div className="donut-count" style={{color:item.color}}>{item.count}건 ({Math.round(item.count/total*100)}%)</div></div></div>))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           )}
 
@@ -5168,14 +5247,14 @@ export default function App() {
                 })()}
               </section>
 
-              {/* 2026-08-31: 결제(KCP) 연동은 아직 없다 — 실제 결제/구독 데이터가 생기기 전
-                  단계로, 기존 기관 생성 시 이미 매겨지던 plan(trial/standard) 필드를 콘솔에서
-                  한눈에 보이게 조회 전용으로 얹는다(어디에도 표시된 적 없던 필드). 실제 KCP
-                  연동은 결제수단 등록 등 보안 검토가 필요해 여기 포함하지 않는다. */}
+              {/* 2026-08-31: plan(trial/standard) 필드는 여전히 조회 전용 표시일 뿐(실제 결제
+                  연동 없음). 2026-08-31(포트원 결제 1단계) 추가: 크레딧 잔액 표시 + 콘솔 수동
+                  충전 — 실제 포트원 카드결제 연동 전까지 최소한의 접근 게이트(잔액 0이면
+                  하드블록, org.guard.ts)를 관리자가 수동으로 운영하기 위한 임시 조치. */}
               <section className="section" style={{marginTop:20}}>
                 <div className="section-title" style={{marginBottom:10}}>
                   요금제·기관 관리 ({orgs.length}개 기관)
-                  <span style={{marginLeft:10, fontSize:12, fontWeight:500, color:'#94a3b8'}}>요금제는 실제 결제(KCP) 연동 전 · 조회 전용</span>
+                  <span style={{marginLeft:10, fontSize:12, fontWeight:500, color:'#94a3b8'}}>요금제는 실제 결제(포트원) 연동 전 · 크레딧은 수동 충전(1단계)</span>
                 </div>
                 {orgs.length === 0 ? (
                   <div style={{color:'#5f6368', fontSize:14, padding:'20px 4px'}}>기관 데이터가 없습니다</div>
@@ -5187,6 +5266,7 @@ export default function App() {
                           <th style={{padding:'8px 10px', fontWeight:500}}>기관명</th>
                           <th style={{padding:'8px 10px', fontWeight:500}}>기관코드</th>
                           <th style={{padding:'8px 10px', fontWeight:500}}>요금제</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>크레딧 잔액</th>
                           <th style={{padding:'8px 10px', fontWeight:500}}>대상자</th>
                           <th style={{padding:'8px 10px', fontWeight:500}}>계정</th>
                           <th style={{padding:'8px 10px', fontWeight:500}}>상태</th>
@@ -5207,6 +5287,13 @@ export default function App() {
                                 color: o.plan==='standard' ? '#1e8e3e' : o.plan==='trial' ? '#754d00' : '#5f6368',
                               }}>{o.plan==='standard'?'정식':o.plan==='trial'?'체험판':(o.plan||'미설정')}</span>
                             </td>
+                            <td style={{padding:'10px'}}>
+                              {o.creditBalance === null || o.creditBalance === undefined ? (
+                                <span style={{color:'#94a3b8'}}>무제한(구기관)</span>
+                              ) : (
+                                <span style={{fontWeight:700, color: o.creditBalance <= 0 ? '#c5221f' : '#0f172a'}}>{Number(o.creditBalance).toLocaleString()}원</span>
+                              )}
+                            </td>
                             <td style={{padding:'10px'}}>{o.elderCount}명</td>
                             <td style={{padding:'10px'}}>{o.userCount}명</td>
                             <td style={{padding:'10px'}}>
@@ -5216,7 +5303,13 @@ export default function App() {
                                 color: suspended ? '#c5221f' : '#1e8e3e',
                               }}>{suspended ? '정지됨' : '정상'}</span>
                             </td>
-                            <td style={{padding:'10px'}}>
+                            <td style={{padding:'10px', display:'flex', gap:6}}>
+                              <button
+                                className="btn-secondary"
+                                style={{fontSize:13, padding:'4px 10px', color:'#246BEB'}}
+                                disabled={orgSuspending === o.orgId}
+                                onClick={()=>creditOrg(o)}
+                              >충전</button>
                               <button
                                 className="btn-secondary"
                                 style={{fontSize:13, padding:'4px 10px', color: suspended ? '#1e8e3e' : '#c5221f'}}

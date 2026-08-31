@@ -55,6 +55,13 @@ export const MeSchema = loose({
 });
 export type Me = z.infer<typeof MeSchema>;
 
+// GET /billing/balance — 선불 충전식 크레딧 잔액(1단계). creditBalance: null=마이그레이션 전 구기관(무제한)
+export const BillingBalanceSchema = loose({
+  orgId: z.string().optional(),
+  creditBalance: z.number().nullable().optional(),
+});
+export type BillingBalance = z.infer<typeof BillingBalanceSchema>;
+
 // ── 알림 (/alerts) ──
 // id: Firestore 문서 id(문자열)로 내려오지만 메모리 실시간 알림은 숫자(Date.now()) — 둘 다 받는다.
 // at: 서버가 createdAt(Timestamp)을 ISO 문자열로 바꿔 내려준다. 값이 없으면 빈 문자열.
