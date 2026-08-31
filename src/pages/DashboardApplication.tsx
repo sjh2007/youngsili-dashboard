@@ -3054,9 +3054,18 @@ export default function App() {
             <div className="sidebar-org-code" style={{cursor:'default'}} title="선불 충전식 크레딧 잔액">
               <span className="sidebar-org-label">크레딧 잔액</span>
               <span className="sidebar-org-value" style={{color: billing.creditBalance <= 200 ? '#dc2626' : undefined}}>
-                {billing.creditBalance.toLocaleString()}원
+                {billing.creditBalance.toLocaleString()}
               </span>
             </div>
+          )}
+          {billing && typeof billing.creditBalance === 'number' && (
+            // 1단계(포트원 연동 전) — 아직 자체 결제 화면이 없어 담당자 문의로 안내만 한다.
+            // 2단계에서 실제 결제창(PortOne.js)으로 교체될 자리.
+            <button
+              className="sidebar-org-code"
+              style={{width:'100%', justifyContent:'center', fontWeight:700, color:'#246BEB'}}
+              onClick={()=>notify('충전이 필요하면 담당 매니저(전략기획실)에게 문의해 주세요. 자동 결제 기능은 준비 중입니다.')}
+            >충전하기</button>
           )}
           {authEnabled&&authUser&&<button className="sidebar-logout" onClick={doLogout}><LogOut size={15}/> 로그아웃</button>}
         </div>
