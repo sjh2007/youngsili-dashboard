@@ -3047,6 +3047,17 @@ export default function App() {
             <span className="sidebar-org-value">{me?.orgCode || '미등록'}</span>
             {me?.orgCode && <span className={`sidebar-org-copy ${orgCopied?'is-copied':''}`}><Copy size={13}/>{orgCopied?'복사됨':'복사'}</span>}
           </div>
+          {/* 2026-08-31: 선불 충전식 크레딧(1단계) — 평소(잔액>0)엔 이 잔액 표시가 유일한 확인
+              경로다(콘솔은 superadmin 전용, 차단화면은 잔액 0일 때만 뜬다). superadmin은
+              소속 기관이 없어(orgId='*') billing이 항상 null이라 자동으로 안 보인다. */}
+          {billing && typeof billing.creditBalance === 'number' && (
+            <div className="sidebar-org-code" style={{cursor:'default'}} title="선불 충전식 크레딧 잔액">
+              <span className="sidebar-org-label">크레딧 잔액</span>
+              <span className="sidebar-org-value" style={{color: billing.creditBalance <= 200 ? '#dc2626' : undefined}}>
+                {billing.creditBalance.toLocaleString()}원
+              </span>
+            </div>
+          )}
           {authEnabled&&authUser&&<button className="sidebar-logout" onClick={doLogout}><LogOut size={15}/> 로그아웃</button>}
         </div>
       </aside>
