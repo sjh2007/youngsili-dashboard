@@ -228,6 +228,7 @@ export default function App() {
   const [consoleAuditLogs, setConsoleAuditLogs]       = useState([]);
   const [consoleAuditLoading, setConsoleAuditLoading] = useState(false);
   const [consoleAuditActor, setConsoleAuditActor]     = useState('');
+  const [orgSuspending, setOrgSuspending] = useState('');   // 정지/재개 처리 중인 orgId(버튼 중복 클릭 방지)
   // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
   const [orgs, setOrgs]           = useState([]);
@@ -532,6 +533,18 @@ export default function App() {
   };
   const fetchOrgs = async () => {
     try { const r = await authFetch(`${SERVER_URL}/admin/orgs`); const d = await r.json(); setOrgs(Array.isArray(d) ? d : []); } catch { setOrgs([]); }
+  };
+  // 기관 정지/재개 — 콘솔 최초의 쓰기 액션(정지되면 그 기관 소속 전원 접근 차단)이라 확인창을 거친다
+  const toggleOrgSuspend = async (org, nextSuspended) => {
+    const verb = nextSuspended ? '정지' : '재개';
+    if (!window.confirm(`"${org.name}" 기관을 ${verb}하시겠습니까?${nextSuspended ? ' 정지하면 소속 직원 전원이 즉시 로그인/이용이 막힙니다.' : ''}`)) return;
+    setOrgSuspending(org.orgId);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/orgs/${org.orgId}/suspend`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ suspended: nextSuspended }) });
+      if (r.ok) { notify(`"${org.name}" 기관을 ${verb}했습니다.`, 'success'); fetchOrgs(); }
+      else { const d = await r.json().catch(()=>({})); notify(errMsg(d, `${verb} 실패`)); }
+    } catch { notify('네트워크 오류 — 기관 상태 변경 실패'); }
+    finally { setOrgSuspending(''); }
   };
   const fetchAccounts = async () => {
     try { const r = await authFetch(`${SERVER_URL}/admin/users`); const d = await r.json(); setAccounts(Array.isArray(d) ? d : []); } catch { setAccounts([]); }
@@ -5161,8 +5174,8 @@ export default function App() {
                   연동은 결제수단 등록 등 보안 검토가 필요해 여기 포함하지 않는다. */}
               <section className="section" style={{marginTop:20}}>
                 <div className="section-title" style={{marginBottom:10}}>
-                  요금제 현황 ({orgs.length}개 기관)
-                  <span style={{marginLeft:10, fontSize:12, fontWeight:500, color:'#94a3b8'}}>실제 결제(KCP) 연동 전 · 조회 전용</span>
+                  요금제·기관 관리 ({orgs.length}개 기관)
+                  <span style={{marginLeft:10, fontSize:12, fontWeight:500, color:'#94a3b8'}}>요금제는 실제 결제(KCP) 연동 전 · 조회 전용</span>
                 </div>
                 {orgs.length === 0 ? (
                   <div style={{color:'#5f6368', fontSize:14, padding:'20px 4px'}}>기관 데이터가 없습니다</div>
@@ -5176,10 +5189,14 @@ export default function App() {
                           <th style={{padding:'8px 10px', fontWeight:500}}>요금제</th>
                           <th style={{padding:'8px 10px', fontWeight:500}}>대상자</th>
                           <th style={{padding:'8px 10px', fontWeight:500}}>계정</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>상태</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {orgs.map(o => (
+                        {orgs.map(o => {
+                          const suspended = o.suspended === true;
+                          return (
                           <tr key={o.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
                             <td style={{padding:'10px'}}>{o.name}</td>
                             <td style={{padding:'10px', fontFamily:'monospace', color:'#5f6368'}}>{o.code}</td>
@@ -5192,8 +5209,24 @@ export default function App() {
                             </td>
                             <td style={{padding:'10px'}}>{o.elderCount}명</td>
                             <td style={{padding:'10px'}}>{o.userCount}명</td>
+                            <td style={{padding:'10px'}}>
+                              <span style={{
+                                fontSize:12, fontWeight:600, padding:'2px 10px', borderRadius:12,
+                                background: suspended ? '#fce8e6' : '#e6f4ea',
+                                color: suspended ? '#c5221f' : '#1e8e3e',
+                              }}>{suspended ? '정지됨' : '정상'}</span>
+                            </td>
+                            <td style={{padding:'10px'}}>
+                              <button
+                                className="btn-secondary"
+                                style={{fontSize:13, padding:'4px 10px', color: suspended ? '#1e8e3e' : '#c5221f'}}
+                                disabled={orgSuspending === o.orgId}
+                                onClick={()=>toggleOrgSuspend(o, !suspended)}
+                              >{orgSuspending === o.orgId ? '처리 중...' : (suspended ? '재개' : '정지')}</button>
+                            </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
