@@ -5155,6 +5155,51 @@ export default function App() {
                 })()}
               </section>
 
+              {/* 2026-08-31: 결제(KCP) 연동은 아직 없다 — 실제 결제/구독 데이터가 생기기 전
+                  단계로, 기존 기관 생성 시 이미 매겨지던 plan(trial/standard) 필드를 콘솔에서
+                  한눈에 보이게 조회 전용으로 얹는다(어디에도 표시된 적 없던 필드). 실제 KCP
+                  연동은 결제수단 등록 등 보안 검토가 필요해 여기 포함하지 않는다. */}
+              <section className="section" style={{marginTop:20}}>
+                <div className="section-title" style={{marginBottom:10}}>
+                  요금제 현황 ({orgs.length}개 기관)
+                  <span style={{marginLeft:10, fontSize:12, fontWeight:500, color:'#94a3b8'}}>실제 결제(KCP) 연동 전 · 조회 전용</span>
+                </div>
+                {orgs.length === 0 ? (
+                  <div style={{color:'#5f6368', fontSize:14, padding:'20px 4px'}}>기관 데이터가 없습니다</div>
+                ) : (
+                  <div style={{overflowX:'auto'}}>
+                    <table style={{width:'100%', borderCollapse:'collapse', fontSize:14}}>
+                      <thead>
+                        <tr style={{textAlign:'left', color:'#5f6368', borderBottom:'1px solid #dadce0'}}>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>기관명</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>기관코드</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>요금제</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>대상자</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>계정</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orgs.map(o => (
+                          <tr key={o.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
+                            <td style={{padding:'10px'}}>{o.name}</td>
+                            <td style={{padding:'10px', fontFamily:'monospace', color:'#5f6368'}}>{o.code}</td>
+                            <td style={{padding:'10px'}}>
+                              <span style={{
+                                fontSize:12, fontWeight:600, padding:'2px 10px', borderRadius:12,
+                                background: o.plan==='standard' ? '#e6f4ea' : o.plan==='trial' ? '#fff8e1' : '#f1f3f4',
+                                color: o.plan==='standard' ? '#1e8e3e' : o.plan==='trial' ? '#754d00' : '#5f6368',
+                              }}>{o.plan==='standard'?'정식':o.plan==='trial'?'체험판':(o.plan||'미설정')}</span>
+                            </td>
+                            <td style={{padding:'10px'}}>{o.elderCount}명</td>
+                            <td style={{padding:'10px'}}>{o.userCount}명</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
               <section className="section" style={{marginTop:20}}>
                 <div className="script-editor-header" style={{marginBottom:10}}>
                   <div className="section-title" style={{marginBottom:0}}>
