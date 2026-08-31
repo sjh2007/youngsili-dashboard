@@ -32,6 +32,16 @@ const normalizeRegion = (region) => {
 };
 // 콘솔 통화 이력은 최대 500건까지 한 번에 내려오므로 테이블 페이지네이션 기준 페이지당 건수
 const HISTORY_PAGE_SIZE = 50;
+// AI영실이 요금 정책 통합본 v1.0(전략기획실, 2026-08-28) §5 정액제 — 앱 설치 방식 4등급.
+// 정량제(선불 충전식 크레딧, 지금 쓰고 있는 방식)가 주력 트랙이지만, 예산을 고정해야 하는
+// 기관을 위한 보조 트랙으로 별도 안내한다. 실제 결제(포트원) 연동 전까지는 "신청 접수"만
+// 하고 담당자가 후속 안내하는 방식(1단계) — 여기서 자동으로 플랜이 바뀌지는 않는다.
+const UPGRADE_PLANS = [
+  { key:'trial',    name:'시범사업', price:'무료',      unit:'30일',    features:['관리자 대시보드','전화 발신 관리','3단계 위험 감지','119·보호자 자동연결','통화 기록'] },
+  { key:'basic',     name:'베이직',   price:'11,000원', unit:'인·월',   features:['시범사업 전체 포함','건강 상태 추적','전화멘트 관리'] },
+  { key:'standard',  name:'스탠다드', price:'13,000원', unit:'인·월',   features:['베이직 전체 포함','리포트 / 통계','공공데이터 연동(산불·폭염·재난)'] },
+  { key:'premium',   name:'프리미엄', price:'19,000원', unit:'인·월',   features:['스탠다드 전체 포함','방문 필요·현장출동 연계','IoT 연동'] },
+];
 // 주민등록번호 앞 6자리 → 생년월일 (7번째 자리로 세기 판정: 1·2=1900년대, 3·4=2000년대)
 const juminToBirth = (jumin) => {
   const d = String(jumin||'').replace(/[^0-9]/g,'');
@@ -232,6 +242,7 @@ export default function App() {
   // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
   const [billing, setBilling]     = useState(null);   // {creditBalance: number|null} — null(미조회) 이면 차단 화면 안 띄움
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false); // 요금제 정책 v1.0(2026-08-28) §5 기준 정액제 안내
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
   const [newOrgType, setNewOrgType] = useState('senior');   // 기관 유형 (화면 분기 기준)
@@ -2525,6 +2536,43 @@ export default function App() {
       {notice && <Dialog open alert className="modal--confirm" title="알림" description={notice} onClose={()=>setNotice(null)} actions={
         <button className="btn-primary" onClick={()=>setNotice(null)}>확인</button>
       } />}
+      {/* 요금제 업그레이드 — 요금 정책 v1.0(2026-08-28) §5 정액제 4등급. 1단계(포트원 연동 전)라
+          "신청 접수"만 하고 실제 결제·플랜 전환은 담당자가 후속 처리한다. */}
+      {showUpgradeModal && (
+        <div className="modal-overlay" onClick={()=>setShowUpgradeModal(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:920,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+              <div className="modal-title" style={{textAlign:'left',marginBottom:0}}>요금제 선택</div>
+              <button onClick={()=>setShowUpgradeModal(false)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
+            </div>
+            <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
+              지금 이용 중인 <b>정량제(선불 충전식 크레딧)</b>가 대부분의 기관에 유리한 주력 방식입니다.
+              아래 정액제는 예산을 매월 고정해야 하는 기관을 위한 보조 요금제입니다(앱 설치 방식 기준, VAT 별도).
+            </p>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(190px, 1fr))',gap:14}}>
+              {UPGRADE_PLANS.map(p=>(
+                <div key={p.key} style={{border:'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:12}}>
+                  <div style={{fontWeight:800,fontSize:16,color:'#0f172a'}}>{p.name}</div>
+                  <div><span style={{fontWeight:900,fontSize:22,color:'#0f172a'}}>{p.price}</span><span style={{fontSize:13,color:'#94a3b8',marginLeft:4}}>/{p.unit}</span></div>
+                  <ul style={{margin:0,padding:0,listStyle:'none',display:'flex',flexDirection:'column',gap:6,flex:1}}>
+                    {p.features.map(f=>(
+                      <li key={f} style={{fontSize:13,color:'#475467',display:'flex',gap:6,alignItems:'flex-start'}}>
+                        <CheckCircle2 size={14} color="#246BEB" style={{flexShrink:0,marginTop:2}}/>{f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    className="btn-primary"
+                    style={{width:'100%'}}
+                    onClick={()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); }}
+                  >신청</button>
+                </div>
+              ))}
+            </div>
+            <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정량제 요율·채널 배정 등 자세한 안내는 담당 매니저에게 문의해 주세요.</p>
+          </div>
+        </div>
+      )}
       {/* 다른 기관 어르신 → 이관 등록 확인 (중앙) */}
       {forceReg && <Dialog open alert tone="danger" className="modal--confirm" title="이미 다른 기관에 등록된 어르신입니다"
         description="같은 전화번호가 다른 기관에 등록되어 있습니다. 그래도 등록하면 이 어르신은 우리 기관 소속으로 이관되며, 기존 기관에서는 더 이상 보이지 않게 됩니다."
@@ -3059,13 +3107,13 @@ export default function App() {
             </div>
           )}
           {billing && typeof billing.creditBalance === 'number' && (
-            // 1단계(포트원 연동 전) — 아직 자체 결제 화면이 없어 담당자 문의로 안내만 한다.
-            // 2단계에서 실제 결제창(PortOne.js)으로 교체될 자리.
+            // 1단계(포트원 연동 전) — 실제 결제창은 없고, 요금 정책(정액제 4등급) 안내 후
+            // "신청"을 담당자 확인 대상으로만 접수한다. 2단계에서 실제 결제창(PortOne.js)으로 교체.
             <button
               className="sidebar-org-code sidebar-credit-charge"
-              style={{width:'100%', justifyContent:'center', fontWeight:700, color:'#246BEB'}}
-              onClick={()=>notify('충전이 필요하면 담당 매니저(전략기획실)에게 문의해 주세요. 자동 결제 기능은 준비 중입니다.')}
-            >충전하기</button>
+              style={{width:'100%', display:'flex', alignItems:'center', justifyContent:'center', textAlign:'center', fontWeight:700, color:'#246BEB'}}
+              onClick={()=>setShowUpgradeModal(true)}
+            >업그레이드</button>
           )}
           {authEnabled&&authUser&&<button className="sidebar-logout" onClick={doLogout}><LogOut size={15}/> 로그아웃</button>}
         </div>
