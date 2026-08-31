@@ -4310,6 +4310,11 @@ body, .app, .main { background: #f4f6f9; }
 }
 .sidebar-logout:hover { color: var(--gov-blue); background: transparent !important; }
 .sidebar-org-code { grid-column: 1 / -1; grid-row: 2; }
+/* 2026-08-31: 크레딧 잔액·충전 버튼도 .sidebar-org-code 스타일(배경·패딩)을 재사용하는데,
+   그 클래스가 grid-row:2로 고정돼 있어 그냥 붙이면 기관코드와 같은 칸에 겹쳐 그려진다
+   (사용자 스크린샷으로 실측 — 버튼만 보이고 잔액·기관코드가 안 보이던 원인). 각자 행을 준다. */
+.sidebar-credit-balance { grid-column: 1 / -1; grid-row: 3; }
+.sidebar-credit-charge { grid-column: 1 / -1; grid-row: 4; }
 
 @media (max-width: 1200px) and (min-width: 761px) {
   .sidebar-footer { padding-left: 14px; padding-right: 14px; }

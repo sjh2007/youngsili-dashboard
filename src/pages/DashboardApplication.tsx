@@ -3051,7 +3051,7 @@ export default function App() {
               경로다(콘솔은 superadmin 전용, 차단화면은 잔액 0일 때만 뜬다). superadmin은
               소속 기관이 없어(orgId='*') billing이 항상 null이라 자동으로 안 보인다. */}
           {billing && typeof billing.creditBalance === 'number' && (
-            <div className="sidebar-org-code" style={{cursor:'default'}} title="선불 충전식 크레딧 잔액">
+            <div className="sidebar-org-code sidebar-credit-balance" style={{cursor:'default'}} title="선불 충전식 크레딧 잔액">
               <span className="sidebar-org-label">크레딧 잔액</span>
               <span className="sidebar-org-value" style={{color: billing.creditBalance <= 200 ? '#dc2626' : undefined}}>
                 {billing.creditBalance.toLocaleString()}
@@ -3062,7 +3062,7 @@ export default function App() {
             // 1단계(포트원 연동 전) — 아직 자체 결제 화면이 없어 담당자 문의로 안내만 한다.
             // 2단계에서 실제 결제창(PortOne.js)으로 교체될 자리.
             <button
-              className="sidebar-org-code"
+              className="sidebar-org-code sidebar-credit-charge"
               style={{width:'100%', justifyContent:'center', fontWeight:700, color:'#246BEB'}}
               onClick={()=>notify('충전이 필요하면 담당 매니저(전략기획실)에게 문의해 주세요. 자동 결제 기능은 준비 중입니다.')}
             >충전하기</button>
