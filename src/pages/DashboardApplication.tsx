@@ -3,7 +3,7 @@ import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from '../components/help/HelpGuide';
 import AuthScreen from '../components/auth/AuthScreen';
-import { ElderListSchema, MeSchema, BillingBalanceSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
+import { ElderListSchema, MeSchema, BillingBalanceSchema, TopupResponseSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
 import { CallTranscript, GroupHeader, PageErrorBoundary } from '../components/common';
 import { Button, Dialog, EmptyState, PageIntro, StatusBadge, Toolbar } from '../components/ui';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -251,6 +251,8 @@ export default function App() {
   const [billing, setBilling]     = useState(null);   // {creditBalance: number|null} — null(미조회) 이면 차단 화면 안 띄움
   const [showUpgradeModal, setShowUpgradeModal] = useState(false); // 요금제 정책 v1.0(2026-08-28) §5 기준 정액제 안내
   const [upgradeTab, setUpgradeTab] = useState('metered'); // 'metered'(정량제, 주력) | 'flat'(정액제, 보조)
+  const [topupBusy, setTopupBusy] = useState(false); // 포트원 결제 요청 처리 중(버튼 중복 클릭 방지)
+  const [customAmount, setCustomAmount] = useState('');
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
   const [newOrgType, setNewOrgType] = useState('senior');   // 기관 유형 (화면 분기 기준)
@@ -527,6 +529,47 @@ export default function App() {
       const r = await authFetch(`${SERVER_URL}/billing/balance`);
       if (r.ok) setBilling(parseOr(BillingBalanceSchema, await r.json(), null));
     } catch {}
+  };
+  // 크레딧 충전(2단계, 포트원) — 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동
+  // 폴백한다(운영에 아직 포트원 키가 안 들어간 동안도 화면이 안 깨지게). 설정돼 있으면
+  // PortOne.js 결제창을 띄우고, 실제 크레딧 반영은 서버 웹훅이 비동기로 처리하므로 결제
+  // 완료 직후 몇 차례 잔액을 다시 조회한다.
+  const startTopup = async (amount) => {
+    if (topupBusy) return;
+    setTopupBusy(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/topup`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount }) });
+      const d = await r.json().catch(()=>({}));
+      if (r.status === 501) {
+        setShowUpgradeModal(false);
+        notify(`${amount.toLocaleString()}원 충전 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success');
+        return;
+      }
+      if (!r.ok) { notify(errMsg(d, '결제 요청 실패')); return; }
+      const topup = parseOr(TopupResponseSchema, d, null);
+      if (!topup) { notify('결제 요청 응답을 처리할 수 없습니다'); return; }
+
+      const { requestPayment } = await import('@portone/browser-sdk/v2');
+      const response = await requestPayment({
+        storeId: topup.storeId,
+        channelKey: topup.channelKey,
+        paymentId: topup.paymentId,
+        orderName: topup.orderName,
+        totalAmount: topup.amount,
+        currency: 'KRW',
+        payMethod: 'CARD',
+        customer: me?.email ? { email: me.email } : undefined,
+      });
+      if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
+
+      setShowUpgradeModal(false);
+      notify('결제 처리 중입니다. 완료되면 잔액이 자동 반영됩니다.', 'success');
+      [3000, 7000, 15000].forEach(ms => setTimeout(fetchBillingBalance, ms));
+    } catch {
+      notify('네트워크 오류 — 결제 요청 실패');
+    } finally {
+      setTopupBusy(false);
+    }
   };
   // 기관 주소 변경 (R5: 저장 즉시 관할·기상 데이터 재생성 — 재로그인 불필요)
   const saveOrgAddress = () => {
@@ -2573,10 +2616,28 @@ export default function App() {
                     <button
                       className="btn-primary"
                       style={{width:'100%'}}
-                      onClick={()=>{ setShowUpgradeModal(false); notify(`${c.amount.toLocaleString()}원 충전 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); }}
-                    >신청</button>
+                      disabled={topupBusy}
+                      onClick={()=>startTopup(c.amount)}
+                    >{topupBusy?'처리 중...':'신청'}</button>
                   </div>
                 ))}
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center',marginTop:16}}>
+                <input
+                  className="form-input"
+                  style={{marginBottom:0,flex:1}}
+                  type="number"
+                  min={10000}
+                  step={1000}
+                  placeholder="직접 입력(원, 10,000원 이상)"
+                  value={customAmount}
+                  onChange={e=>setCustomAmount(e.target.value)}
+                />
+                <button
+                  className="btn-secondary"
+                  disabled={topupBusy || !customAmount || Number(customAmount) < 10000}
+                  onClick={()=>startTopup(Number(customAmount))}
+                >{topupBusy?'처리 중...':'직접 충전'}</button>
               </div>
               <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정확한 채널 배정·이용 패턴별 견적은 담당 매니저에게 문의해 주세요.</p>
             </>) : (<>
