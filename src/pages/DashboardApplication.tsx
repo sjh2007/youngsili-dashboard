@@ -31,7 +31,7 @@ const normalizeRegion = (region) => {
   return [SIDO_FULL_TO_SHORT[tokens[0]] || tokens[0], ...tokens.slice(1)].join(' ');
 };
 // 콘솔 통화 이력은 최대 500건까지 한 번에 내려오므로 테이블 페이지네이션 기준 페이지당 건수
-const HISTORY_PAGE_SIZE = 50;
+const HISTORY_PAGE_SIZE = 25;
 // AI영실이 요금 정책 통합본 v1.0(전략기획실, 2026-08-28) §5 정액제 — 앱 설치 방식 4등급.
 // 정량제(선불 충전식 크레딧, 지금 쓰고 있는 방식)가 주력 트랙이지만, 예산을 고정해야 하는
 // 기관을 위한 보조 트랙으로 별도 안내한다. 실제 결제(포트원) 연동 전까지는 "신청 접수"만

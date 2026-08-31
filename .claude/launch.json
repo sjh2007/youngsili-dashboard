@@ -6,6 +6,18 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
       "port": 3000
+    },
+    {
+      "name": "dashboard-prod",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-s", "build", "-l", "4173"],
+      "port": 4173
+    },
+    {
+      "name": "console-prod",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-s", "build-console", "-l", "4174"],
+      "port": 4174
     }
   ]
 }

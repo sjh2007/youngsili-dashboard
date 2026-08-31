@@ -20,6 +20,8 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "start:console": "REACT_APP_TARGET=console react-scripts start",
+    "build:console": "REACT_APP_TARGET=console BUILD_PATH=build-console react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
