@@ -18,6 +18,18 @@ import { LayoutGrid, Activity, Users, ShieldCheck, Phone, CalendarDays, MessageS
 
 // REACT_APP_SERVER_URL(.env.local)로 로컬 서버 테스트 가능 — 미설정 시 운영 서버
 const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', jumin:'', caregiver:'', caregiverPhone:'', assignedTo:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', careGroup:'', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
+// 지역명 정규화 — 주소검색(Daum Postcode)으로 등록하면 "대구 북구"처럼 시·도가 축약형으로
+// 통일되는데, CSV 일괄등록은 셀 값을 그대로 저장해 "대구광역시 북구"처럼 다른 표기가 섞였다.
+// 그 결과 경보 대상 화면의 지역 필터·자동선택이 같은 구를 서로 다른 그룹으로 갈라 보여주는
+// 사고가 있었다(실사용 지적). 시·도 전체 이름은 축약형으로, 그 외(로마자 지명 등 오기입)는
+// 그대로 통과시킨다 — 자동 번역/추정은 하지 않는다.
+const SIDO_FULL_TO_SHORT = {'서울특별시':'서울','부산광역시':'부산','대구광역시':'대구','인천광역시':'인천','광주광역시':'광주','대전광역시':'대전','울산광역시':'울산','세종특별자치시':'세종','경기도':'경기','강원특별자치도':'강원','강원도':'강원','충청북도':'충북','충청남도':'충남','전북특별자치도':'전북','전라북도':'전북','전라남도':'전남','경상북도':'경북','경상남도':'경남','제주특별자치도':'제주'};
+const normalizeRegion = (region) => {
+  const s = String(region||'').trim().replace(/\s+/g,' ');
+  if (!s) return s;
+  const tokens = s.split(' ');
+  return [SIDO_FULL_TO_SHORT[tokens[0]] || tokens[0], ...tokens.slice(1)].join(' ');
+};
 // 주민등록번호 앞 6자리 → 생년월일 (7번째 자리로 세기 판정: 1·2=1900년대, 3·4=2000년대)
 const juminToBirth = (jumin) => {
   const d = String(jumin||'').replace(/[^0-9]/g,'');
@@ -2316,7 +2328,7 @@ export default function App() {
     const parsed = rows.slice(1).map((r,ri)=>{
       const get=k=>colIdx[k]!==undefined?String(r[colIdx[k]]||'').trim():'';
       const name=get('name'); const phone=restoreLeadingZero(get('phone').replace(/\D/g,'')); const gender=/남/.test(get('gender'))?'male':'female';
-      const rec={ name, phone, age:get('age').replace(/\D/g,''), gender, title:get('title')||(gender==='male'?'할아버지':'할머니'), region:get('region'), caregiver:get('caregiver'), callTime:/^\d{1,2}:\d{2}$/.test(get('callTime'))?get('callTime'):'09:00', guardian:get('guardian'), guardianPhone:restoreLeadingZero(get('guardianPhone').replace(/\D/g,'')), disease:get('disease'), medicine:get('medicine'), careGroup:/중점/.test(get('careGroup'))?'intensive':/일반/.test(get('careGroup'))?'general':'' };
+      const rec={ name, phone, age:get('age').replace(/\D/g,''), gender, title:get('title')||(gender==='male'?'할아버지':'할머니'), region:normalizeRegion(get('region')), caregiver:get('caregiver'), callTime:/^\d{1,2}:\d{2}$/.test(get('callTime'))?get('callTime'):'09:00', guardian:get('guardian'), guardianPhone:restoreLeadingZero(get('guardianPhone').replace(/\D/g,'')), disease:get('disease'), medicine:get('medicine'), careGroup:/중점/.test(get('careGroup'))?'intensive':/일반/.test(get('careGroup'))?'general':'' };
       let st='ok', why='';
       if(!name){st='error';why='이름 없음';}
       else if(!phone||phone.length<9){st='error';why='전화번호 오류';}
@@ -3029,7 +3041,7 @@ export default function App() {
                   .sort((a, b) => b.d - a.d);
                 const noRespNew = noResp.filter(x => x.d === 3);
                 const noRespChronic = noResp.filter(x => x.d > 3);
-                const heatwaveElders = elders.filter(e => weatherData[e.region]?.alert === 'heatwave');
+                const heatwaveElders = elders.filter(e => weatherData[normalizeRegion(e.region)]?.alert === 'heatwave');
                 if (alerts.length === 0 && noResp.length === 0 && heatwaveElders.length === 0) return (
                   <section className="dashboard-priority dashboard-priority-safe">
                     <div className="dashboard-block-heading">
@@ -3138,7 +3150,7 @@ export default function App() {
                     const kwUnread = alertsData.filter(a=>!a.read&&(a.level==='critical'||a.level==='urgent')&&alertIsReal(a)).length;
                     const noRespCnt = elders.filter(e=>{const d=getNoResponseDays(e.lastCall,e.lastCallAt);return d>=3&&d<99;}).length;
                     const visitCnt = elders.filter(e=>e.visits>0).length;
-                    const heatCnt = elders.filter(e=>weatherData[e.region]?.alert==='heatwave').length;
+                    const heatCnt = elders.filter(e=>weatherData[normalizeRegion(e.region)]?.alert==='heatwave').length;
                     const todos = [
                       noRespCnt>0 && {key:'noresp', label:'미응답 어르신 확인', count:`${noRespCnt}명`, tone:'danger', go:'elders'},
                       kwUnread>0  && {key:'kw',     label:'위험 키워드 알림 확인', count:`${kwUnread}건`, tone:'danger', go:'health'},
@@ -3999,7 +4011,7 @@ export default function App() {
                           return (
                             <button className="btn-secondary" style={{fontSize:15,padding:'5px 10px'}}
                               title={`지금 선택한 '${label}' 경보가 발효 중인 지역의 어르신만 선택합니다. 다른 경보(예: 호우) 지역은 그 경보를 선택한 뒤 눌러 주세요.`}
-                              onClick={()=>setChecked(elders.filter(e=>weatherData[e.region]?.alert===activeAlert).map(e=>e.id))}>{label} 지역 자동선택</button>
+                              onClick={()=>setChecked(elders.filter(e=>weatherData[normalizeRegion(e.region)]?.alert===activeAlert).map(e=>e.id))}>{label} 지역 자동선택</button>
                           );
                         })()}
                         <button className="btn-secondary" style={{fontSize:15,padding:'5px 10px'}} onClick={()=>setChecked(elders.map(e=>e.id))}>전체</button>
@@ -4009,9 +4021,13 @@ export default function App() {
                     <div className="alert-region-filters">
                       {/* 2026-08-27: 어르신 region이 비어있으면(총괄 계정은 여러 기관 전체를 보므로
                           이 케이스를 마주칠 확률이 높다) undefined.replace()에서 그대로 죽어 화면이
-                          빈 화면이 되던 버그 수정(실사용 지적) — 빈 지역은 별도 표시로 묶는다. */}
-                      {[...new Set(elders.map(e=>e.region||'(지역 미설정)'))].sort().map(r => {
-                        const inR = elders.filter(e=>(e.region||'(지역 미설정)')===r);
+                          빈 화면이 되던 버그 수정(실사용 지적) — 빈 지역은 별도 표시로 묶는다.
+                          2026-08-31: CSV로 등록된 어르신은 "대구광역시 북구"처럼 정규화 안 된
+                          표기가 섞여 있어, 정규화 없이 그대로 묶으면 같은 구가 서로 다른 칩으로
+                          갈라져 필터·자동선택에서 빠지는 사고가 있었다(실사용 지적) — 그룹핑·
+                          비교 모두 normalizeRegion()으로 통일한다. */}
+                      {[...new Set(elders.map(e=>normalizeRegion(e.region)||'(지역 미설정)'))].sort().map(r => {
+                        const inR = elders.filter(e=>(normalizeRegion(e.region)||'(지역 미설정)')===r);
                         const allOn = inR.length>0 && inR.every(e=>checked.includes(e.id));
                         const someOn = inR.some(e=>checked.includes(e.id));
                         return (
@@ -4021,7 +4037,7 @@ export default function App() {
                     </div>
                     <div className="alert-elder-list">
                       {elders.map(e => {
-                        const inZone = weatherData[e.region]?.alert === activeAlert;
+                        const inZone = weatherData[normalizeRegion(e.region)]?.alert === activeAlert;
                         const on = checked.includes(e.id);
                         return (
                           <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,border:'1px solid '+(on?'#246BEB':'#e5e7eb'),borderRadius:8,padding:'8px 12px',cursor:'pointer',background:on?'#eff6ff':'#fff'}}>
@@ -4803,7 +4819,7 @@ export default function App() {
                         {key:'typhoon', icon:'🌀', label:'태풍경보', color:'#7c3aed', tip:'외출 금지·안부 확인'},
                         {key:'wildfire', icon:'🔥', label:'산불발생', color:'#ea580c', tip:'대피 안내 확인·안부 확인'},
                       ];
-                      const groups = ALERTS.map(a => ({...a, list: elders.filter(e => weatherData[e.region]?.alert === a.key)})).filter(g => g.list.length > 0);
+                      const groups = ALERTS.map(a => ({...a, list: elders.filter(e => weatherData[normalizeRegion(e.region)]?.alert === a.key)})).filter(g => g.list.length > 0);
                       if (groups.length === 0) return <div style={{color:'#16a34a',fontSize:17,padding:'20px 0',textAlign:'center'}}>현재 발령된 기상특보가 없습니다. 모든 어르신이 안전한 날씨입니다.</div>;
                       return groups.map(g => {
                         // P2-9: '확인 필요'만 노출, 오늘 통화 받은(확인 완료) 어르신은 "+N명 더보기 ▾"로 접기
@@ -4823,7 +4839,7 @@ export default function App() {
                               <div key={e.id} style={{border:'1px solid '+g.color+'33',borderRadius:10,padding:'10px 14px',background:'#fff',minWidth:210,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
                                 <div>
                                   <div style={{fontWeight:700,color:'#0f172a'}}>{e.name} <span style={{fontWeight:400,fontSize:15,color:e.status==='danger'?'#ef4444':e.status==='warning'?'#f59e0b':'#9ca3af'}}>{e.status==='danger'?'· 위험':e.status==='warning'?'· 주의':''}</span></div>
-                                  <div style={{fontSize:15,color:'#6b7280'}}>{e.region} · {weatherData[e.region]?.temp}℃ · <span style={{color:'#dc2626',fontWeight:700}}>확인 필요</span></div>
+                                  <div style={{fontSize:15,color:'#6b7280'}}>{e.region} · {weatherData[normalizeRegion(e.region)]?.temp}℃ · <span style={{color:'#dc2626',fontWeight:700}}>확인 필요</span></div>
                                 </div>
                                 <button onClick={()=>e.callActive&&setCallModal(e)} disabled={calling===e.id||!e.callActive} style={{fontSize:16,padding:'6px 12px',borderRadius:8,border:'none',background:e.callActive?g.color:'#d1d5db',color:'#fff',cursor:e.callActive?'pointer':'not-allowed',fontWeight:700,whiteSpace:'nowrap'}}>{calling===e.id?'발신 중':'앱 전화'}</button>
                               </div>
