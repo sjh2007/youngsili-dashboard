@@ -221,6 +221,10 @@ export default function App() {
   const [consoleHistoryOrg, setConsoleHistoryOrg]   = useState('');
   const [consoleHistoryFrom, setConsoleHistoryFrom] = useState('');
   const [consoleHistoryTo, setConsoleHistoryTo]     = useState('');
+  // 감사 로그 — 누가 언제 콘솔에서 뭘 조회했는지(2026-08-31). 통화 이력과 마찬가지로 수동 조회.
+  const [consoleAuditLogs, setConsoleAuditLogs]       = useState([]);
+  const [consoleAuditLoading, setConsoleAuditLoading] = useState(false);
+  const [consoleAuditActor, setConsoleAuditActor]     = useState('');
   // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
   const [orgs, setOrgs]           = useState([]);
@@ -645,6 +649,22 @@ export default function App() {
       console.error('콘솔 통화 이력 오류:', err);
     } finally {
       setConsoleHistoryLoading(false);
+    }
+  };
+
+  // 감사 로그 — 통화 이력과 동일하게 수동 조회(자동 폴링 안 함)
+  const fetchConsoleAuditLogs = async () => {
+    setConsoleAuditLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (consoleAuditActor) params.set('actor', consoleAuditActor);
+      const r = await authFetch(`${SERVER_URL}/console/audit-logs?${params.toString()}`);
+      const d = await r.json();
+      setConsoleAuditLogs(Array.isArray(d?.logs) ? d.logs : []);
+    } catch (err) {
+      console.error('콘솔 감사 로그 오류:', err);
+    } finally {
+      setConsoleAuditLoading(false);
     }
   };
 
@@ -5112,6 +5132,49 @@ export default function App() {
                             </tr>
                           );
                         })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              <section className="section" style={{marginTop:20}}>
+                <div className="script-editor-header" style={{marginBottom:10}}>
+                  <div className="section-title" style={{marginBottom:0}}>
+                    감사 로그 ({consoleAuditLogs.length}건)
+                  </div>
+                  <button className={`btn-download ${consoleAuditLoading?'btn-calling':''}`} onClick={fetchConsoleAuditLogs} disabled={consoleAuditLoading}>
+                    {consoleAuditLoading ? '조회 중...' : '조회'}
+                  </button>
+                </div>
+                <div style={{display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', marginBottom:14}}>
+                  <input className="form-input" style={{width:240, margin:0}} placeholder="관리자 이메일로 필터 (선택)" value={consoleAuditActor} onChange={e=>setConsoleAuditActor(e.target.value)} />
+                  <span style={{fontSize:12, color:'#5f6368'}}>기본: 최근 7일 · 최근 100건 — 누가 언제 콘솔에서 뭘 조회했는지</span>
+                </div>
+                {consoleAuditLogs.length === 0 ? (
+                  <div style={{color:'#5f6368', fontSize:14, padding:'20px 4px'}}>
+                    {consoleAuditLoading ? '불러오는 중...' : '조회된 감사 로그가 없습니다'}
+                  </div>
+                ) : (
+                  <div style={{overflowX:'auto'}}>
+                    <table style={{width:'100%', borderCollapse:'collapse', fontSize:14}}>
+                      <thead>
+                        <tr style={{textAlign:'left', color:'#5f6368', borderBottom:'1px solid #dadce0'}}>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>시각</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>관리자</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>조회 항목</th>
+                          <th style={{padding:'8px 10px', fontWeight:500}}>상세</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {consoleAuditLogs.map((l) => (
+                          <tr key={l.id} style={{borderBottom:'1px solid #f1f3f4'}}>
+                            <td style={{padding:'10px', color:'#5f6368'}}>{l.at ? new Date(l.at).toLocaleString('ko-KR') : '-'}</td>
+                            <td style={{padding:'10px'}}>{l.actorEmail || '-'}</td>
+                            <td style={{padding:'10px', fontFamily:'monospace', fontSize:12}}>{l.action}</td>
+                            <td style={{padding:'10px', color:'#5f6368', fontSize:12}}>{l.detail ? JSON.stringify(l.detail) : ''}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
