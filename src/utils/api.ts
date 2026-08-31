@@ -45,7 +45,9 @@ export async function authFetch(url: string, opts: RequestInit = {}): Promise<Re
         headers['Authorization'] = 'Bearer ' + (await auth.currentUser.getIdToken(forceRefresh));
       }
     } catch { /* 토큰 발급 실패 → 무토큰 전송, 서버가 401 로 응답 */ }
-    return fetch(url, { ...opts, headers });
+    // 계정 전환(로그아웃→다른 계정 로그인) 시 브라우저가 같은 URL의 이전 응답을 캐시에서
+    // 돌려줄 가능성을 원천 차단 — 이 서버 응답들은 전부 로그인한 계정(기관)에 따라 달라진다.
+    return fetch(url, { ...opts, headers, cache: opts.cache ?? 'no-store' });
   };
 
   const res = await send(false);

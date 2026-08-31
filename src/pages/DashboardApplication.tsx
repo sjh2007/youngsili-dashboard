@@ -890,7 +890,10 @@ export default function App() {
   // 로그인 완료(authUser) 시 토큰이 생기므로 재로드 — 안 그러면 로그인 전 무토큰 호출로 빈 화면
   // authUser 확정 후 재조회 — 특히 fetchWeather: 마운트 시 첫 호출은 토큰 복원 전(비인증)이라
   // 서버가 기본(대구) 지역을 반환함 → 로그인 확정 시점에 토큰 포함으로 다시 불러 기관 관할 지역 반영
-  useEffect(() => { fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); fetchSpecialWarning(); fetchBillingBalance(); } }, [authUser]); // eslint-disable-line
+  // 계정 전환(로그아웃→다른 계정 로그인) 시 새 조회가 끝나기 전까지 이전 계정의 크레딧 잔액이
+  // 화면에 그대로 남아있던 버그(2026-08-31 실사용 지적) — 잔액은 곧바로 null로 비워 재조회가
+  // 끝날 때까지는 아무것도 안 보이게 한다(다른 기관 금액을 잘못 보여주는 것보다 안전).
+  useEffect(() => { setBilling(null); setSubStatus(null); fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); fetchSpecialWarning(); fetchBillingBalance(); } }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'admin' && isStaffUp) { if (isSuper) fetchOrgs(); fetchAccounts(); fetchInvites(); setAdminMsg(''); } }, [page, isStaffUp, isSuper]); // eslint-disable-line
   // 어르신 등록/수정 폼: 담당 지원사 배정 드롭다운용 계정 목록
   useEffect(() => { if (page === 'register' && isStaffUp && accounts.length === 0) fetchAccounts(); }, [page, isStaffUp]); // eslint-disable-line
