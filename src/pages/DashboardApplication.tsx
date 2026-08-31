@@ -558,7 +558,8 @@ export default function App() {
         totalAmount: topup.amount,
         currency: 'KRW',
         payMethod: 'CARD',
-        customer: me?.email ? { email: me.email } : undefined,
+        // 일부 PG는 customer.fullName(또는 email)이 없으면 prepare 단계에서 400을 낸다.
+        customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객' },
       });
       if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
 
