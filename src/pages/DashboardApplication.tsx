@@ -252,6 +252,7 @@ export default function App() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false); // 요금제 정책 v1.0(2026-08-28) §5 기준 정액제 안내
   const [upgradeTab, setUpgradeTab] = useState('metered'); // 'metered'(정량제, 주력) | 'flat'(정액제, 보조)
   const [topupBusy, setTopupBusy] = useState(false); // 포트원 결제 요청 처리 중(버튼 중복 클릭 방지)
+  const [paymentSuccessAmount, setPaymentSuccessAmount] = useState(null); // 결제 접수 완료 모달에 표시할 금액(null이면 모달 숨김)
   const [customAmount, setCustomAmount] = useState('');
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
@@ -567,7 +568,7 @@ export default function App() {
       if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
 
       setShowUpgradeModal(false);
-      notify('결제 처리 중입니다. 완료되면 잔액이 자동 반영됩니다.', 'success');
+      setPaymentSuccessAmount(amount);
       [3000, 7000, 15000].forEach(ms => setTimeout(fetchBillingBalance, ms));
     } catch {
       notify('네트워크 오류 — 결제 요청 실패');
@@ -2591,6 +2592,23 @@ export default function App() {
       {notice && <Dialog open alert className="modal--confirm" title="알림" description={notice} onClose={()=>setNotice(null)} actions={
         <button className="btn-primary" onClick={()=>setNotice(null)}>확인</button>
       } />}
+      {/* 결제 접수 완료 — 실제 크레딧 반영은 서버 웹훅이 비동기로 처리하므로 "완료"가 아니라
+          "접수" 상태를 보여준다(과장 방지). 결제 실패/네트워크 오류는 여전히 공용 notify()로. */}
+      {paymentSuccessAmount !== null && (
+        <div className="modal-overlay" onClick={()=>setPaymentSuccessAmount(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:380,width:'92%',textAlign:'center',padding:'36px 28px'}}>
+            <div style={{width:56,height:56,borderRadius:'50%',background:'#ecfdf5',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 18px'}}>
+              <CheckCircle2 size={30} color="#16a34a"/>
+            </div>
+            <div style={{fontWeight:800,fontSize:18,color:'#0f172a',marginBottom:8}}>결제가 접수됐습니다</div>
+            <div style={{fontSize:15,color:'#64748b',lineHeight:1.6,marginBottom:24}}>
+              <b style={{color:'#0f172a'}}>{paymentSuccessAmount.toLocaleString()}원</b> 충전 요청이 접수됐습니다.<br/>
+              결제 확인 후 잔액에 자동 반영됩니다.
+            </div>
+            <button className="btn-primary" style={{width:'100%'}} onClick={()=>setPaymentSuccessAmount(null)}>확인</button>
+          </div>
+        </div>
+      )}
       {/* 요금제 업그레이드 — 요금 정책 v1.0(2026-08-28) §3(정량제)·§5(정액제 4등급). 1단계(포트원
           연동 전)라 "신청 접수"만 하고 실제 충전·플랜 전환은 담당자가 후속 처리한다. */}
       {showUpgradeModal && (
