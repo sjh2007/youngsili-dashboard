@@ -42,6 +42,13 @@ const UPGRADE_PLANS = [
   { key:'standard',  name:'스탠다드', price:'13,000원', unit:'인·월',   features:['베이직 전체 포함','리포트 / 통계','공공데이터 연동(산불·폭염·재난)'] },
   { key:'premium',   name:'프리미엄', price:'19,000원', unit:'인·월',   features:['스탠다드 전체 포함','방문 필요·현장출동 연계','IoT 연동'] },
 ];
+// 같은 문서 §3 "충전 단위별 도달 통화 수(3분 무선 기준)" — 정량제(선불 충전식, 지금 쓰는 방식) 충전 단위.
+// 정액제와 달리 매월 고정 요금이 아니라 발신한 만큼만 차감되므로 "플랜"이 아니라 "충전 금액"을 고른다.
+const CHARGE_TIERS = [
+  { key:'c30',  amount:300000,  calls:'약 350통',   usage:'주 1회 50명 1.6개월 · 특보 발신 300명 1회' },
+  { key:'c50',  amount:500000,  calls:'약 585통',   usage:'주 1회 50명 2.7개월 · 특보 발신 300명 2회' },
+  { key:'c100', amount:1000000, calls:'약 1,170통', usage:'주 1회 100명 2.7개월 · 특보 발신 300명 4회' },
+];
 // 주민등록번호 앞 6자리 → 생년월일 (7번째 자리로 세기 판정: 1·2=1900년대, 3·4=2000년대)
 const juminToBirth = (jumin) => {
   const d = String(jumin||'').replace(/[^0-9]/g,'');
@@ -243,6 +250,7 @@ export default function App() {
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
   const [billing, setBilling]     = useState(null);   // {creditBalance: number|null} — null(미조회) 이면 차단 화면 안 띄움
   const [showUpgradeModal, setShowUpgradeModal] = useState(false); // 요금제 정책 v1.0(2026-08-28) §5 기준 정액제 안내
+  const [upgradeTab, setUpgradeTab] = useState('metered'); // 'metered'(정량제, 주력) | 'flat'(정액제, 보조)
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
   const [newOrgType, setNewOrgType] = useState('senior');   // 기관 유형 (화면 분기 기준)
@@ -2536,40 +2544,67 @@ export default function App() {
       {notice && <Dialog open alert className="modal--confirm" title="알림" description={notice} onClose={()=>setNotice(null)} actions={
         <button className="btn-primary" onClick={()=>setNotice(null)}>확인</button>
       } />}
-      {/* 요금제 업그레이드 — 요금 정책 v1.0(2026-08-28) §5 정액제 4등급. 1단계(포트원 연동 전)라
-          "신청 접수"만 하고 실제 결제·플랜 전환은 담당자가 후속 처리한다. */}
+      {/* 요금제 업그레이드 — 요금 정책 v1.0(2026-08-28) §3(정량제)·§5(정액제 4등급). 1단계(포트원
+          연동 전)라 "신청 접수"만 하고 실제 충전·플랜 전환은 담당자가 후속 처리한다. */}
       {showUpgradeModal && (
         <div className="modal-overlay" onClick={()=>setShowUpgradeModal(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:920,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
               <div className="modal-title" style={{textAlign:'left',marginBottom:0}}>요금제 선택</div>
               <button onClick={()=>setShowUpgradeModal(false)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
             </div>
-            <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
-              지금 이용 중인 <b>정량제(선불 충전식 크레딧)</b>가 대부분의 기관에 유리한 주력 방식입니다.
-              아래 정액제는 예산을 매월 고정해야 하는 기관을 위한 보조 요금제입니다(앱 설치 방식 기준, VAT 별도).
-            </p>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(190px, 1fr))',gap:14}}>
-              {UPGRADE_PLANS.map(p=>(
-                <div key={p.key} style={{border:'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:12}}>
-                  <div style={{fontWeight:800,fontSize:16,color:'#0f172a'}}>{p.name}</div>
-                  <div><span style={{fontWeight:900,fontSize:22,color:'#0f172a'}}>{p.price}</span><span style={{fontSize:13,color:'#94a3b8',marginLeft:4}}>/{p.unit}</span></div>
-                  <ul style={{margin:0,padding:0,listStyle:'none',display:'flex',flexDirection:'column',gap:6,flex:1}}>
-                    {p.features.map(f=>(
-                      <li key={f} style={{fontSize:13,color:'#475467',display:'flex',gap:6,alignItems:'flex-start'}}>
-                        <CheckCircle2 size={14} color="#246BEB" style={{flexShrink:0,marginTop:2}}/>{f}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    className="btn-primary"
-                    style={{width:'100%'}}
-                    onClick={()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); }}
-                  >신청</button>
-                </div>
+            <div style={{display:'flex',gap:6,marginBottom:18}}>
+              {[['metered','정량제 (주력)'],['flat','정액제 (보조)']].map(([k,label])=>(
+                <button key={k} onClick={()=>setUpgradeTab(k)} style={{padding:'8px 16px',borderRadius:10,border:'1px solid '+(upgradeTab===k?'#246BEB':'#e2e8f0'),background:upgradeTab===k?'#eff6ff':'#fff',color:upgradeTab===k?'#246BEB':'#64748b',fontWeight:700,fontSize:14,cursor:'pointer'}}>{label}</button>
               ))}
             </div>
-            <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정량제 요율·채널 배정 등 자세한 안내는 담당 매니저에게 문의해 주세요.</p>
+
+            {upgradeTab==='metered' ? (<>
+              <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
+                발신 시도마다 <b>발신 기본료 40원</b> + 실제 연결된 통화에만 <b>통화 요금</b>이 충전액에서 차감됩니다.
+                발신이 없는 달은 차감도 청구도 없습니다(VAT 별도). 아래는 대표적인 충전 단위입니다 — 원하는 금액을 직접 입력해도 됩니다.
+              </p>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:14}}>
+                {CHARGE_TIERS.map(c=>(
+                  <div key={c.key} style={{border:'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:10}}>
+                    <div style={{fontWeight:900,fontSize:22,color:'#0f172a'}}>{c.amount.toLocaleString()}원</div>
+                    <div style={{fontSize:14,fontWeight:700,color:'#246BEB'}}>{c.calls} 도달(3분 통화 기준)</div>
+                    <div style={{fontSize:13,color:'#475467',lineHeight:1.5,flex:1}}>{c.usage}</div>
+                    <button
+                      className="btn-primary"
+                      style={{width:'100%'}}
+                      onClick={()=>{ setShowUpgradeModal(false); notify(`${c.amount.toLocaleString()}원 충전 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); }}
+                    >신청</button>
+                  </div>
+                ))}
+              </div>
+              <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정확한 채널 배정·이용 패턴별 견적은 담당 매니저에게 문의해 주세요.</p>
+            </>) : (<>
+              <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
+                예산을 매월 고정해야 하는 기관을 위한 인·월 정액 요금제입니다(앱 설치 방식 기준, VAT 별도).
+              </p>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(190px, 1fr))',gap:14}}>
+                {UPGRADE_PLANS.map(p=>(
+                  <div key={p.key} style={{border:'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:12}}>
+                    <div style={{fontWeight:800,fontSize:16,color:'#0f172a'}}>{p.name}</div>
+                    <div><span style={{fontWeight:900,fontSize:22,color:'#0f172a'}}>{p.price}</span><span style={{fontSize:13,color:'#94a3b8',marginLeft:4}}>/{p.unit}</span></div>
+                    <ul style={{margin:0,padding:0,listStyle:'none',display:'flex',flexDirection:'column',gap:6,flex:1}}>
+                      {p.features.map(f=>(
+                        <li key={f} style={{fontSize:13,color:'#475467',display:'flex',gap:6,alignItems:'flex-start'}}>
+                          <CheckCircle2 size={14} color="#246BEB" style={{flexShrink:0,marginTop:2}}/>{f}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      className="btn-primary"
+                      style={{width:'100%'}}
+                      onClick={()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); }}
+                    >신청</button>
+                  </div>
+                ))}
+              </div>
+              <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정액제 세부 조건은 담당 매니저에게 문의해 주세요.</p>
+            </>)}
           </div>
         </div>
       )}
