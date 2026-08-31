@@ -30,6 +30,8 @@ const normalizeRegion = (region) => {
   const tokens = s.split(' ');
   return [SIDO_FULL_TO_SHORT[tokens[0]] || tokens[0], ...tokens.slice(1)].join(' ');
 };
+// 콘솔 통화 이력은 최대 500건까지 한 번에 내려오므로 테이블 페이지네이션 기준 페이지당 건수
+const HISTORY_PAGE_SIZE = 50;
 // 주민등록번호 앞 6자리 → 생년월일 (7번째 자리로 세기 판정: 1·2=1900년대, 3·4=2000년대)
 const juminToBirth = (jumin) => {
   const d = String(jumin||'').replace(/[^0-9]/g,'');
@@ -221,6 +223,7 @@ export default function App() {
   const [consoleHistoryOrg, setConsoleHistoryOrg]   = useState('');
   const [consoleHistoryFrom, setConsoleHistoryFrom] = useState('');
   const [consoleHistoryTo, setConsoleHistoryTo]     = useState('');
+  const [consoleHistoryPage, setConsoleHistoryPage] = useState(1);   // 통화 이력 최대 500건이라 테이블 페이지네이션 필요
   // 감사 로그 — 누가 언제 콘솔에서 뭘 조회했는지(2026-08-31). 통화 이력과 마찬가지로 수동 조회.
   const [consoleAuditLogs, setConsoleAuditLogs]       = useState([]);
   const [consoleAuditLoading, setConsoleAuditLoading] = useState(false);
@@ -645,6 +648,7 @@ export default function App() {
       const r = await authFetch(`${SERVER_URL}/console/calls/history?${params.toString()}`);
       const d = await r.json();
       setConsoleHistory(Array.isArray(d?.calls) ? d.calls : []);
+      setConsoleHistoryPage(1);   // 새로 조회하면 1페이지로
     } catch (err) {
       console.error('콘솔 통화 이력 오류:', err);
     } finally {
@@ -5115,7 +5119,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {consoleHistory.map((c) => {
+                        {consoleHistory.slice((consoleHistoryPage-1)*HISTORY_PAGE_SIZE, consoleHistoryPage*HISTORY_PAGE_SIZE).map((c) => {
                           const R = RISK_CONFIG[c.riskLevel] || {};
                           const org = orgs.find(o => o.orgId === c.orgId);
                           return (
@@ -5136,6 +5140,19 @@ export default function App() {
                     </table>
                   </div>
                 )}
+                {consoleHistory.length > HISTORY_PAGE_SIZE && (() => {
+                  const totalPages = Math.ceil(consoleHistory.length / HISTORY_PAGE_SIZE);
+                  const start = (consoleHistoryPage-1)*HISTORY_PAGE_SIZE + 1;
+                  const end = Math.min(consoleHistoryPage*HISTORY_PAGE_SIZE, consoleHistory.length);
+                  return (
+                    <div style={{display:'flex', alignItems:'center', gap:10, marginTop:14, justifyContent:'flex-end'}}>
+                      <span style={{fontSize:13, color:'#5f6368'}}>{start}–{end} / 총 {consoleHistory.length}건</span>
+                      <button className="btn-download" disabled={consoleHistoryPage<=1} onClick={()=>setConsoleHistoryPage(p=>Math.max(1,p-1))}>이전</button>
+                      <span style={{fontSize:13, color:'#5f6368'}}>{consoleHistoryPage} / {totalPages}</span>
+                      <button className="btn-download" disabled={consoleHistoryPage>=totalPages} onClick={()=>setConsoleHistoryPage(p=>Math.min(totalPages,p+1))}>다음</button>
+                    </div>
+                  );
+                })()}
               </section>
 
               <section className="section" style={{marginTop:20}}>
