@@ -59,10 +59,29 @@ function AccessDenied({ email, onLogout }: { email?: string; onLogout: () => voi
   );
 }
 
+const PAGE_SIZE = 25; // 대시보드 콘솔 통화 이력과 동일한 페이지당 건수
+
+function Pager({ page, setPage, total }: { page: number; setPage: (fn: (p: number) => number) => void; total: number }) {
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) return null;
+  const start = (page - 1) * PAGE_SIZE + 1;
+  const end = Math.min(page * PAGE_SIZE, total);
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:10,marginTop:14,justifyContent:'flex-end'}}>
+      <span style={{fontSize:13,color:'#5f6368'}}>{start}–{end} / 총 {total}건</span>
+      <button className="btn-download" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>이전</button>
+      <span style={{fontSize:13,color:'#5f6368'}}>{page} / {totalPages}</span>
+      <button className="btn-download" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>다음</button>
+    </div>
+  );
+}
+
 const NAV = [
   { id: 'health', label: '시스템 모니터링' },
   { id: 'calls', label: '통화 이력' },
   { id: 'subscriptions', label: '정기결제 현황' },
+  { id: 'payments', label: '결제 내역' },
+  { id: 'refunds', label: '환불' },
   { id: 'orgs', label: '기관 관리' },
   { id: 'audit', label: '감사 로그' },
 ] as const;
@@ -83,13 +102,21 @@ export default function ConsoleApp() {
   const [activeCalls, setActiveCalls] = useState<any[]>([]);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
   const [historyOrg, setHistoryOrg] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [subs, setSubs] = useState<any[]>([]);
+  const [subsPage, setSubsPage] = useState(1);
   const [subsLoading, setSubsLoading] = useState(false);
+  const [orgsPage, setOrgsPage] = useState(1);
   const [orgs, setOrgs] = useState<any[]>([]);
   const [orgBusy, setOrgBusy] = useState('');
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditPage, setAuditPage] = useState(1);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const [paymentsOrg, setPaymentsOrg] = useState('');
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [authCheckError, setAuthCheckError] = useState('');   // 네트워크/CORS 등 판정 자체가 실패한 경우 — "권한 없음"과 구분해야 함
   const [authCheckRetry, setAuthCheckRetry] = useState(0);
@@ -147,6 +174,7 @@ export default function ConsoleApp() {
       const r = await authFetch(`${SERVER_URL}/console/calls/history?${params.toString()}`);
       const d = await r.json();
       setHistory(Array.isArray(d?.calls) ? d.calls : []);
+      setHistoryPage(1);
     } catch { notify('통화 이력 조회 실패'); }
     finally { setHistoryLoading(false); }
   };
@@ -157,12 +185,13 @@ export default function ConsoleApp() {
       const r = await authFetch(`${SERVER_URL}/console/subscriptions`);
       const d = await r.json();
       setSubs(Array.isArray(d?.orgs) ? d.orgs : []);
+      setSubsPage(1);
     } catch { notify('정기결제 현황 조회 실패'); }
     finally { setSubsLoading(false); }
   };
 
   const fetchOrgs = async () => {
-    try { const r = await authFetch(`${SERVER_URL}/admin/orgs`); const d = await r.json(); setOrgs(Array.isArray(d) ? d : []); } catch { setOrgs([]); }
+    try { const r = await authFetch(`${SERVER_URL}/admin/orgs`); const d = await r.json(); setOrgs(Array.isArray(d) ? d : []); setOrgsPage(1); } catch { setOrgs([]); }
   };
   const toggleOrgSuspend = async (org: any, nextSuspended: boolean) => {
     const verb = nextSuspended ? '정지' : '재개';
@@ -196,8 +225,22 @@ export default function ConsoleApp() {
       const r = await authFetch(`${SERVER_URL}/console/audit-logs`);
       const d = await r.json();
       setAuditLogs(Array.isArray(d?.logs) ? d.logs : []);
+      setAuditPage(1);
     } catch { notify('감사 로그 조회 실패'); }
     finally { setAuditLoading(false); }
+  };
+
+  const fetchPayments = async () => {
+    setPaymentsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (paymentsOrg) params.set('org', paymentsOrg);
+      const r = await authFetch(`${SERVER_URL}/console/payments?${params.toString()}`);
+      const d = await r.json();
+      setPayments(Array.isArray(d?.payments) ? d.payments : []);
+      setPaymentsPage(1);
+    } catch { notify('결제 내역 조회 실패'); }
+    finally { setPaymentsLoading(false); }
   };
 
   useEffect(() => {
@@ -207,6 +250,7 @@ export default function ConsoleApp() {
     if (page === 'subscriptions') fetchSubs();
     if (page === 'orgs') fetchOrgs();
     if (page === 'audit') fetchAuditLogs();
+    if (page === 'payments') fetchPayments();
   }, [page, authorized]); // eslint-disable-line
 
   if (!authChecked) return null;
@@ -309,7 +353,7 @@ export default function ConsoleApp() {
                     <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>어르신</th>
                     <th style={{padding:'8px 10px'}}>위험도</th><th style={{padding:'8px 10px'}}>통화시간</th>
                   </tr></thead>
-                  <tbody>{history.map((c:any) => (
+                  <tbody>{history.slice((historyPage-1)*PAGE_SIZE, historyPage*PAGE_SIZE).map((c:any) => (
                     <tr key={c.id} style={{borderBottom:'1px solid #f1f3f4'}}>
                       <td style={{padding:'10px',color:'#5f6368'}}>{c.at ? new Date(c.at).toLocaleString('ko-KR') : '-'}</td>
                       <td style={{padding:'10px'}}>{c.orgId}</td><td style={{padding:'10px'}}>{c.elderName}</td>
@@ -317,6 +361,7 @@ export default function ConsoleApp() {
                     </tr>
                   ))}</tbody>
                 </table>
+                <Pager page={historyPage} setPage={setHistoryPage} total={history.length} />
               </div>
             )}
           </section>
@@ -335,7 +380,7 @@ export default function ConsoleApp() {
                     <th style={{padding:'8px 10px'}}>기관명</th><th style={{padding:'8px 10px'}}>요금제</th><th style={{padding:'8px 10px'}}>대상자</th>
                     <th style={{padding:'8px 10px'}}>월 청구액</th><th style={{padding:'8px 10px'}}>자동결제</th><th style={{padding:'8px 10px'}}>다음 청구일</th><th style={{padding:'8px 10px'}}>최근 오류</th>
                   </tr></thead>
-                  <tbody>{subs.map((s:any) => (
+                  <tbody>{subs.slice((subsPage-1)*PAGE_SIZE, subsPage*PAGE_SIZE).map((s:any) => (
                     <tr key={s.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
                       <td style={{padding:'10px'}}>{s.orgName || s.orgId}</td><td style={{padding:'10px'}}>{s.plan || '미설정'}</td><td style={{padding:'10px'}}>{s.elderCount}명</td>
                       <td style={{padding:'10px'}}>{s.monthlyAmount != null ? `${s.monthlyAmount.toLocaleString()}원` : '-'}</td>
@@ -345,8 +390,64 @@ export default function ConsoleApp() {
                     </tr>
                   ))}</tbody>
                 </table>
+                <Pager page={subsPage} setPage={setSubsPage} total={subs.length} />
               </div>
             )}
+          </section>
+        )}
+
+        {page === 'payments' && (
+          <section className="section fade-in">
+            <div className="script-editor-header" style={{marginBottom:10}}>
+              <div className="section-title" style={{marginBottom:0}}>결제 내역 ({payments.length}건)</div>
+              <button className={`btn-download ${paymentsLoading?'btn-calling':''}`} onClick={fetchPayments} disabled={paymentsLoading}>{paymentsLoading?'조회 중...':'조회'}</button>
+            </div>
+            <div style={{display:'flex',gap:10,marginBottom:14}}>
+              <input className="form-input" style={{width:200,margin:0}} placeholder="기관코드 필터(선택)" value={paymentsOrg} onChange={e=>setPaymentsOrg(e.target.value)} />
+            </div>
+            <div style={{fontSize:12,color:'#94a3b8',marginBottom:10}}>포트원 결제·정액제 청구 기록(조회 전용) — 취소/환불은 아래 "환불" 메뉴 참고</div>
+            {payments.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{paymentsLoading?'불러오는 중...':'조회된 결제 내역이 없습니다'}</div> : (
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                  <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                    <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>종류</th>
+                    <th style={{padding:'8px 10px'}}>금액</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}>요청자</th>
+                  </tr></thead>
+                  <tbody>{payments.slice((paymentsPage-1)*PAGE_SIZE, paymentsPage*PAGE_SIZE).map((p:any) => (
+                    <tr key={p.id} style={{borderBottom:'1px solid #f1f3f4'}}>
+                      <td style={{padding:'10px',color:'#5f6368'}}>{p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '-'}</td>
+                      <td style={{padding:'10px'}}>{p.orgId}</td>
+                      <td style={{padding:'10px'}}>{p.type==='subscription' ? `정액제${p.planKey?`(${p.planKey})`:''}${p.renewal?' · 자동갱신':''}` : '크레딧 충전'}</td>
+                      <td style={{padding:'10px',fontWeight:700}}>{p.amount.toLocaleString()}원</td>
+                      <td style={{padding:'10px'}}>
+                        <span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,
+                          background: p.status==='paid'?'#e6f4ea':p.status==='failed'?'#fce8e6':p.status==='cancelled'?'#f1f3f4':'#fff8e1',
+                          color: p.status==='paid'?'#1e8e3e':p.status==='failed'?'#c5221f':p.status==='cancelled'?'#5f6368':'#754d00'}}>
+                          {p.status==='paid'?'완료':p.status==='failed'?'실패':p.status==='cancelled'?'취소됨':'대기'}
+                        </span>
+                      </td>
+                      <td style={{padding:'10px',color:'#5f6368',fontSize:12}}>{p.requestedBy}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+                <Pager page={paymentsPage} setPage={setPaymentsPage} total={payments.length} />
+              </div>
+            )}
+          </section>
+        )}
+
+        {page === 'refunds' && (
+          <section className="section fade-in">
+            <div className="section-title" style={{marginBottom:16}}>환불</div>
+            <div style={{textAlign:'center',padding:'40px 20px',color:'#64748b'}}>
+              <div style={{fontSize:36}}>🚧</div>
+              <div style={{fontSize:16,fontWeight:700,color:'#0f172a',marginTop:10}}>포트원 결제 취소 연동 후 제공</div>
+              <div style={{fontSize:13,marginTop:8,lineHeight:1.6}}>
+                환불 처리(포트원 결제취소 API)와 사유 기록이 여기 들어옵니다.<br/>
+                지금 당장 환불이 필요하면 <a href="https://admin.portone.io" target="_blank" rel="noreferrer" style={{color:'#246beb',fontWeight:700}}>포트원 관리자 콘솔</a>에서 직접 취소하고,
+                해당 기관의 크레딧 잔액은 위 "기관 관리" 메뉴에서 수동으로 맞춰주세요.
+              </div>
+            </div>
           </section>
         )}
 
@@ -360,7 +461,7 @@ export default function ConsoleApp() {
                     <th style={{padding:'8px 10px'}}>기관명</th><th style={{padding:'8px 10px'}}>기관코드</th><th style={{padding:'8px 10px'}}>요금제</th>
                     <th style={{padding:'8px 10px'}}>크레딧 잔액</th><th style={{padding:'8px 10px'}}>대상자</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}></th>
                   </tr></thead>
-                  <tbody>{orgs.map((o:any) => {
+                  <tbody>{orgs.slice((orgsPage-1)*PAGE_SIZE, orgsPage*PAGE_SIZE).map((o:any) => {
                     const suspended = o.suspended === true;
                     return (
                     <tr key={o.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
@@ -376,6 +477,7 @@ export default function ConsoleApp() {
                     );
                   })}</tbody>
                 </table>
+                <Pager page={orgsPage} setPage={setOrgsPage} total={orgs.length} />
               </div>
             )}
           </section>
@@ -393,7 +495,7 @@ export default function ConsoleApp() {
                   <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
                     <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>관리자</th><th style={{padding:'8px 10px'}}>조회 항목</th><th style={{padding:'8px 10px'}}>상세</th>
                   </tr></thead>
-                  <tbody>{auditLogs.map((l:any) => (
+                  <tbody>{auditLogs.slice((auditPage-1)*PAGE_SIZE, auditPage*PAGE_SIZE).map((l:any) => (
                     <tr key={l.id} style={{borderBottom:'1px solid #f1f3f4'}}>
                       <td style={{padding:'10px',color:'#5f6368'}}>{l.at ? new Date(l.at).toLocaleString('ko-KR') : '-'}</td>
                       <td style={{padding:'10px'}}>{l.actorEmail || '-'}</td>
@@ -402,6 +504,7 @@ export default function ConsoleApp() {
                     </tr>
                   ))}</tbody>
                 </table>
+                <Pager page={auditPage} setPage={setAuditPage} total={auditLogs.length} />
               </div>
             )}
           </section>
