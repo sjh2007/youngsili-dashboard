@@ -39,14 +39,14 @@ const HISTORY_PAGE_SIZE = 50;
 const UPGRADE_PLANS = [
   { key:'trial',    name:'시범사업', price:'무료',      unit:'30일',    features:['관리자 대시보드','전화 발신 관리','3단계 위험 감지','119·보호자 자동연결','통화 기록'] },
   { key:'basic',     name:'베이직',   price:'11,000원', unit:'인·월',   features:['시범사업 전체 포함','건강 상태 추적','전화멘트 관리'] },
-  { key:'standard',  name:'스탠다드', price:'13,000원', unit:'인·월',   features:['베이직 전체 포함','리포트 / 통계','공공데이터 연동(산불·폭염·재난)'] },
+  { key:'standard',  name:'스탠다드', price:'13,000원', unit:'인·월',   features:['베이직 전체 포함','리포트 / 통계','공공데이터 연동(산불·폭염·재난)'], recommended:true },
   { key:'premium',   name:'프리미엄', price:'19,000원', unit:'인·월',   features:['스탠다드 전체 포함','방문 필요·현장출동 연계','IoT 연동'] },
 ];
 // 같은 문서 §3 "충전 단위별 도달 통화 수(3분 무선 기준)" — 정량제(선불 충전식, 지금 쓰는 방식) 충전 단위.
 // 정액제와 달리 매월 고정 요금이 아니라 발신한 만큼만 차감되므로 "플랜"이 아니라 "충전 금액"을 고른다.
 const CHARGE_TIERS = [
   { key:'c30',  amount:300000,  calls:'약 350통',   usage:'주 1회 50명 1.6개월 · 특보 발신 300명 1회' },
-  { key:'c50',  amount:500000,  calls:'약 585통',   usage:'주 1회 50명 2.7개월 · 특보 발신 300명 2회' },
+  { key:'c50',  amount:500000,  calls:'약 585통',   usage:'주 1회 50명 2.7개월 · 특보 발신 300명 2회', recommended:true },
   { key:'c100', amount:1000000, calls:'약 1,170통', usage:'주 1회 100명 2.7개월 · 특보 발신 300명 4회' },
 ];
 // 주민등록번호 앞 6자리 → 생년월일 (7번째 자리로 세기 판정: 1·2=1900년대, 3·4=2000년대)
@@ -2554,7 +2554,7 @@ export default function App() {
               <button onClick={()=>setShowUpgradeModal(false)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
             </div>
             <div style={{display:'flex',gap:6,marginBottom:18}}>
-              {[['metered','정량제 (주력)'],['flat','정액제 (보조)']].map(([k,label])=>(
+              {[['metered','정량제'],['flat','정액제']].map(([k,label])=>(
                 <button key={k} onClick={()=>setUpgradeTab(k)} style={{padding:'8px 16px',borderRadius:10,border:'1px solid '+(upgradeTab===k?'#246BEB':'#e2e8f0'),background:upgradeTab===k?'#eff6ff':'#fff',color:upgradeTab===k?'#246BEB':'#64748b',fontWeight:700,fontSize:14,cursor:'pointer'}}>{label}</button>
               ))}
             </div>
@@ -2566,7 +2566,7 @@ export default function App() {
               </p>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:14}}>
                 {CHARGE_TIERS.map(c=>(
-                  <div key={c.key} style={{border:'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:10}}>
+                  <div key={c.key} style={{border:c.recommended?'2px solid #246BEB':'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:10}}>
                     <div style={{fontWeight:900,fontSize:22,color:'#0f172a'}}>{c.amount.toLocaleString()}원</div>
                     <div style={{fontSize:14,fontWeight:700,color:'#246BEB'}}>{c.calls} 도달(3분 통화 기준)</div>
                     <div style={{fontSize:13,color:'#475467',lineHeight:1.5,flex:1}}>{c.usage}</div>
@@ -2585,7 +2585,7 @@ export default function App() {
               </p>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(190px, 1fr))',gap:14}}>
                 {UPGRADE_PLANS.map(p=>(
-                  <div key={p.key} style={{border:'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:12}}>
+                  <div key={p.key} style={{border:p.recommended?'2px solid #246BEB':'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:12}}>
                     <div style={{fontWeight:800,fontSize:16,color:'#0f172a'}}>{p.name}</div>
                     <div><span style={{fontWeight:900,fontSize:22,color:'#0f172a'}}>{p.price}</span><span style={{fontSize:13,color:'#94a3b8',marginLeft:4}}>/{p.unit}</span></div>
                     <ul style={{margin:0,padding:0,listStyle:'none',display:'flex',flexDirection:'column',gap:6,flex:1}}>
