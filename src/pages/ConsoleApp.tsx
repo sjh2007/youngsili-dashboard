@@ -697,9 +697,10 @@ export default function ConsoleApp() {
     if (!window.confirm(`"${elder.name || elder.phone}" 어르신을 "${targetOrgId.trim()}"로 이관합니다. 계속할까요?`)) return;
     setElderBusy(elder.phone);
     try {
-      const r = await authFetch(`${SERVER_URL}/elders/save?org=${encodeURIComponent(targetOrgId.trim())}`, {
+      // 콘솔 전용 이관 액션(orgId만 변경) — CS 담당자도 이걸로만 이관 가능(범용 upsert는 차단됨)
+      const r = await authFetch(`${SERVER_URL}/console/elders/${encodeURIComponent(elder.phone)}/transfer`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: elder.phone, force: true }),
+        body: JSON.stringify({ orgId: targetOrgId.trim() }),
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) { notify('기관을 이관했습니다.', 'success'); fetchElders(); }
@@ -1289,7 +1290,9 @@ export default function ConsoleApp() {
                         </div>
                         <div style={{display:'flex',gap:6,flexShrink:0}}>
                           <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} onClick={()=>toggleNoticeActive(n)}>{n.active?'내리기':'재게시'}</button>
-                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px',color:'#c5221f'}} onClick={()=>deleteNoticeAction(n)}>삭제</button>
+                          {consoleRole!=='cs' && (
+                            <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px',color:'#c5221f'}} onClick={()=>deleteNoticeAction(n)}>삭제</button>
+                          )}
                         </div>
                       </div>
                     </div>
