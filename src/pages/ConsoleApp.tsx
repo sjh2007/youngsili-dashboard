@@ -84,6 +84,7 @@ const NAV = [
   { id: 'refunds', label: '환불' },
   { id: 'orgs', label: '기관 관리' },
   { id: 'audit', label: '감사 로그' },
+  { id: 'test', label: '기능 테스트' },
 ] as const;
 type PageId = typeof NAV[number]['id'];
 
@@ -121,6 +122,14 @@ export default function ConsoleApp() {
   const [refundPage, setRefundPage] = useState(1);
   const [refundLoading, setRefundLoading] = useState(false);
   const [refundBusy, setRefundBusy] = useState('');
+  const [testOrgId, setTestOrgId] = useState('');
+  const [testLog, setTestLog] = useState<string[]>([]);
+  const [testAmount, setTestAmount] = useState('300000');
+  const [testPayMethod, setTestPayMethod] = useState('CARD');
+  const [testPlanKey, setTestPlanKey] = useState('basic');
+  const [testRefundPaymentId, setTestRefundPaymentId] = useState('');
+  const [testRefundReason, setTestRefundReason] = useState('테스트 환불 요청');
+  const [testBusy, setTestBusy] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
   const [authCheckError, setAuthCheckError] = useState('');   // 네트워크/CORS 등 판정 자체가 실패한 경우 — "권한 없음"과 구분해야 함
   const [authCheckRetry, setAuthCheckRetry] = useState(0);
@@ -271,6 +280,88 @@ export default function ConsoleApp() {
     } catch { notify('네트워크 오류 — 환불 실패'); }
     finally { setRefundBusy(''); }
   };
+  const doRejectRefund = async (payment: any) => {
+    if (!window.confirm(`"${payment.orgId}" 기관의 환불 요청을 거절할까요? (실제 환불은 일어나지 않습니다)`)) return;
+    setRefundBusy(payment.id);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/payments/${payment.id}/refund-request/reject`, { method:'POST' });
+      if (r.ok) { notify('환불 요청을 거절했습니다.', 'success'); fetchRefundable(); }
+      else notify('거절 처리 실패');
+    } catch { notify('네트워크 오류 — 거절 처리 실패'); }
+    finally { setRefundBusy(''); }
+  };
+
+  // ── 기능 테스트(총괄 관리자 전용) — orgId를 직접 지정해 실제 결제 플로우를 눌러본다 ──
+  const logTest = (line: string) => setTestLog(prev => [...prev.slice(-30), `${new Date().toLocaleTimeString()} ${line}`]);
+
+  const testTopupFlow = async () => {
+    if (!testOrgId) { notify('먼저 대상 기관을 선택하세요'); return; }
+    const amount = Number(testAmount);
+    if (!Number.isInteger(amount) || amount < 10000) { notify('10,000원 이상의 정수를 입력하세요'); return; }
+    setTestBusy('topup');
+    logTest(`충전 테스트 시작 — ${testOrgId}, ${amount.toLocaleString()}원, ${testPayMethod}`);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/test/topup`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orgId: testOrgId, amount, payMethod: testPayMethod }) });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { logTest(`❌ 요청 생성 실패: ${errMsg(d,'실패')}`); return; }
+      logTest(`✅ 결제 요청 생성됨(paymentId=${d.paymentId}) — PortOne 결제창 호출...`);
+
+      const { requestPayment } = await import('@portone/browser-sdk/v2');
+      const response = await requestPayment({
+        storeId: d.storeId, channelKey: d.channelKey, paymentId: d.paymentId, orderName: d.orderName,
+        totalAmount: d.amount, currency: 'KRW', payMethod: testPayMethod as any,
+        customer: { email: authUser.email, fullName: '테스트' },
+        ...(testPayMethod === 'VIRTUAL_ACCOUNT' ? { virtualAccount: { accountExpiry: { validHours: 24 } } } : {}),
+      });
+      if (response?.code !== undefined) { logTest(`❌ 결제 실패: ${response.message || response.code}`); return; }
+      logTest(`✅ 결제창 완료(paymentId=${d.paymentId}) — 웹훅으로 크레딧 반영은 잠시 후 확인해 주세요`);
+      notify('충전 테스트 완료', 'success');
+    } catch (e:any) { logTest(`❌ 오류: ${e?.message || e}`); }
+    finally { setTestBusy(''); }
+  };
+
+  const testSubscribeFlow = async () => {
+    if (!testOrgId) { notify('먼저 대상 기관을 선택하세요'); return; }
+    setTestBusy('subscribe');
+    logTest(`정액제 테스트 시작 — ${testOrgId}, ${testPlanKey}`);
+    try {
+      const regRes = await authFetch(`${SERVER_URL}/console/test/subscribe/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orgId: testOrgId, planKey: testPlanKey }) });
+      const reg = await regRes.json().catch(()=>({}));
+      if (!regRes.ok) { logTest(`❌ 빌링키 발급 요청 실패: ${errMsg(reg,'실패')}`); return; }
+      logTest(`✅ 빌링키 발급 요청 생성됨(issueId=${reg.issueId}, ${reg.amount.toLocaleString()}원) — 카드 등록창 호출...`);
+
+      const { requestIssueBillingKey } = await import('@portone/browser-sdk/v2');
+      const response = await requestIssueBillingKey({
+        storeId: reg.storeId, channelKey: reg.channelKey, billingKeyMethod: 'CARD',
+        issueId: reg.issueId, issueName: reg.issueName,
+        customer: { email: authUser.email, fullName: '테스트', phoneNumber: '01000000000' },
+      });
+      if (response?.code !== undefined) { logTest(`❌ 카드 등록 실패: ${response.message || response.code}`); return; }
+      logTest(`✅ 카드 등록 완료(billingKey=${response.billingKey.slice(0,12)}...) — 첫 결제 승인 요청...`);
+
+      const confirmRes = await authFetch(`${SERVER_URL}/console/test/subscribe/confirm`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orgId: testOrgId, issueId: reg.issueId, billingKey: response.billingKey }) });
+      const confirm = await confirmRes.json().catch(()=>({}));
+      if (!confirmRes.ok) { logTest(`❌ 첫 결제 승인 실패: ${errMsg(confirm,'실패')}`); return; }
+      logTest(`✅ 첫 결제 승인 완료(${confirm.amount?.toLocaleString()}원) — 자동결제 등록됨`);
+      notify('정액제 테스트 완료', 'success');
+    } catch (e:any) { logTest(`❌ 오류: ${e?.message || e}`); }
+    finally { setTestBusy(''); }
+  };
+
+  const testRefundRequestFlow = async () => {
+    if (!testOrgId) { notify('먼저 대상 기관을 선택하세요'); return; }
+    if (!testRefundPaymentId.trim()) { notify('테스트할 paymentId를 입력하세요'); return; }
+    setTestBusy('refund');
+    logTest(`환불 요청 테스트 — ${testOrgId}, paymentId=${testRefundPaymentId}`);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/test/refund-request`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orgId: testOrgId, paymentId: testRefundPaymentId.trim(), reason: testRefundReason }) });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { logTest(`❌ 환불 요청 실패: ${errMsg(d,'실패')}`); return; }
+      logTest(`✅ 환불 요청 접수됨(status=${d.status}) — "환불" 메뉴에서 확인 가능`);
+      notify('환불 요청 테스트 완료', 'success');
+    } catch (e:any) { logTest(`❌ 오류: ${e?.message || e}`); }
+    finally { setTestBusy(''); }
+  };
 
   useEffect(() => {
     if (authorized !== true) return;
@@ -278,6 +369,7 @@ export default function ConsoleApp() {
     if (page === 'calls') fetchHistory();
     if (page === 'subscriptions') fetchSubs();
     if (page === 'orgs') fetchOrgs();
+    if (page === 'test' && orgs.length === 0) fetchOrgs();
     if (page === 'audit') fetchAuditLogs();
     if (page === 'payments') fetchPayments();
     if (page === 'refunds') fetchRefundable();
@@ -472,24 +564,33 @@ export default function ConsoleApp() {
               <div className="section-title" style={{marginBottom:0}}>환불 ({refundable.length}건)</div>
               <button className={`btn-download ${refundLoading?'btn-calling':''}`} onClick={fetchRefundable} disabled={refundLoading}>{refundLoading?'조회 중...':'새로고침'}</button>
             </div>
-            <div style={{fontSize:12,color:'#94a3b8',marginBottom:14}}>완료(paid)된 크레딧 충전 건만 대상 — 정액제 결제는 플랜 상태가 얽혀 있어 여기서 환불할 수 없습니다. 환불하면 포트원 결제취소 + 해당 기관 크레딧 회수가 함께 일어납니다(되돌릴 수 없음).</div>
+            <div style={{fontSize:12,color:'#94a3b8',marginBottom:14}}>완료(paid)된 크레딧 충전 건만 대상 — 정액제 결제는 플랜 상태가 얽혀 있어 여기서 환불할 수 없습니다. 환불하면 포트원 결제취소 + 해당 기관 크레딧 회수가 함께 일어납니다(되돌릴 수 없음). 기관이 직접 요청한 건은 "환불 요청됨"으로 표시됩니다(요청 없이도 직접 환불 가능).</div>
             {refundable.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{refundLoading?'불러오는 중...':'환불 가능한 결제가 없습니다'}</div> : (
               <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
                   <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
-                    <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>종류</th>
-                    <th style={{padding:'8px 10px'}}>금액</th><th style={{padding:'8px 10px'}}></th>
+                    <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>금액</th>
+                    <th style={{padding:'8px 10px'}}>요청 상태</th><th style={{padding:'8px 10px'}}>사유</th><th style={{padding:'8px 10px'}}></th>
                   </tr></thead>
-                  <tbody>{refundable.slice((refundPage-1)*PAGE_SIZE, refundPage*PAGE_SIZE).map((p:any) => (
+                  <tbody>{[...refundable].sort((a:any,b:any)=>(b.refundRequestStatus==='pending'?1:0)-(a.refundRequestStatus==='pending'?1:0))
+                    .slice((refundPage-1)*PAGE_SIZE, refundPage*PAGE_SIZE).map((p:any) => (
                     <tr key={p.id} style={{borderBottom:'1px solid #f1f3f4'}}>
                       <td style={{padding:'10px',color:'#5f6368'}}>{p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '-'}</td>
                       <td style={{padding:'10px'}}>{p.orgId}</td>
-                      <td style={{padding:'10px'}}>크레딧 충전</td>
                       <td style={{padding:'10px',fontWeight:700}}>{p.amount.toLocaleString()}원</td>
                       <td style={{padding:'10px'}}>
+                        {p.refundRequestStatus==='pending' ? <span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:'#fff8e1',color:'#754d00'}}>환불 요청됨</span>
+                          : p.refundRequestStatus==='rejected' ? <span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:'#f1f3f4',color:'#5f6368'}}>요청 거절됨</span>
+                          : <span style={{color:'#94a3b8',fontSize:12}}>-</span>}
+                      </td>
+                      <td style={{padding:'10px',color:'#5f6368',fontSize:12}}>{p.refundRequestReason || '-'}</td>
+                      <td style={{padding:'10px',display:'flex',gap:6}}>
                         <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:'#c5221f'}} disabled={refundBusy===p.id} onClick={()=>doRefund(p)}>
                           {refundBusy===p.id ? '처리 중...' : '환불'}
                         </button>
+                        {p.refundRequestStatus==='pending' && (
+                          <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px'}} disabled={refundBusy===p.id} onClick={()=>doRejectRefund(p)}>거절</button>
+                        )}
                       </td>
                     </tr>
                   ))}</tbody>
@@ -557,6 +658,62 @@ export default function ConsoleApp() {
               </div>
             )}
           </section>
+        )}
+
+        {page === 'test' && (
+          <div className="fade-in">
+            <section className="section" style={{marginBottom:16}}>
+              <div className="section-title" style={{marginBottom:10}}>대상 기관</div>
+              <select className="form-input" style={{maxWidth:360}} value={testOrgId} onChange={e=>setTestOrgId(e.target.value)}>
+                <option value="">기관을 선택하세요</option>
+                {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
+              </select>
+              <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>총괄 관리자 계정 자체는 소속 기관이 없어서(orgId='*'), 아래 테스트는 여기서 고른 기관을 대상으로 실행됩니다 — 실제 결제(카드/계좌이체 등)가 나갑니다, 테스트 채널인지 확인 후 진행하세요.</div>
+            </section>
+
+            <section className="section" style={{marginBottom:16}}>
+              <div className="section-title" style={{marginBottom:10}}>크레딧 충전 테스트</div>
+              <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                <input className="form-input" style={{width:160,margin:0}} type="number" min={10000} step={1000} value={testAmount} onChange={e=>setTestAmount(e.target.value)} placeholder="금액" />
+                <select className="form-input" style={{width:200,margin:0}} value={testPayMethod} onChange={e=>setTestPayMethod(e.target.value)}>
+                  <option value="CARD">카드</option>
+                  <option value="TRANSFER">실시간 계좌이체</option>
+                  <option value="VIRTUAL_ACCOUNT">무통장입금</option>
+                  <option value="EASY_PAY">카카오페이</option>
+                </select>
+                <button className="btn-primary" disabled={testBusy==='topup'} onClick={testTopupFlow}>{testBusy==='topup'?'진행 중...':'테스트 결제'}</button>
+              </div>
+            </section>
+
+            <section className="section" style={{marginBottom:16}}>
+              <div className="section-title" style={{marginBottom:10}}>정액제 신청 테스트</div>
+              <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                <select className="form-input" style={{width:200,margin:0}} value={testPlanKey} onChange={e=>setTestPlanKey(e.target.value)}>
+                  <option value="basic">베이직</option>
+                  <option value="standard">스탠다드</option>
+                  <option value="premium">프리미엄</option>
+                </select>
+                <button className="btn-primary" disabled={testBusy==='subscribe'} onClick={testSubscribeFlow}>{testBusy==='subscribe'?'진행 중...':'테스트 등록'}</button>
+              </div>
+              <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>선택한 기관에 등록된 어르신 수가 있어야 금액 계산이 됩니다.</div>
+            </section>
+
+            <section className="section" style={{marginBottom:16}}>
+              <div className="section-title" style={{marginBottom:10}}>환불 요청 테스트</div>
+              <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                <input className="form-input" style={{width:260,margin:0}} value={testRefundPaymentId} onChange={e=>setTestRefundPaymentId(e.target.value)} placeholder="paymentId (결제 내역 메뉴에서 확인)" />
+                <input className="form-input" style={{width:220,margin:0}} value={testRefundReason} onChange={e=>setTestRefundReason(e.target.value)} placeholder="환불 사유" />
+                <button className="btn-primary" disabled={testBusy==='refund'} onClick={testRefundRequestFlow}>{testBusy==='refund'?'진행 중...':'요청 테스트'}</button>
+              </div>
+            </section>
+
+            <section className="section">
+              <div className="section-title" style={{marginBottom:10}}>실행 로그</div>
+              <div style={{background:'#0f172a',color:'#e2e8f0',borderRadius:10,padding:14,minHeight:120,maxHeight:300,overflowY:'auto',fontFamily:'monospace',fontSize:12}}>
+                {testLog.length === 0 ? <span style={{color:'#64748b'}}>아직 실행한 테스트가 없습니다</span> : testLog.map((l,i)=>(<div key={i}>{l}</div>))}
+              </div>
+            </section>
+          </div>
         )}
       </div>
     </div>

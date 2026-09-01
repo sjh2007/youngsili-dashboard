@@ -34,6 +34,7 @@ const normalizeRegion = (region) => {
 // 콘솔 통화 이력은 최대 500건까지 한 번에 내려오므로 테이블 페이지네이션 기준 페이지당 건수
 const HISTORY_PAGE_SIZE = 25;
 // 포트원 Bank 코드 → 한글 은행명(주요 시중은행만, 나머지는 코드 그대로 표시)
+const REFUND_REASON_PRESETS = ['단순 변심', '중복 결제', '서비스 이용 안 함', '결제 오류(금액·수단 착오)', '요금제 변경으로 인한 환불', '직접 입력'];
 const PAY_METHOD_OPTIONS = [
   { key:'CARD', label:'카드', desc:'신용·체크카드', icon: CreditCard },
   { key:'TRANSFER', label:'실시간 계좌이체', desc:'즉시 출금·완료', icon: Landmark },
@@ -289,6 +290,12 @@ export default function App() {
   const [customAmount, setCustomAmount] = useState('');
   const [topupPayMethod, setTopupPayMethod] = useState('CARD'); // 'CARD'(이니시스) | 'TRANSFER'(계좌이체) | 'VIRTUAL_ACCOUNT'(무통장입금) — 카카오페이는 제외(2026-09-01)
   const [pendingTopup, setPendingTopup] = useState(null); // {amount} — "신청" 클릭 시 결제수단 선택 모달을 띄우기 위한 대기 상태
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
+  const [refundTarget, setRefundTarget] = useState(null); // {id, amount} — 환불 요청 사유 선택 모달
+  const [refundReasonPreset, setRefundReasonPreset] = useState(REFUND_REASON_PRESETS[0]);
+  const [refundReasonCustom, setRefundReasonCustom] = useState('');
+  const [refundRequestBusy, setRefundRequestBusy] = useState(false);
   const [virtualAccountInfo, setVirtualAccountInfo] = useState(null); // {amount, bank, accountNumber, remitteeName, expiredAt} — 계좌 발급 완료 안내 모달
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
@@ -631,6 +638,31 @@ export default function App() {
     } finally {
       setTopupBusy(false);
     }
+  };
+  // 결제 내역 — 업그레이드 모달의 "결제 내역" 탭에서 조회
+  const fetchPaymentHistory = async () => {
+    setPaymentHistoryLoading(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/payments`);
+      const d = await r.json().catch(()=>({}));
+      setPaymentHistory(Array.isArray(d?.payments) ? d.payments : []);
+    } catch { notify('결제 내역 조회 실패'); }
+    finally { setPaymentHistoryLoading(false); }
+  };
+  // 환불 요청 — 실제 환불은 총괄 관리자가 콘솔에서 승인해야 실행된다(여기선 요청만 남긴다)
+  const submitRefundRequest = async () => {
+    const reason = refundReasonPreset === '직접 입력' ? refundReasonCustom.trim() : refundReasonPreset;
+    if (!reason) { notify('환불 사유를 입력해 주세요'); return; }
+    setRefundRequestBusy(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/payment/${refundTarget.id}/refund-request`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason }),
+      });
+      const d = await r.json().catch(()=>({}));
+      if (r.ok) { notify('환불 요청이 접수됐습니다. 담당자 확인 후 처리됩니다.', 'success'); setRefundTarget(null); fetchPaymentHistory(); }
+      else notify(errMsg(d, '환불 요청 실패'));
+    } catch { notify('네트워크 오류 — 환불 요청 실패'); }
+    finally { setRefundRequestBusy(false); }
   };
   // 정액제 자동결제(빌링키) 현재 상태 — 다음 청구일·최근 오류 등. 업그레이드 모달을 열 때/결제 확정 후 갱신한다.
   const fetchSubscriptionStatus = async () => {
@@ -2816,8 +2848,8 @@ export default function App() {
               <button onClick={()=>setShowUpgradeModal(false)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
             </div>
             <div style={{display:'flex',gap:6,marginBottom:18}}>
-              {[['metered','정량제'],['flat','정액제']].map(([k,label])=>(
-                <button key={k} onClick={()=>setUpgradeTab(k)} style={{padding:'8px 16px',borderRadius:10,border:'1px solid '+(upgradeTab===k?'#246BEB':'#e2e8f0'),background:upgradeTab===k?'#eff6ff':'#fff',color:upgradeTab===k?'#246BEB':'#64748b',fontWeight:700,fontSize:14,cursor:'pointer'}}>{label}</button>
+              {[['metered','정량제'],['flat','정액제'],['history','결제 내역']].map(([k,label])=>(
+                <button key={k} onClick={()=>{ setUpgradeTab(k); if (k==='history') fetchPaymentHistory(); }} style={{padding:'8px 16px',borderRadius:10,border:'1px solid '+(upgradeTab===k?'#246BEB':'#e2e8f0'),background:upgradeTab===k?'#eff6ff':'#fff',color:upgradeTab===k?'#246BEB':'#64748b',fontWeight:700,fontSize:14,cursor:'pointer'}}>{label}</button>
               ))}
             </div>
 
@@ -2858,7 +2890,7 @@ export default function App() {
                 >직접 충전</button>
               </div>
               <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정확한 채널 배정·이용 패턴별 견적은 담당 매니저에게 문의해 주세요.</p>
-            </>) : (<>
+            </>) : upgradeTab==='flat' ? (<>
               <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
                 예산을 매월 고정해야 하는 기관을 위한 인·월 정액 요금제입니다(앱 설치 방식 기준, VAT 별도).
               </p>
@@ -2909,7 +2941,83 @@ export default function App() {
                 })}
               </div>
               <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정액제 세부 조건은 담당 매니저에게 문의해 주세요.</p>
+            </>) : (<>
+              <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
+                크레딧 충전·정액제 결제 내역입니다. 완료된 크레딧 충전 건은 환불을 요청할 수 있습니다(실제 처리는 담당자 확인 후 진행됩니다).
+              </p>
+              {paymentHistoryLoading ? (
+                <div style={{color:'#94a3b8',fontSize:14,padding:'20px 4px'}}>불러오는 중...</div>
+              ) : paymentHistory.length === 0 ? (
+                <div style={{color:'#94a3b8',fontSize:14,padding:'20px 4px'}}>결제 내역이 없습니다</div>
+              ) : (
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                    <thead><tr style={{textAlign:'left',color:'#94a3b8',borderBottom:'1px solid #e2e8f0'}}>
+                      <th style={{padding:'8px 10px',fontWeight:600}}>시각</th><th style={{padding:'8px 10px',fontWeight:600}}>종류</th>
+                      <th style={{padding:'8px 10px',fontWeight:600}}>금액</th><th style={{padding:'8px 10px',fontWeight:600}}>상태</th><th style={{padding:'8px 10px',fontWeight:600}}></th>
+                    </tr></thead>
+                    <tbody>{paymentHistory.map((p:any)=>{
+                      const canRequest = p.status==='paid' && p.type!=='subscription' && !p.refundRequestStatus;
+                      return (
+                      <tr key={p.id} style={{borderBottom:'1px solid #f1f5f9'}}>
+                        <td style={{padding:'10px',color:'#94a3b8'}}>{p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '-'}</td>
+                        <td style={{padding:'10px'}}>{p.type==='subscription' ? `정액제${p.planKey?`(${p.planKey})`:''}` : '크레딧 충전'}</td>
+                        <td style={{padding:'10px',fontWeight:700}}>{p.amount.toLocaleString()}원</td>
+                        <td style={{padding:'10px'}}>
+                          {p.status==='cancelled' ? <span style={{color:'#94a3b8'}}>환불됨</span>
+                            : p.refundRequestStatus==='pending' ? <span style={{color:'#754d00'}}>환불 요청됨</span>
+                            : p.refundRequestStatus==='rejected' ? <span style={{color:'#c5221f'}}>환불 거절됨</span>
+                            : p.status==='paid' ? <span style={{color:'#1e8e3e'}}>완료</span>
+                            : <span style={{color:'#94a3b8'}}>{p.status}</span>}
+                        </td>
+                        <td style={{padding:'10px'}}>
+                          {canRequest && (
+                            <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px'}}
+                              onClick={()=>{ setRefundTarget({id:p.id, amount:p.amount}); setRefundReasonPreset(REFUND_REASON_PRESETS[0]); setRefundReasonCustom(''); }}
+                            >환불 요청</button>
+                          )}
+                        </td>
+                      </tr>
+                      );
+                    })}</tbody>
+                  </table>
+                </div>
+              )}
             </>)}
+          </div>
+        </div>
+      )}
+      {/* 환불 요청 — 프리셋 사유 5개 + 직접 입력. 실제 환불은 담당자 승인 후 처리됨(요청만 접수) */}
+      {refundTarget !== null && (
+        <div className="modal-overlay" onClick={()=>!refundRequestBusy && setRefundTarget(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420,width:'92%'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
+              <div className="modal-title" style={{textAlign:'left',marginBottom:0}}>환불 요청</div>
+              <button onClick={()=>setRefundTarget(null)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
+            </div>
+            <div style={{fontSize:14,color:'#64748b',marginBottom:18}}>
+              <b style={{color:'#0f172a',fontSize:20,fontWeight:900}}>{refundTarget.amount.toLocaleString()}원</b> 결제 건 환불 요청
+            </div>
+            <div style={{fontSize:13,fontWeight:700,color:'#475467',marginBottom:8}}>환불 사유</div>
+            <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:14}}>
+              {REFUND_REASON_PRESETS.map(reason=>(
+                <button key={reason} onClick={()=>setRefundReasonPreset(reason)}
+                  style={{textAlign:'left',padding:'10px 14px',borderRadius:10,cursor:'pointer',fontSize:14,fontWeight:refundReasonPreset===reason?700:500,
+                    border:'2px solid '+(refundReasonPreset===reason?'#246BEB':'#e2e8f0'),background:refundReasonPreset===reason?'#eff6ff':'#fff',color:refundReasonPreset===reason?'#246BEB':'#0f172a'}}
+                >{reason}</button>
+              ))}
+            </div>
+            {refundReasonPreset==='직접 입력' && (
+              <textarea className="form-input" style={{width:'100%',minHeight:70,marginBottom:14,boxSizing:'border-box'}} placeholder="환불 사유를 입력해 주세요"
+                value={refundReasonCustom} onChange={e=>setRefundReasonCustom(e.target.value)} />
+            )}
+            <div style={{fontSize:12,color:'#94a3b8',marginBottom:18}}>요청 후 담당자 확인을 거쳐 실제 환불·크레딧 회수가 진행됩니다.</div>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
+              <button className="btn-primary" style={{width:'100%'}} disabled={refundRequestBusy} onClick={submitRefundRequest}>
+                {refundRequestBusy ? '요청 중...' : '환불 요청 보내기'}
+              </button>
+              <button style={{background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:14,fontWeight:600,padding:4}} disabled={refundRequestBusy} onClick={()=>setRefundTarget(null)}>취소</button>
+            </div>
           </div>
         </div>
       )}
