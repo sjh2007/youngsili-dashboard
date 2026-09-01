@@ -2933,7 +2933,7 @@ export default function App() {
                 return (
                   <button key={m.key} onClick={()=>setTopupPayMethod(m.key)}
                     style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,padding:'14px',borderRadius:12,cursor:'pointer',textAlign:'left',
-                      border:selected?'2px solid #246BEB':'1px solid #e2e8f0',background:selected?'#eff6ff':'#fff'}}>
+                      border:'2px solid '+(selected?'#246BEB':'#e2e8f0'),background:selected?'#eff6ff':'#fff'}}>
                     <Icon size={22} color={selected?'#246BEB':'#64748b'}/>
                     <div style={{fontSize:14,fontWeight:800,color:selected?'#246BEB':'#0f172a'}}>{m.label}</div>
                     <div style={{fontSize:12,color:'#94a3b8'}}>{m.desc}</div>
