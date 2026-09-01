@@ -130,6 +130,8 @@ export default function ConsoleApp() {
   const [testRefundPaymentId, setTestRefundPaymentId] = useState('');
   const [testRefundReason, setTestRefundReason] = useState('테스트 환불 요청');
   const [testBusy, setTestBusy] = useState('');
+  const [testCallTarget, setTestCallTarget] = useState<any>(null); // {configured, phone, name, orgId}
+  const [testPublicData, setTestPublicData] = useState<any[]>([]); // ComponentHealth[]
   const [auditLoading, setAuditLoading] = useState(false);
   const [authCheckError, setAuthCheckError] = useState('');   // 네트워크/CORS 등 판정 자체가 실패한 경우 — "권한 없음"과 구분해야 함
   const [authCheckRetry, setAuthCheckRetry] = useState(0);
@@ -363,8 +365,44 @@ export default function ConsoleApp() {
     finally { setTestBusy(''); }
   };
 
+  const fetchTestCallTarget = async () => {
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/test/call-target`);
+      setTestCallTarget(await r.json().catch(()=>null));
+    } catch { setTestCallTarget(null); }
+  };
+  const testCallFlow = async (kind: 'checkin' | 'alert') => {
+    if (!testCallTarget?.configured) { notify('TEST_ELDER_PHONE이 설정돼 있지 않습니다(서버 .env)'); return; }
+    if (!window.confirm(`${testCallTarget.name || '테스트 어르신'}(${testCallTarget.phone})에게 ${kind==='alert'?'경보':'안부확인'} 테스트 전화를 겁니다. 계속할까요?`)) return;
+    setTestBusy(`call-${kind}`);
+    logTest(`통화 발신 테스트 — ${kind==='alert'?'경보':'안부확인'} (${testCallTarget.phone})`);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/test/call`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ kind }) });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { logTest(`❌ 발신 요청 실패: ${errMsg(d,'실패')}`); return; }
+      logTest(`✅ 발신 결과: ${JSON.stringify(d)}`);
+      notify('통화 발신 테스트 요청 완료', 'success');
+    } catch (e:any) { logTest(`❌ 오류: ${e?.message || e}`); }
+    finally { setTestBusy(''); }
+  };
+
+  const testPublicDataFlow = async () => {
+    if (!testOrgId) { notify('먼저 대상 기관을 선택하세요'); return; }
+    setTestBusy('public-data');
+    logTest(`공공데이터 연동 상태 조회 — ${testOrgId}`);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/test/public-data?orgId=${encodeURIComponent(testOrgId)}`);
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { logTest(`❌ 조회 실패: ${errMsg(d,'실패')}`); return; }
+      setTestPublicData(Array.isArray(d.components) ? d.components : []);
+      logTest(`✅ 조회 완료 — ${d.components?.length ?? 0}개 항목`);
+    } catch (e:any) { logTest(`❌ 오류: ${e?.message || e}`); }
+    finally { setTestBusy(''); }
+  };
+
   useEffect(() => {
     if (authorized !== true) return;
+    if (page === 'test') fetchTestCallTarget();
     if (page === 'health') fetchHealth();
     if (page === 'calls') fetchHistory();
     if (page === 'subscriptions') fetchSubs();
@@ -705,6 +743,44 @@ export default function ConsoleApp() {
                 <input className="form-input" style={{width:220,margin:0}} value={testRefundReason} onChange={e=>setTestRefundReason(e.target.value)} placeholder="환불 사유" />
                 <button className="btn-primary" disabled={testBusy==='refund'} onClick={testRefundRequestFlow}>{testBusy==='refund'?'진행 중...':'요청 테스트'}</button>
               </div>
+            </section>
+
+            <section className="section" style={{marginBottom:16}}>
+              <div className="section-title" style={{marginBottom:10}}>통화 발신 테스트</div>
+              {testCallTarget === null ? (
+                <div style={{color:'#94a3b8',fontSize:14}}>불러오는 중...</div>
+              ) : !testCallTarget.configured ? (
+                <div style={{color:'#c5221f',fontSize:13}}>TEST_ELDER_PHONE이 서버에 설정돼 있지 않습니다 — .env에 테스트 전용 어르신 번호를 등록해야 이 기능을 쓸 수 있습니다(실제 어르신에게 오발신되지 않도록 서버가 이 번호로만 하드 제한합니다).</div>
+              ) : (
+                <>
+                  <div style={{fontSize:13,color:'#5f6368',marginBottom:10}}>
+                    테스트 대상: <b style={{color:'#0f172a'}}>{testCallTarget.name || '(이름 없음)'}</b> ({testCallTarget.phone}) · {testCallTarget.orgId || '소속 기관 확인 불가'}
+                  </div>
+                  <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                    <button className="btn-primary" disabled={!!testBusy} onClick={()=>testCallFlow('checkin')}>{testBusy==='call-checkin'?'발신 중...':'안부확인 테스트 발신'}</button>
+                    <button className="btn-secondary" disabled={!!testBusy} onClick={()=>testCallFlow('alert')}>{testBusy==='call-alert'?'발신 중...':'경보 테스트 발신'}</button>
+                  </div>
+                </>
+              )}
+            </section>
+
+            <section className="section" style={{marginBottom:16}}>
+              <div className="section-title" style={{marginBottom:10}}>공공데이터 연동 상태</div>
+              <div style={{display:'flex',gap:10,marginBottom:14}}>
+                <button className="btn-primary" disabled={testBusy==='public-data'} onClick={testPublicDataFlow}>{testBusy==='public-data'?'조회 중...':'선택한 기관 기준으로 조회'}</button>
+              </div>
+              {testPublicData.length > 0 && (
+                <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+                  {testPublicData.map((c:any) => (
+                    <div key={c.name} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'12px 16px',minWidth:160}}>
+                      <div style={{fontSize:13,color:'#64748b'}}>{c.name}</div>
+                      <div style={{fontSize:16,fontWeight:800,color:c.ok?'#1e8e3e':'#c5221f',marginTop:4}}>{c.ok?'정상':'오류'}</div>
+                      {c.latencyMs != null && <div style={{fontSize:12,color:'#94a3b8'}}>{c.latencyMs}ms</div>}
+                      {c.detail && <div style={{fontSize:12,color:c.ok?'#5f6368':'#c5221f',marginTop:2}}>{c.detail}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
 
             <section className="section">
