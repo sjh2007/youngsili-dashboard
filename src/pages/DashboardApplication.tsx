@@ -14,7 +14,8 @@ import { LayoutGrid, Activity, Users, ShieldCheck, Phone, CalendarDays, MessageS
          PencilLine, FileText, BarChart3, Database, Building2, BookOpen, RotateCw,
          AlertCircle, AlertTriangle, CheckCircle2, ArrowLeft, ArrowRight, Plus,
          UserRound, UserRoundCheck, X, Search, Copy, LogOut, ChevronDown, List,
-         Sun, Snowflake, CloudRain, CloudSun, Wind, Flame, CircleCheck, Clock, Terminal } from 'lucide-react';
+         Sun, Snowflake, CloudRain, CloudSun, Wind, Flame, CircleCheck, Clock, Terminal,
+         CreditCard, Landmark, Banknote, Wallet } from 'lucide-react';
 
 // REACT_APP_SERVER_URL(.env.local)로 로컬 서버 테스트 가능 — 미설정 시 운영 서버
 const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', jumin:'', caregiver:'', caregiverPhone:'', assignedTo:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', careGroup:'', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
@@ -33,6 +34,12 @@ const normalizeRegion = (region) => {
 // 콘솔 통화 이력은 최대 500건까지 한 번에 내려오므로 테이블 페이지네이션 기준 페이지당 건수
 const HISTORY_PAGE_SIZE = 25;
 // 포트원 Bank 코드 → 한글 은행명(주요 시중은행만, 나머지는 코드 그대로 표시)
+const PAY_METHOD_OPTIONS = [
+  { key:'EASY_PAY', label:'카카오페이', desc:'간편결제', icon: Wallet },
+  { key:'CARD', label:'카드', desc:'신용·체크카드', icon: CreditCard },
+  { key:'TRANSFER', label:'실시간 계좌이체', desc:'즉시 출금·완료', icon: Landmark },
+  { key:'VIRTUAL_ACCOUNT', label:'무통장입금', desc:'계좌 발급 후 입금', icon: Banknote },
+];
 const BANK_LABELS = {
   KOOKMIN:'국민은행', SHINHAN:'신한은행', WOORI:'우리은행', HANA:'하나은행', IBK:'기업은행',
   NONGHYUP:'NH농협은행', LOCAL_NONGHYUP:'지역농축협', STANDARD_CHARTERED:'SC제일은행', CITI:'한국씨티은행',
@@ -282,6 +289,7 @@ export default function App() {
   const [subCancelBusy, setSubCancelBusy] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
   const [topupPayMethod, setTopupPayMethod] = useState('EASY_PAY'); // 'EASY_PAY'(카카오페이) | 'CARD'(이니시스) | 'VIRTUAL_ACCOUNT'(무통장입금)
+  const [pendingTopup, setPendingTopup] = useState(null); // {amount} — "신청" 클릭 시 결제수단 선택 모달을 띄우기 위한 대기 상태
   const [virtualAccountInfo, setVirtualAccountInfo] = useState(null); // {amount, bank, accountNumber, remitteeName, expiredAt} — 계좌 발급 완료 안내 모달
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
@@ -2819,16 +2827,6 @@ export default function App() {
                 발신 시도마다 <b>발신 기본료 40원</b> + 실제 연결된 통화에만 <b>통화 요금</b>이 충전액에서 차감됩니다.
                 발신이 없는 달은 차감도 청구도 없습니다(VAT 별도). 아래는 대표적인 충전 단위입니다 — 원하는 금액을 직접 입력해도 됩니다.
               </p>
-              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-                <span style={{fontSize:13,fontWeight:700,color:'#475467'}}>결제 수단</span>
-                <div style={{display:'flex',gap:6}}>
-                  {[['EASY_PAY','카카오페이'],['CARD','카드'],['TRANSFER','실시간 계좌이체'],['VIRTUAL_ACCOUNT','무통장입금']].map(([k,label])=>(
-                    <button key={k} onClick={()=>setTopupPayMethod(k)}
-                      style={{padding:'7px 14px',borderRadius:9,border:'1px solid '+(topupPayMethod===k?'#246BEB':'#e2e8f0'),background:topupPayMethod===k?'#eff6ff':'#fff',color:topupPayMethod===k?'#246BEB':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}
-                    >{label}</button>
-                  ))}
-                </div>
-              </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:14}}>
                 {CHARGE_TIERS.map(c=>(
                   <div key={c.key} style={{border:c.recommended?'2px solid #246BEB':'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:10}}>
@@ -2838,9 +2836,8 @@ export default function App() {
                     <button
                       className="btn-primary"
                       style={{width:'100%'}}
-                      disabled={topupBusy}
-                      onClick={()=>startTopup(c.amount)}
-                    >{topupBusy?'처리 중...':'신청'}</button>
+                      onClick={()=>setPendingTopup({amount:c.amount})}
+                    >신청</button>
                   </div>
                 ))}
               </div>
@@ -2857,9 +2854,9 @@ export default function App() {
                 />
                 <button
                   className="btn-secondary"
-                  disabled={topupBusy || !customAmount || Number(customAmount) < 10000}
-                  onClick={()=>startTopup(Number(customAmount))}
-                >{topupBusy?'처리 중...':'직접 충전'}</button>
+                  disabled={!customAmount || Number(customAmount) < 10000}
+                  onClick={()=>setPendingTopup({amount:Number(customAmount)})}
+                >직접 충전</button>
               </div>
               <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정확한 채널 배정·이용 패턴별 견적은 담당 매니저에게 문의해 주세요.</p>
             </>) : (<>
@@ -2914,6 +2911,42 @@ export default function App() {
               </div>
               <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정액제 세부 조건은 담당 매니저에게 문의해 주세요.</p>
             </>)}
+          </div>
+        </div>
+      )}
+      {/* 결제수단 선택 — "신청"/"직접 충전" 클릭 시 여기서 수단을 고르고 "결제하기"를 눌러야
+          실제 결제창(PortOne.js)이 뜬다. 요금제 모달 위에 겹쳐서 뜬다. */}
+      {pendingTopup !== null && (
+        <div className="modal-overlay" onClick={()=>!topupBusy && setPendingTopup(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420,width:'92%'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
+              <div className="modal-title" style={{textAlign:'left',marginBottom:0}}>결제 수단 선택</div>
+              <button onClick={()=>setPendingTopup(null)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
+            </div>
+            <div style={{fontSize:14,color:'#64748b',marginBottom:18}}>
+              <b style={{color:'#0f172a',fontSize:20,fontWeight:900}}>{pendingTopup.amount.toLocaleString()}원</b> 충전
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:22}}>
+              {PAY_METHOD_OPTIONS.map(m=>{
+                const Icon = m.icon;
+                const selected = topupPayMethod===m.key;
+                return (
+                  <button key={m.key} onClick={()=>setTopupPayMethod(m.key)}
+                    style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,padding:'14px',borderRadius:12,cursor:'pointer',textAlign:'left',
+                      border:selected?'2px solid #246BEB':'1px solid #e2e8f0',background:selected?'#eff6ff':'#fff'}}>
+                    <Icon size={22} color={selected?'#246BEB':'#64748b'}/>
+                    <div style={{fontSize:14,fontWeight:800,color:selected?'#246BEB':'#0f172a'}}>{m.label}</div>
+                    <div style={{fontSize:12,color:'#94a3b8'}}>{m.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button className="btn-secondary" style={{flex:1}} disabled={topupBusy} onClick={()=>setPendingTopup(null)}>취소</button>
+              <button className="btn-primary" style={{flex:2}} disabled={topupBusy} onClick={async ()=>{ const amt = pendingTopup.amount; await startTopup(amt); setPendingTopup(null); }}>
+                {topupBusy ? '처리 중...' : '결제하기'}
+              </button>
+            </div>
           </div>
         </div>
       )}
