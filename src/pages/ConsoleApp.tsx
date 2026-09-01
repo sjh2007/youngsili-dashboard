@@ -117,6 +117,10 @@ export default function ConsoleApp() {
   const [paymentsPage, setPaymentsPage] = useState(1);
   const [paymentsOrg, setPaymentsOrg] = useState('');
   const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [refundable, setRefundable] = useState<any[]>([]);
+  const [refundPage, setRefundPage] = useState(1);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundBusy, setRefundBusy] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
   const [authCheckError, setAuthCheckError] = useState('');   // 네트워크/CORS 등 판정 자체가 실패한 경우 — "권한 없음"과 구분해야 함
   const [authCheckRetry, setAuthCheckRetry] = useState(0);
@@ -243,6 +247,31 @@ export default function ConsoleApp() {
     finally { setPaymentsLoading(false); }
   };
 
+  const fetchRefundable = async () => {
+    setRefundLoading(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/payments?status=paid`);
+      const d = await r.json();
+      setRefundable(Array.isArray(d?.payments) ? d.payments.filter((p:any)=>p.type !== 'subscription') : []);
+      setRefundPage(1);
+    } catch { notify('환불 대상 조회 실패'); }
+    finally { setRefundLoading(false); }
+  };
+  const doRefund = async (payment: any) => {
+    const reason = window.prompt(`"${payment.orgId}" 기관의 ${payment.amount.toLocaleString()}원 결제를 환불합니다.\n환불 사유를 입력하세요.`, '');
+    if (reason === null) return;
+    if (!reason.trim()) { notify('환불 사유를 입력해야 합니다'); return; }
+    if (!window.confirm(`${payment.amount.toLocaleString()}원을 환불하고 해당 기관의 크레딧을 회수합니다. 계속할까요?`)) return;
+    setRefundBusy(payment.id);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/payments/${payment.id}/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason: reason.trim() }) });
+      const d = await r.json().catch(()=>({}));
+      if (r.ok) { notify(`환불 완료: ${payment.amount.toLocaleString()}원`, 'success'); fetchRefundable(); }
+      else notify(errMsg(d, '환불 실패'));
+    } catch { notify('네트워크 오류 — 환불 실패'); }
+    finally { setRefundBusy(''); }
+  };
+
   useEffect(() => {
     if (authorized !== true) return;
     if (page === 'health') fetchHealth();
@@ -251,6 +280,7 @@ export default function ConsoleApp() {
     if (page === 'orgs') fetchOrgs();
     if (page === 'audit') fetchAuditLogs();
     if (page === 'payments') fetchPayments();
+    if (page === 'refunds') fetchRefundable();
   }, [page, authorized]); // eslint-disable-line
 
   if (!authChecked) return null;
@@ -438,16 +468,35 @@ export default function ConsoleApp() {
 
         {page === 'refunds' && (
           <section className="section fade-in">
-            <div className="section-title" style={{marginBottom:16}}>환불</div>
-            <div style={{textAlign:'center',padding:'40px 20px',color:'#64748b'}}>
-              <div style={{fontSize:36}}>🚧</div>
-              <div style={{fontSize:16,fontWeight:700,color:'#0f172a',marginTop:10}}>포트원 결제 취소 연동 후 제공</div>
-              <div style={{fontSize:13,marginTop:8,lineHeight:1.6}}>
-                환불 처리(포트원 결제취소 API)와 사유 기록이 여기 들어옵니다.<br/>
-                지금 당장 환불이 필요하면 <a href="https://admin.portone.io" target="_blank" rel="noreferrer" style={{color:'#246beb',fontWeight:700}}>포트원 관리자 콘솔</a>에서 직접 취소하고,
-                해당 기관의 크레딧 잔액은 위 "기관 관리" 메뉴에서 수동으로 맞춰주세요.
-              </div>
+            <div className="script-editor-header" style={{marginBottom:10}}>
+              <div className="section-title" style={{marginBottom:0}}>환불 ({refundable.length}건)</div>
+              <button className={`btn-download ${refundLoading?'btn-calling':''}`} onClick={fetchRefundable} disabled={refundLoading}>{refundLoading?'조회 중...':'새로고침'}</button>
             </div>
+            <div style={{fontSize:12,color:'#94a3b8',marginBottom:14}}>완료(paid)된 크레딧 충전 건만 대상 — 정액제 결제는 플랜 상태가 얽혀 있어 여기서 환불할 수 없습니다. 환불하면 포트원 결제취소 + 해당 기관 크레딧 회수가 함께 일어납니다(되돌릴 수 없음).</div>
+            {refundable.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{refundLoading?'불러오는 중...':'환불 가능한 결제가 없습니다'}</div> : (
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                  <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                    <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>종류</th>
+                    <th style={{padding:'8px 10px'}}>금액</th><th style={{padding:'8px 10px'}}></th>
+                  </tr></thead>
+                  <tbody>{refundable.slice((refundPage-1)*PAGE_SIZE, refundPage*PAGE_SIZE).map((p:any) => (
+                    <tr key={p.id} style={{borderBottom:'1px solid #f1f3f4'}}>
+                      <td style={{padding:'10px',color:'#5f6368'}}>{p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '-'}</td>
+                      <td style={{padding:'10px'}}>{p.orgId}</td>
+                      <td style={{padding:'10px'}}>크레딧 충전</td>
+                      <td style={{padding:'10px',fontWeight:700}}>{p.amount.toLocaleString()}원</td>
+                      <td style={{padding:'10px'}}>
+                        <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:'#c5221f'}} disabled={refundBusy===p.id} onClick={()=>doRefund(p)}>
+                          {refundBusy===p.id ? '처리 중...' : '환불'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+                <Pager page={refundPage} setPage={setRefundPage} total={refundable.length} />
+              </div>
+            )}
           </section>
         )}
 
