@@ -42,6 +42,7 @@ export const MeSchema = loose({
   orgId: z.string().optional(),
   role: z.string().optional(),
   name: z.string().optional(),
+  phone: z.string().optional(),
   orgName: z.string().optional(),
   orgCode: z.string().optional(),
   orgType: z.string().optional(),

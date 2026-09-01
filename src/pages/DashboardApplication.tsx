@@ -629,10 +629,14 @@ export default function App() {
       const response = await requestIssueBillingKey({
         storeId: reg.storeId,
         channelKey: reg.channelKey,
-        billingKeyMethod: 'EASY_PAY',
+        // 2026-09-01: 카카오페이(EASY_PAY) 채널은 빌링키 발급 자체를 지원하지 않았다(실측:
+        // PG_PROVIDER_ERROR "onetime order should have amount!") — 이제 이니시스 정기결제
+        // 채널로 바뀌었으므로(백엔드 channelKey도 함께 교체됨) CARD로 발급한다.
+        billingKeyMethod: 'CARD',
         issueId: reg.issueId,
         issueName: reg.issueName,
-        customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객' },
+        // 이니시스는 customer.phoneNumber가 필수(REQUIRED) — 없으면 issue-prepare 자체가 400.
+        customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || undefined },
       });
       if (response?.code !== undefined) { notify(`자동결제 등록 실패: ${response.message || response.code}`); return; }
 
@@ -2812,15 +2816,17 @@ export default function App() {
                     {isCurrent ? (
                       <div style={{width:'100%',textAlign:'center',fontSize:13,fontWeight:700,color:'#1e8e3e',background:'#e6f4ea',borderRadius:10,padding:'9px 0'}}>자동결제 중</div>
                     ) : (
-                      // 2026-08-31: 연결된 채널이 카카오페이 정기결제(빌링키) 승인이 안 된 상태라
-                      // startSubscription()(실제 자동결제 등록)을 호출하면 PG 오류가 그대로 사용자에게
-                      // 노출된다. 채널이 정기결제를 지원하게 되기 전까지는 안전하게 접수 안내로 되돌린다
-                      // — startSubscription/백엔드 빌링키 로직 자체는 그대로 남겨둔다(테스트 통과 상태).
+                      // 2026-09-01: 이니시스 정기결제 채널 연동으로 빌링키 발급이 가능해져
+                      // startSubscription() 실결제 흐름을 다시 켠다(trial만 예외).
                       <button
                         className="btn-primary"
                         style={{width:'100%'}}
-                        onClick={()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); }}
-                      >신청</button>
+                        disabled={subscribeBusy === p.key}
+                        onClick={()=> p.key === 'trial'
+                          ? (()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); })()
+                          : startSubscription(p.key, p.name)
+                        }
+                      >{subscribeBusy === p.key ? '처리 중...' : '신청'}</button>
                     )}
                   </div>
                   );
