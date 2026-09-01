@@ -72,6 +72,19 @@ export const TopupResponseSchema = loose({
   orderName: z.string(),
   payMethod: z.string().optional(),
 });
+
+// GET /billing/payment/:paymentId — 결제 1건 상태(무통장입금 계좌 정보 포함)
+export const PaymentStatusSchema = loose({
+  paymentId: z.string(),
+  status: z.string(),
+  amount: z.number(),
+  virtualAccount: loose({
+    bank: z.string().nullable().optional(),
+    accountNumber: z.string().nullable().optional(),
+    remitteeName: z.string().nullable().optional(),
+    expiredAt: z.string().nullable().optional(),
+  }).nullable(),
+});
 export type TopupResponse = z.infer<typeof TopupResponseSchema>;
 
 // POST /billing/subscribe/register — 정액제 자동결제 등록 1단계 응답. 프론트가 이 값으로

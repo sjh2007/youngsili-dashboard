@@ -3,7 +3,7 @@ import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from '../components/help/HelpGuide';
 import AuthScreen from '../components/auth/AuthScreen';
-import { ElderListSchema, MeSchema, BillingBalanceSchema, TopupResponseSchema, SubscribeRegisterResponseSchema, SubscriptionStatusSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
+import { ElderListSchema, MeSchema, BillingBalanceSchema, TopupResponseSchema, PaymentStatusSchema, SubscribeRegisterResponseSchema, SubscriptionStatusSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
 import { CallTranscript, GroupHeader, PageErrorBoundary } from '../components/common';
 import { Button, Dialog, EmptyState, PageIntro, StatusBadge, Toolbar } from '../components/ui';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -32,6 +32,14 @@ const normalizeRegion = (region) => {
 };
 // 콘솔 통화 이력은 최대 500건까지 한 번에 내려오므로 테이블 페이지네이션 기준 페이지당 건수
 const HISTORY_PAGE_SIZE = 25;
+// 포트원 Bank 코드 → 한글 은행명(주요 시중은행만, 나머지는 코드 그대로 표시)
+const BANK_LABELS = {
+  KOOKMIN:'국민은행', SHINHAN:'신한은행', WOORI:'우리은행', HANA:'하나은행', IBK:'기업은행',
+  NONGHYUP:'NH농협은행', LOCAL_NONGHYUP:'지역농축협', STANDARD_CHARTERED:'SC제일은행', CITI:'한국씨티은행',
+  DAEGU:'아이엠뱅크(대구)', BUSAN:'부산은행', KWANGJU:'광주은행', JEJU:'제주은행', JEONBUK:'전북은행',
+  KYONGNAM:'경남은행', KFCC:'새마을금고', SHINHYUP:'신협', SAVINGS_BANK:'저축은행', POST:'우체국',
+  K_BANK:'케이뱅크', KAKAO:'카카오뱅크', TOSS:'토스뱅크', SUHYUP:'수협은행',
+};
 // AI영실이 요금 정책 통합본 v1.0(전략기획실, 2026-08-28) §5 정액제 — 앱 설치 방식 4등급.
 // 정량제(선불 충전식 크레딧, 지금 쓰고 있는 방식)가 주력 트랙이지만, 예산을 고정해야 하는
 // 기관을 위한 보조 트랙으로 별도 안내한다. 실제 결제(포트원) 연동 전까지는 "신청 접수"만
@@ -273,7 +281,8 @@ export default function App() {
   const [subStatus, setSubStatus] = useState(null); // GET /billing/subscription — {plan, autoRenew, nextChargeAt, lastChargeError, elderCount, monthlyAmount}
   const [subCancelBusy, setSubCancelBusy] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
-  const [topupPayMethod, setTopupPayMethod] = useState('EASY_PAY'); // 'EASY_PAY'(카카오페이) | 'CARD'(이니시스)
+  const [topupPayMethod, setTopupPayMethod] = useState('EASY_PAY'); // 'EASY_PAY'(카카오페이) | 'CARD'(이니시스) | 'VIRTUAL_ACCOUNT'(무통장입금)
+  const [virtualAccountInfo, setVirtualAccountInfo] = useState(null); // {amount, bank, accountNumber, remitteeName, expiredAt} — 계좌 발급 완료 안내 모달
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
   const [newOrgType, setNewOrgType] = useState('senior');   // 기관 유형 (화면 분기 기준)
@@ -584,10 +593,30 @@ export default function App() {
         payMethod: topup.payMethod,
         // 일부 PG는 customer.fullName(또는 email)이 없으면 prepare 단계에서 400을 낸다.
         customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || undefined },
+        // 무통장입금은 입금 기한이 필수 파라미터(이니시스 실측: accountExpiry 없으면 400).
+        ...(topup.payMethod === 'VIRTUAL_ACCOUNT' ? { virtualAccount: { accountExpiry: { validHours: 24 } } } : {}),
       });
       if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
 
       setShowUpgradeModal(false);
+      if (topup.payMethod === 'VIRTUAL_ACCOUNT') {
+        // 무통장입금은 결제창이 끝나도 "결제 완료"가 아니라 "계좌 발급"일 뿐 — 서버가 웹훅으로
+        // 계좌 정보를 받아 저장할 때까지 몇 차례 폴링해서 화면에 보여준다(실제 입금 여부와 무관).
+        for (const delayMs of [1500, 3000, 5000, 8000, 12000]) {
+          await new Promise(res => setTimeout(res, delayMs));
+          try {
+            const sr = await authFetch(`${SERVER_URL}/billing/payment/${topup.paymentId}`);
+            if (!sr.ok) continue;
+            const status = parseOr(PaymentStatusSchema, await sr.json(), null);
+            if (status?.virtualAccount?.accountNumber) {
+              setVirtualAccountInfo({ amount, ...status.virtualAccount });
+              return;
+            }
+          } catch { /* 다음 시도에서 재시도 */ }
+        }
+        notify('계좌 발급 확인이 지연되고 있습니다. 잠시 후 결제 내역에서 다시 확인해 주세요.', 'info');
+        return;
+      }
       setPaymentSuccess({ amount, desc: `${amount.toLocaleString()}원 충전 요청이 접수됐습니다.` });
       [3000, 7000, 15000].forEach(ms => setTimeout(fetchBillingBalance, ms));
     } catch {
@@ -2730,6 +2759,46 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* 무통장입금 계좌 발급 안내 — 카드/카카오페이와 달리 이 시점엔 아직 입금 전이라
+          "완료"가 아니라 계좌 정보 + 입금 기한을 보여주고 명시적으로 안내한다. */}
+      {virtualAccountInfo !== null && (
+        <div className="modal-overlay" onClick={()=>setVirtualAccountInfo(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:400,width:'92%',textAlign:'center',padding:'36px 28px'}}>
+            <div style={{width:56,height:56,borderRadius:'50%',background:'#eff6ff',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 18px'}}>
+              <Database size={26} color="#246BEB"/>
+            </div>
+            <div style={{fontWeight:800,fontSize:18,color:'#0f172a',marginBottom:16}}>입금 계좌가 발급됐습니다</div>
+            <div style={{background:'#f8fafc',borderRadius:12,padding:'16px 18px',textAlign:'left',marginBottom:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                <span style={{fontSize:13,color:'#64748b'}}>은행</span>
+                <span style={{fontSize:14,fontWeight:700,color:'#0f172a'}}>{BANK_LABELS[virtualAccountInfo.bank] || virtualAccountInfo.bank || '-'}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                <span style={{fontSize:13,color:'#64748b'}}>계좌번호</span>
+                <span style={{fontSize:15,fontWeight:800,color:'#0f172a',fontFamily:'monospace'}}>{virtualAccountInfo.accountNumber}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                <span style={{fontSize:13,color:'#64748b'}}>예금주</span>
+                <span style={{fontSize:14,fontWeight:700,color:'#0f172a'}}>{virtualAccountInfo.remitteeName || 'AI영실이'}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                <span style={{fontSize:13,color:'#64748b'}}>입금액</span>
+                <span style={{fontSize:14,fontWeight:700,color:'#0f172a'}}>{virtualAccountInfo.amount?.toLocaleString()}원</span>
+              </div>
+              {virtualAccountInfo.expiredAt && (
+                <div style={{display:'flex',justifyContent:'space-between'}}>
+                  <span style={{fontSize:13,color:'#64748b'}}>입금 기한</span>
+                  <span style={{fontSize:14,fontWeight:700,color:'#c5221f'}}>{new Date(virtualAccountInfo.expiredAt).toLocaleString('ko-KR')}</span>
+                </div>
+              )}
+            </div>
+            <div style={{fontSize:13,color:'#64748b',marginBottom:20,lineHeight:1.6}}>
+              위 계좌로 입금하시면 확인 후 자동으로 크레딧에 반영됩니다.
+            </div>
+            <button className="btn-primary" style={{width:'100%'}} onClick={()=>setVirtualAccountInfo(null)}>확인</button>
+          </div>
+        </div>
+      )}
       {/* 요금제 업그레이드 — 요금 정책 v1.0(2026-08-28) §3(정량제)·§5(정액제 4등급). 1단계(포트원
           연동 전)라 "신청 접수"만 하고 실제 충전·플랜 전환은 담당자가 후속 처리한다. */}
       {showUpgradeModal && (
@@ -2753,7 +2822,7 @@ export default function App() {
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
                 <span style={{fontSize:13,fontWeight:700,color:'#475467'}}>결제 수단</span>
                 <div style={{display:'flex',gap:6}}>
-                  {[['EASY_PAY','카카오페이'],['CARD','카드']].map(([k,label])=>(
+                  {[['EASY_PAY','카카오페이'],['CARD','카드'],['VIRTUAL_ACCOUNT','무통장입금']].map(([k,label])=>(
                     <button key={k} onClick={()=>setTopupPayMethod(k)}
                       style={{padding:'7px 14px',borderRadius:9,border:'1px solid '+(topupPayMethod===k?'#246BEB':'#e2e8f0'),background:topupPayMethod===k?'#eff6ff':'#fff',color:topupPayMethod===k?'#246BEB':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}
                     >{label}</button>
