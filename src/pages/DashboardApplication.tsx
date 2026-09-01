@@ -2822,7 +2822,7 @@ export default function App() {
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
                 <span style={{fontSize:13,fontWeight:700,color:'#475467'}}>결제 수단</span>
                 <div style={{display:'flex',gap:6}}>
-                  {[['EASY_PAY','카카오페이'],['CARD','카드'],['VIRTUAL_ACCOUNT','무통장입금']].map(([k,label])=>(
+                  {[['EASY_PAY','카카오페이'],['CARD','카드'],['TRANSFER','실시간 계좌이체'],['VIRTUAL_ACCOUNT','무통장입금']].map(([k,label])=>(
                     <button key={k} onClick={()=>setTopupPayMethod(k)}
                       style={{padding:'7px 14px',borderRadius:9,border:'1px solid '+(topupPayMethod===k?'#246BEB':'#e2e8f0'),background:topupPayMethod===k?'#eff6ff':'#fff',color:topupPayMethod===k?'#246BEB':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}
                     >{label}</button>
