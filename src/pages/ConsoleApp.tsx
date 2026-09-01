@@ -78,11 +78,15 @@ function Pager({ page, setPage, total }: { page: number; setPage: (fn: (p: numbe
 
 const NAV = [
   { id: 'health', label: '시스템 모니터링' },
+  { id: 'stats', label: '통계' },
   { id: 'calls', label: '통화 이력' },
   { id: 'subscriptions', label: '정기결제 현황' },
   { id: 'payments', label: '결제 내역' },
   { id: 'refunds', label: '환불' },
   { id: 'orgs', label: '기관 관리' },
+  { id: 'users', label: '사용자' },
+  { id: 'elders', label: '어르신' },
+  { id: 'notices', label: '공지' },
   { id: 'audit', label: '감사 로그' },
   { id: 'test', label: '기능 테스트' },
 ] as const;
@@ -136,6 +140,35 @@ export default function ConsoleApp() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [authCheckError, setAuthCheckError] = useState('');   // 네트워크/CORS 등 판정 자체가 실패한 경우 — "권한 없음"과 구분해야 함
   const [authCheckRetry, setAuthCheckRetry] = useState(0);
+
+  // ── 통계 ──
+  const [statsData, setStatsData] = useState<any>(null); // { monthly, byOrg }
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsMonths, setStatsMonths] = useState(6);
+  const [statsOrg, setStatsOrg] = useState('');
+
+  // ── 사용자(기관 소속 계정) 관리 ──
+  const [users, setUsers] = useState<any[]>([]);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersOrgFilter, setUsersOrgFilter] = useState('');
+  const [userBusy, setUserBusy] = useState('');
+
+  // ── 어르신 마스터 데이터 ──
+  const [elders, setElders] = useState<any[]>([]);
+  const [eldersPage, setEldersPage] = useState(1);
+  const [eldersLoading, setEldersLoading] = useState(false);
+  const [eldersOrgFilter, setEldersOrgFilter] = useState('');
+  const [eldersSearch, setEldersSearch] = useState('');
+  const [elderBusy, setElderBusy] = useState('');
+
+  // ── 공지 ──
+  const [notices, setNotices] = useState<any[]>([]);
+  const [noticesLoading, setNoticesLoading] = useState(false);
+  const [noticeTitle, setNoticeTitle] = useState('');
+  const [noticeBody, setNoticeBody] = useState('');
+  const [noticeTargetOrgs, setNoticeTargetOrgs] = useState(''); // 콤마 구분 orgId, 빈 값=전체
+  const [noticeBusy, setNoticeBusy] = useState(false);
 
   useEffect(() => {
     if (!authEnabled) { setAuthChecked(true); return; }
@@ -414,6 +447,147 @@ export default function ConsoleApp() {
     finally { setTestBusy(''); }
   };
 
+  // ── 통계 ──
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const params = new URLSearchParams({ months: String(statsMonths) });
+      if (statsOrg) params.set('org', statsOrg);
+      const r = await authFetch(`${SERVER_URL}/console/stats?${params.toString()}`);
+      setStatsData(await r.json().catch(() => null));
+    } catch { notify('통계 조회 실패'); }
+    finally { setStatsLoading(false); }
+  };
+  const orgName = (orgId: string) => orgs.find((o: any) => o.orgId === orgId)?.name || orgId;
+
+  // ── 사용자(기관 소속 계정) 관리 ──
+  const fetchUsers = async () => {
+    setUsersLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (usersOrgFilter) params.set('org', usersOrgFilter);
+      const r = await authFetch(`${SERVER_URL}/admin/users?${params.toString()}`);
+      const d = await r.json().catch(() => []);
+      setUsers(Array.isArray(d) ? d : []);
+      setUsersPage(1);
+    } catch { notify('사용자 목록 조회 실패'); }
+    finally { setUsersLoading(false); }
+  };
+  const changeUserRole = async (u: any) => {
+    const next = window.prompt(`"${u.email}" 계정의 새 역할을 입력하세요 (worker / staff / admin)`, u.role);
+    if (next === null) return;
+    if (!['worker', 'staff', 'admin'].includes(next)) { notify('worker / staff / admin 중 하나여야 합니다'); return; }
+    setUserBusy(u.uid);
+    try {
+      const r = await authFetch(`${SERVER_URL}/admin/users/${u.uid}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: next }) });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) { notify('역할을 변경했습니다.', 'success'); fetchUsers(); }
+      else notify(errMsg(d, '역할 변경 실패'));
+    } catch { notify('네트워크 오류 — 역할 변경 실패'); }
+    finally { setUserBusy(''); }
+  };
+  const toggleUserLock = async (u: any, disabled: boolean) => {
+    const verb = disabled ? '잠그' : '잠금 해제하';
+    if (!window.confirm(`"${u.email}" 계정을 ${verb}시겠습니까?`)) return;
+    setUserBusy(u.uid);
+    try {
+      const r = await authFetch(`${SERVER_URL}/admin/users/${u.uid}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ disabled }) });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) { notify(`계정을 ${disabled ? '잠갔습니다' : '잠금 해제했습니다'}.`, 'success'); fetchUsers(); }
+      else notify(errMsg(d, '처리 실패'));
+    } catch { notify('네트워크 오류 — 처리 실패'); }
+    finally { setUserBusy(''); }
+  };
+  const resetUserPasswordAction = async (u: any) => {
+    if (!window.confirm(`"${u.email}" 계정의 비밀번호 재설정 링크를 발급할까요? (메일은 자동 발송되지 않습니다 — 직접 전달해야 합니다)`)) return;
+    setUserBusy(u.uid);
+    try {
+      const r = await authFetch(`${SERVER_URL}/admin/users/${u.uid}/reset-password`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.resetLink) {
+        try { await navigator.clipboard.writeText(d.resetLink); notify('재설정 링크를 클립보드에 복사했습니다. 담당자에게 전달해 주세요.', 'success'); }
+        catch { window.prompt('아래 링크를 복사해 담당자에게 전달하세요:', d.resetLink); }
+      } else notify(errMsg(d, '링크 발급 실패'));
+    } catch { notify('네트워크 오류 — 링크 발급 실패'); }
+    finally { setUserBusy(''); }
+  };
+
+  // ── 어르신 마스터 데이터 ──
+  const fetchElders = async () => {
+    setEldersLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (eldersOrgFilter) params.set('org', eldersOrgFilter);
+      const r = await authFetch(`${SERVER_URL}/elders?${params.toString()}`);
+      const d = await r.json().catch(() => []);
+      setElders(Array.isArray(d) ? d : []);
+      setEldersPage(1);
+    } catch { notify('어르신 목록 조회 실패'); }
+    finally { setEldersLoading(false); }
+  };
+  const transferElder = async (elder: any) => {
+    const targetOrgId = window.prompt(
+      `"${elder.name || elder.phone}" 어르신을 이관할 기관의 orgId를 입력하세요.\n(현재: ${elder.orgId})\n\n선택 가능: ${orgs.map((o: any) => `${o.orgId}(${o.name})`).join(', ')}`,
+      '',
+    );
+    if (targetOrgId === null || !targetOrgId.trim()) return;
+    if (!orgs.some((o: any) => o.orgId === targetOrgId.trim())) { notify('존재하지 않는 orgId입니다'); return; }
+    if (!window.confirm(`"${elder.name || elder.phone}" 어르신을 "${targetOrgId.trim()}"로 이관합니다. 계속할까요?`)) return;
+    setElderBusy(elder.phone);
+    try {
+      const r = await authFetch(`${SERVER_URL}/elders/save?org=${encodeURIComponent(targetOrgId.trim())}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: elder.phone, force: true }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) { notify('기관을 이관했습니다.', 'success'); fetchElders(); }
+      else notify(errMsg(d, '이관 실패'));
+    } catch { notify('네트워크 오류 — 이관 실패'); }
+    finally { setElderBusy(''); }
+  };
+
+  // ── 공지(총괄 관리자 → 기관) ──
+  const fetchNotices = async () => {
+    setNoticesLoading(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/notices`);
+      const d = await r.json().catch(() => []);
+      setNotices(Array.isArray(d) ? d : []);
+    } catch { notify('공지 목록 조회 실패'); }
+    finally { setNoticesLoading(false); }
+  };
+  const createNoticeAction = async () => {
+    if (!noticeTitle.trim() || !noticeBody.trim()) { notify('제목과 내용을 입력하세요'); return; }
+    const targetOrgs = noticeTargetOrgs.split(',').map(s => s.trim()).filter(Boolean);
+    setNoticeBusy(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/notices`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: noticeTitle.trim(), body: noticeBody.trim(), ...(targetOrgs.length ? { targetOrgs } : {}) }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) { notify('공지를 게시했습니다.', 'success'); setNoticeTitle(''); setNoticeBody(''); setNoticeTargetOrgs(''); fetchNotices(); }
+      else notify(errMsg(d, '공지 생성 실패'));
+    } catch { notify('네트워크 오류 — 공지 생성 실패'); }
+    finally { setNoticeBusy(false); }
+  };
+  const toggleNoticeActive = async (n: any) => {
+    const nextActive = !n.active;
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/notices/${n.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: nextActive }) });
+      if (r.ok) { notify(nextActive ? '공지를 다시 게시했습니다.' : '공지를 내렸습니다.', 'success'); fetchNotices(); }
+      else notify('상태 변경 실패');
+    } catch { notify('네트워크 오류 — 상태 변경 실패'); }
+  };
+  const deleteNoticeAction = async (n: any) => {
+    if (!window.confirm(`"${n.title}" 공지를 완전히 삭제할까요?`)) return;
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/notices/${n.id}`, { method: 'DELETE' });
+      if (r.ok) { notify('공지를 삭제했습니다.', 'success'); fetchNotices(); }
+      else notify('삭제 실패');
+    } catch { notify('네트워크 오류 — 삭제 실패'); }
+  };
+
   useEffect(() => {
     if (authorized !== true) return;
     if (page === 'test') fetchTestCallTarget();
@@ -425,6 +599,10 @@ export default function ConsoleApp() {
     if (page === 'audit') fetchAuditLogs();
     if (page === 'payments') fetchPayments();
     if (page === 'refunds') fetchRefundable();
+    if (page === 'stats') { fetchStats(); if (orgs.length === 0) fetchOrgs(); }
+    if (page === 'users') { fetchUsers(); if (orgs.length === 0) fetchOrgs(); }
+    if (page === 'elders') { fetchElders(); if (orgs.length === 0) fetchOrgs(); }
+    if (page === 'notices') fetchNotices();
   }, [page, authorized]); // eslint-disable-line
 
   if (!authChecked) return null;
@@ -508,6 +686,77 @@ export default function ConsoleApp() {
                 </div>
               )}
             </section>
+          </div>
+        )}
+
+        {page === 'stats' && (
+          <div className="fade-in">
+            <section className="section" style={{marginBottom:16}}>
+              <div className="script-editor-header" style={{marginBottom:10}}>
+                <div className="section-title" style={{marginBottom:0}}>월별 이용 통계</div>
+                <button className={`btn-download ${statsLoading?'btn-calling':''}`} onClick={fetchStats} disabled={statsLoading}>{statsLoading?'조회 중...':'조회'}</button>
+              </div>
+              <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'center'}}>
+                <select className="form-input" style={{width:140,margin:0}} value={statsMonths} onChange={e=>setStatsMonths(Number(e.target.value))}>
+                  <option value={3}>최근 3개월</option>
+                  <option value={6}>최근 6개월</option>
+                  <option value={12}>최근 12개월</option>
+                </select>
+                <select className="form-input" style={{width:220,margin:0}} value={statsOrg} onChange={e=>setStatsOrg(e.target.value)}>
+                  <option value="">전체 기관</option>
+                  {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
+                </select>
+              </div>
+              {!statsData ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{statsLoading?'불러오는 중...':'데이터 없음 — 조회 버튼을 눌러주세요'}</div> : (
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                    <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                      <th style={{padding:'8px 10px'}}>월</th><th style={{padding:'8px 10px'}}>전체 발신</th><th style={{padding:'8px 10px'}}>연결</th>
+                      <th style={{padding:'8px 10px'}}>미연결</th><th style={{padding:'8px 10px'}}>실패</th><th style={{padding:'8px 10px'}}>연결률</th>
+                      <th style={{padding:'8px 10px'}}>위험알림(긴급/주의)</th><th style={{padding:'8px 10px'}}>추이</th>
+                    </tr></thead>
+                    <tbody>{(statsData.monthly || []).map((m:any) => {
+                      const maxTotal = Math.max(1, ...(statsData.monthly || []).map((x:any)=>x.total));
+                      return (
+                      <tr key={m.month} style={{borderBottom:'1px solid #f1f3f4'}}>
+                        <td style={{padding:'10px',fontWeight:700}}>{m.month}</td>
+                        <td style={{padding:'10px'}}>{m.total}건</td>
+                        <td style={{padding:'10px',color:'#1e8e3e'}}>{m.completed}건</td>
+                        <td style={{padding:'10px',color:'#754d00'}}>{m.missed}건</td>
+                        <td style={{padding:'10px',color:'#c5221f'}}>{m.failed}건</td>
+                        <td style={{padding:'10px'}}>{m.connectRate != null ? `${Math.round(m.connectRate*100)}%` : '-'}</td>
+                        <td style={{padding:'10px'}}>{m.riskCritical+m.riskUrgent > 0 ? <span style={{color:'#c5221f',fontWeight:700}}>{m.riskCritical+m.riskUrgent}건</span> : '-'}{m.riskWarning>0 && <span style={{color:'#754d00'}}> / 주의 {m.riskWarning}건</span>}</td>
+                        <td style={{padding:'10px',minWidth:120}}>
+                          <div style={{background:'#e2e8f0',borderRadius:4,height:10,width:120,overflow:'hidden'}}>
+                            <div style={{background:'#246BEB',height:'100%',width:`${(m.total/maxTotal)*100}%`}} />
+                          </div>
+                        </td>
+                      </tr>
+                    );})}</tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+            {statsData && statsData.byOrg?.length > 0 && (
+              <section className="section">
+                <div className="section-title" style={{marginBottom:10}}>기관별 이용 순위 (선택 기간 합계)</div>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                    <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                      <th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>전체 발신</th><th style={{padding:'8px 10px'}}>연결</th><th style={{padding:'8px 10px'}}>연결률</th>
+                    </tr></thead>
+                    <tbody>{statsData.byOrg.map((o:any) => (
+                      <tr key={o.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
+                        <td style={{padding:'10px'}}>{orgName(o.orgId)}</td>
+                        <td style={{padding:'10px'}}>{o.total}건</td>
+                        <td style={{padding:'10px',color:'#1e8e3e'}}>{o.completed}건</td>
+                        <td style={{padding:'10px'}}>{o.connectRate != null ? `${Math.round(o.connectRate*100)}%` : '-'}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </section>
+            )}
           </div>
         )}
 
@@ -683,6 +932,130 @@ export default function ConsoleApp() {
               </div>
             )}
           </section>
+        )}
+
+        {page === 'users' && (
+          <section className="section fade-in">
+            <div className="script-editor-header" style={{marginBottom:10}}>
+              <div className="section-title" style={{marginBottom:0}}>기관 소속 사용자 ({users.length}명)</div>
+              <button className={`btn-download ${usersLoading?'btn-calling':''}`} onClick={fetchUsers} disabled={usersLoading}>{usersLoading?'조회 중...':'조회'}</button>
+            </div>
+            <div style={{display:'flex',gap:10,marginBottom:14}}>
+              <select className="form-input" style={{width:220,margin:0}} value={usersOrgFilter} onChange={e=>setUsersOrgFilter(e.target.value)}>
+                <option value="">전체 기관</option>
+                {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
+              </select>
+            </div>
+            {users.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{usersLoading?'불러오는 중...':'조회된 사용자가 없습니다'}</div> : (
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                  <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                    <th style={{padding:'8px 10px'}}>이메일</th><th style={{padding:'8px 10px'}}>이름</th><th style={{padding:'8px 10px'}}>기관</th>
+                    <th style={{padding:'8px 10px'}}>역할</th><th style={{padding:'8px 10px'}}></th>
+                  </tr></thead>
+                  <tbody>{users.slice((usersPage-1)*PAGE_SIZE, usersPage*PAGE_SIZE).map((u:any) => (
+                    <tr key={u.uid} style={{borderBottom:'1px solid #f1f3f4'}}>
+                      <td style={{padding:'10px'}}>{u.email}</td>
+                      <td style={{padding:'10px'}}>{u.name || '-'}</td>
+                      <td style={{padding:'10px'}}>{orgName(u.orgId)}</td>
+                      <td style={{padding:'10px'}}><span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:'#f1f3f4',color:'#5f6368'}}>{u.role}</span></td>
+                      <td style={{padding:'10px',display:'flex',gap:6,flexWrap:'wrap'}}>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>changeUserRole(u)}>역할변경</button>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>toggleUserLock(u,true)}>잠금</button>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>toggleUserLock(u,false)}>잠금해제</button>
+                        <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px',color:'#246BEB'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>resetUserPasswordAction(u)}>비번재설정</button>
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+                <Pager page={usersPage} setPage={setUsersPage} total={users.length} />
+              </div>
+            )}
+          </section>
+        )}
+
+        {page === 'elders' && (
+          <section className="section fade-in">
+            <div className="script-editor-header" style={{marginBottom:10}}>
+              <div className="section-title" style={{marginBottom:0}}>어르신 마스터 데이터 ({elders.length}명)</div>
+              <button className={`btn-download ${eldersLoading?'btn-calling':''}`} onClick={fetchElders} disabled={eldersLoading}>{eldersLoading?'조회 중...':'조회'}</button>
+            </div>
+            <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}>
+              <select className="form-input" style={{width:220,margin:0}} value={eldersOrgFilter} onChange={e=>setEldersOrgFilter(e.target.value)}>
+                <option value="">전체 기관</option>
+                {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
+              </select>
+              <input className="form-input" style={{width:220,margin:0}} placeholder="이름·전화번호 검색" value={eldersSearch} onChange={e=>setEldersSearch(e.target.value)} />
+            </div>
+            {(() => {
+              const filtered = elders.filter((e:any) => !eldersSearch.trim() || String(e.name||'').includes(eldersSearch.trim()) || String(e.phone||'').includes(eldersSearch.trim()));
+              return filtered.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{eldersLoading?'불러오는 중...':'조회된 어르신이 없습니다'}</div> : (
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                    <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                      <th style={{padding:'8px 10px'}}>이름</th><th style={{padding:'8px 10px'}}>전화번호</th><th style={{padding:'8px 10px'}}>기관</th>
+                      <th style={{padding:'8px 10px'}}>승인상태</th><th style={{padding:'8px 10px'}}>통화활성</th><th style={{padding:'8px 10px'}}></th>
+                    </tr></thead>
+                    <tbody>{filtered.slice((eldersPage-1)*PAGE_SIZE, eldersPage*PAGE_SIZE).map((e:any) => (
+                      <tr key={e.phone} style={{borderBottom:'1px solid #f1f3f4'}}>
+                        <td style={{padding:'10px'}}>{e.name || '-'}</td>
+                        <td style={{padding:'10px'}}>{e.phone}</td>
+                        <td style={{padding:'10px'}}>{orgName(e.orgId)}</td>
+                        <td style={{padding:'10px'}}>
+                          <span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:e.approved===false?'#fff8e1':'#e6f4ea',color:e.approved===false?'#754d00':'#1e8e3e'}}>{e.approved===false?'승인대기':'승인됨'}</span>
+                        </td>
+                        <td style={{padding:'10px'}}>{e.callActive===false ? <span style={{color:'#94a3b8'}}>꺼짐</span> : <span style={{color:'#1e8e3e'}}>켜짐</span>}</td>
+                        <td style={{padding:'10px'}}>
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={elderBusy===e.phone} onClick={()=>transferElder(e)}>{elderBusy===e.phone?'처리 중...':'기관 이관'}</button>
+                        </td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                  <Pager page={eldersPage} setPage={setEldersPage} total={filtered.length} />
+                </div>
+              );
+            })()}
+          </section>
+        )}
+
+        {page === 'notices' && (
+          <div className="fade-in">
+            <section className="section" style={{marginBottom:16}}>
+              <div className="section-title" style={{marginBottom:10}}>새 공지 게시</div>
+              <input className="form-input" placeholder="제목" value={noticeTitle} onChange={e=>setNoticeTitle(e.target.value)} style={{marginBottom:8}} />
+              <textarea className="form-input" placeholder="내용" value={noticeBody} onChange={e=>setNoticeBody(e.target.value)} rows={4} style={{marginBottom:8,width:'100%',boxSizing:'border-box',resize:'vertical'}} />
+              <input className="form-input" placeholder="대상 기관 orgId(콤마 구분, 비우면 전체 기관)" value={noticeTargetOrgs} onChange={e=>setNoticeTargetOrgs(e.target.value)} style={{marginBottom:8}} />
+              <div style={{fontSize:12,color:'#94a3b8',marginBottom:10}}>기관코드: {orgs.map((o:any)=>`${o.orgId}(${o.name})`).join(', ') || '기관 목록 로딩 전'}</div>
+              <button className="btn-primary" disabled={noticeBusy} onClick={createNoticeAction}>{noticeBusy?'게시 중...':'게시'}</button>
+            </section>
+            <section className="section">
+              <div className="script-editor-header" style={{marginBottom:10}}>
+                <div className="section-title" style={{marginBottom:0}}>게시된 공지 ({notices.length}건)</div>
+                <button className={`btn-download ${noticesLoading?'btn-calling':''}`} onClick={fetchNotices} disabled={noticesLoading}>{noticesLoading?'조회 중...':'새로고침'}</button>
+              </div>
+              {notices.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{noticesLoading?'불러오는 중...':'게시된 공지가 없습니다'}</div> : (
+                <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                  {notices.map((n:any) => (
+                    <div key={n.id} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'14px 16px',opacity:n.active?1:0.55}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+                        <div>
+                          <div style={{fontWeight:800,fontSize:15}}>{n.title} {!n.active && <span style={{fontSize:11,fontWeight:600,color:'#5f6368',marginLeft:6}}>(내려짐)</span>}</div>
+                          <div style={{fontSize:13,color:'#5f6368',marginTop:4,whiteSpace:'pre-wrap'}}>{n.body}</div>
+                          <div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>
+                            대상: {n.targetOrgs?.length ? n.targetOrgs.map((o:string)=>orgName(o)).join(', ') : '전체 기관'} · {n.createdBy} · {n.createdAt ? new Date(n.createdAt).toLocaleString('ko-KR') : '-'}
+                          </div>
+                        </div>
+                        <div style={{display:'flex',gap:6,flexShrink:0}}>
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} onClick={()=>toggleNoticeActive(n)}>{n.active?'내리기':'재게시'}</button>
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px',color:'#c5221f'}} onClick={()=>deleteNoticeAction(n)}>삭제</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
         )}
 
         {page === 'audit' && (

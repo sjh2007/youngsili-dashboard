@@ -279,6 +279,8 @@ export default function App() {
   const [consoleSubsLoading, setConsoleSubsLoading] = useState(false);
   // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
+  const [orgNotices, setOrgNotices] = useState([]);    // 총괄 관리자 콘솔이 보낸 공지(GET /notices/active)
+  const [dismissedNoticeIds, setDismissedNoticeIds] = useState([]); // 닫기는 이 세션 동안만(서버에 안 남김)
   const [billing, setBilling]     = useState(null);   // {creditBalance: number|null} — null(미조회) 이면 차단 화면 안 띄움
   const [showUpgradeModal, setShowUpgradeModal] = useState(false); // 요금제 정책 v1.0(2026-08-28) §5 기준 정액제 안내
   const [upgradeTab, setUpgradeTab] = useState('metered'); // 'metered'(정량제, 주력) | 'flat'(정액제, 보조)
@@ -565,6 +567,10 @@ export default function App() {
   // ── 멀티테넌트: 본인 정보 + 운영자 기관·계정 관리 ──
   const fetchMe = async () => {
     try { const r = await authFetch(`${SERVER_URL}/me`); if (r.ok) { const m = parseOr(MeSchema, await r.json(), null); if (m) setMe(m); } } catch {}
+  };
+  // 총괄 관리자 콘솔이 보낸 공지("점검 예정" 등) — 닫기는 이 세션 동안만 유지(서버에 안 남김)
+  const fetchOrgNotices = async () => {
+    try { const r = await authFetch(`${SERVER_URL}/notices/active`); if (r.ok) setOrgNotices(await r.json().catch(()=>[])); } catch {}
   };
   // 선불 충전식 크레딧 잔액(1단계) — superadmin은 소속 기관이 없어(orgId='*') 조회 대상이 아니다.
   // /billing/balance는 @BillingExempt라 잔액 0이어도 조회는 항상 성공한다(막힌 이유를 보여줘야 하므로).
@@ -966,7 +972,7 @@ export default function App() {
   // 계정 전환(로그아웃→다른 계정 로그인) 시 새 조회가 끝나기 전까지 이전 계정의 크레딧 잔액이
   // 화면에 그대로 남아있던 버그(2026-08-31 실사용 지적) — 잔액은 곧바로 null로 비워 재조회가
   // 끝날 때까지는 아무것도 안 보이게 한다(다른 기관 금액을 잘못 보여주는 것보다 안전).
-  useEffect(() => { setBilling(null); setSubStatus(null); fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); fetchSpecialWarning(); fetchBillingBalance(); } }, [authUser]); // eslint-disable-line
+  useEffect(() => { setBilling(null); setSubStatus(null); fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); fetchSpecialWarning(); fetchBillingBalance(); fetchOrgNotices(); } }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'admin' && isStaffUp) { if (isSuper) fetchOrgs(); fetchAccounts(); fetchInvites(); setAdminMsg(''); } }, [page, isStaffUp, isSuper]); // eslint-disable-line
   // 어르신 등록/수정 폼: 담당 지원사 배정 드롭다운용 계정 목록
   useEffect(() => { if (page === 'register' && isStaffUp && accounts.length === 0) fetchAccounts(); }, [page, isStaffUp]); // eslint-disable-line
@@ -3609,6 +3615,13 @@ export default function App() {
       </aside>
 
       <main className="main" id="main-content">
+        {orgNotices.filter(n => !dismissedNoticeIds.includes(n.id)).map(n => (
+          <div key={n.id} style={{background:'#eff6ff',borderBottom:'1px solid #bfdbfe',padding:'10px 16px',display:'flex',alignItems:'flex-start',gap:12,fontSize:15}}>
+            <span style={{color:'#1d4ed8',fontWeight:700,flexShrink:0}}>{n.title}</span>
+            <span style={{color:'#1e3a8a',flex:1,whiteSpace:'pre-wrap'}}>{n.body}</span>
+            <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',flexShrink:0}} onClick={()=>setDismissedNoticeIds(prev=>[...prev, n.id])}>닫기</button>
+          </div>
+        ))}
         {authEnabled && authUser && !authUser.emailVerified && (
           <div style={{background:'#fffbeb',borderBottom:'1px solid #fde68a',padding:'10px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',fontSize:17}}>
             <span style={{color:'#b45309',fontWeight:700}}>이메일 인증을 완료해 주세요.</span>
