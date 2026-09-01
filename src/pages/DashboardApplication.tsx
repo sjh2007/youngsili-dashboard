@@ -15,7 +15,7 @@ import { LayoutGrid, Activity, Users, ShieldCheck, Phone, CalendarDays, MessageS
          AlertCircle, AlertTriangle, CheckCircle2, ArrowLeft, ArrowRight, Plus,
          UserRound, UserRoundCheck, X, Search, Copy, LogOut, ChevronDown, List,
          Sun, Snowflake, CloudRain, CloudSun, Wind, Flame, CircleCheck, Clock, Terminal,
-         CreditCard, Landmark, Banknote, Wallet } from 'lucide-react';
+         CreditCard, Landmark, Banknote } from 'lucide-react';
 
 // REACT_APP_SERVER_URL(.env.local)로 로컬 서버 테스트 가능 — 미설정 시 운영 서버
 const EMPTY_FORM = { name:'', age:'', gender:'female', title:'할머니', region:'', address:'', addressDetail:'', phone:'', jumin:'', caregiver:'', caregiverPhone:'', assignedTo:'', guardian:'', guardianPhone:'', disease:'', medicine:'', mobility:'독립보행 가능', careGroup:'', callCycle:'daily', callDays:[], callTime:'09:00', callActive:true };
@@ -35,7 +35,6 @@ const normalizeRegion = (region) => {
 const HISTORY_PAGE_SIZE = 25;
 // 포트원 Bank 코드 → 한글 은행명(주요 시중은행만, 나머지는 코드 그대로 표시)
 const PAY_METHOD_OPTIONS = [
-  { key:'EASY_PAY', label:'카카오페이', desc:'간편결제', icon: Wallet },
   { key:'CARD', label:'카드', desc:'신용·체크카드', icon: CreditCard },
   { key:'TRANSFER', label:'실시간 계좌이체', desc:'즉시 출금·완료', icon: Landmark },
   { key:'VIRTUAL_ACCOUNT', label:'무통장입금', desc:'계좌 발급 후 입금', icon: Banknote },
@@ -288,7 +287,7 @@ export default function App() {
   const [subStatus, setSubStatus] = useState(null); // GET /billing/subscription — {plan, autoRenew, nextChargeAt, lastChargeError, elderCount, monthlyAmount}
   const [subCancelBusy, setSubCancelBusy] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
-  const [topupPayMethod, setTopupPayMethod] = useState('EASY_PAY'); // 'EASY_PAY'(카카오페이) | 'CARD'(이니시스) | 'VIRTUAL_ACCOUNT'(무통장입금)
+  const [topupPayMethod, setTopupPayMethod] = useState('CARD'); // 'CARD'(이니시스) | 'TRANSFER'(계좌이체) | 'VIRTUAL_ACCOUNT'(무통장입금) — 카카오페이는 제외(2026-09-01)
   const [pendingTopup, setPendingTopup] = useState(null); // {amount} — "신청" 클릭 시 결제수단 선택 모달을 띄우기 위한 대기 상태
   const [virtualAccountInfo, setVirtualAccountInfo] = useState(null); // {amount, bank, accountNumber, remitteeName, expiredAt} — 계좌 발급 완료 안내 모달
   const [orgs, setOrgs]           = useState([]);
