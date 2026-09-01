@@ -273,6 +273,7 @@ export default function App() {
   const [subStatus, setSubStatus] = useState(null); // GET /billing/subscription — {plan, autoRenew, nextChargeAt, lastChargeError, elderCount, monthlyAmount}
   const [subCancelBusy, setSubCancelBusy] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
+  const [topupPayMethod, setTopupPayMethod] = useState('EASY_PAY'); // 'EASY_PAY'(카카오페이) | 'CARD'(이니시스)
   const [orgs, setOrgs]           = useState([]);
   const [accounts, setAccounts]   = useState([]);
   const [newOrgType, setNewOrgType] = useState('senior');   // 기관 유형 (화면 분기 기준)
@@ -558,7 +559,7 @@ export default function App() {
     if (topupBusy) return;
     setTopupBusy(true);
     try {
-      const r = await authFetch(`${SERVER_URL}/billing/topup`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount }) });
+      const r = await authFetch(`${SERVER_URL}/billing/topup`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount, payMethod: topupPayMethod }) });
       const d = await r.json().catch(()=>({}));
       if (r.status === 501) {
         setShowUpgradeModal(false);
@@ -577,12 +578,12 @@ export default function App() {
         orderName: topup.orderName,
         totalAmount: topup.amount,
         currency: 'KRW',
-        // 2026-08-31 실측: 연결된 채널이 카드결제가 아니라 간편결제(카카오페이) 전용 채널이라
-        // payMethod:'CARD'는 prepare 단계에서 400(payMethod violates EQUALS("EASY_PAY"))이 났다.
-        // 채널 구성이 바뀌면(카드 채널 추가 시) 이 값도 같이 바꿔야 한다.
-        payMethod: 'EASY_PAY',
+        // 2026-09-01: 결제수단 선택 버튼 추가 — 카카오페이(기존 채널)/카드(이니시스 일반결제
+        // 채널) 중 사용자가 고른 값을 그대로 전달. 서버가 payMethod에 맞는 channelKey를
+        // 이미 골라서 내려주므로 프론트는 값만 그대로 넘기면 된다.
+        payMethod: topup.payMethod,
         // 일부 PG는 customer.fullName(또는 email)이 없으면 prepare 단계에서 400을 낸다.
-        customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객' },
+        customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || undefined },
       });
       if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
 
@@ -2749,6 +2750,16 @@ export default function App() {
                 발신 시도마다 <b>발신 기본료 40원</b> + 실제 연결된 통화에만 <b>통화 요금</b>이 충전액에서 차감됩니다.
                 발신이 없는 달은 차감도 청구도 없습니다(VAT 별도). 아래는 대표적인 충전 단위입니다 — 원하는 금액을 직접 입력해도 됩니다.
               </p>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+                <span style={{fontSize:13,fontWeight:700,color:'#475467'}}>결제 수단</span>
+                <div style={{display:'flex',gap:6}}>
+                  {[['EASY_PAY','카카오페이'],['CARD','카드']].map(([k,label])=>(
+                    <button key={k} onClick={()=>setTopupPayMethod(k)}
+                      style={{padding:'7px 14px',borderRadius:9,border:'1px solid '+(topupPayMethod===k?'#246BEB':'#e2e8f0'),background:topupPayMethod===k?'#eff6ff':'#fff',color:topupPayMethod===k?'#246BEB':'#64748b',fontWeight:700,fontSize:13,cursor:'pointer'}}
+                    >{label}</button>
+                  ))}
+                </div>
+              </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:14}}>
                 {CHARGE_TIERS.map(c=>(
                   <div key={c.key} style={{border:c.recommended?'2px solid #246BEB':'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:10}}>

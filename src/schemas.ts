@@ -70,6 +70,7 @@ export const TopupResponseSchema = loose({
   channelKey: z.string(),
   amount: z.number(),
   orderName: z.string(),
+  payMethod: z.string().optional(),
 });
 export type TopupResponse = z.infer<typeof TopupResponseSchema>;
 
