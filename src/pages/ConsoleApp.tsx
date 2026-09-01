@@ -4,11 +4,87 @@
 // 권한 판정은 별도 API 없이 GET /console/health 호출 결과(403이면 비superadmin)로 대신한다.
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import {
+  Activity, BarChart3, Phone, CreditCard, Receipt, RotateCcw, Building2,
+  Users as UsersIcon, HeartHandshake, Megaphone, FileClock, FlaskConical, LogOut,
+} from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
-// App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적)
+// App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적) —
+// 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
+// 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
 
-const NAVY = '#003675', BLUE = '#246beb';
+const NAVY = '#1a73e8', BLUE = '#1a73e8';
+
+/** 역할 계층별 배지 색 — 권한 수준이 한눈에 구분되도록(worker < staff < admin < superadmin) */
+const ROLE_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
+  worker:     { bg: '#f1f3f4', fg: '#5f6368', label: 'worker' },
+  staff:      { bg: '#e8f0fe', fg: '#1a73e8', label: 'staff' },
+  admin:      { bg: '#f3e8fd', fg: '#9334e6', label: 'admin' },
+  superadmin: { bg: '#fce8e6', fg: '#c5221f', label: 'superadmin' },
+};
+function RoleBadge({ role }: { role: string }) {
+  const s = ROLE_STYLE[role] || ROLE_STYLE.worker;
+  return <span className="gcp-chip" style={{ background: s.bg, color: s.fg }}>{s.label}</span>;
+}
+
+/** 구글 클라우드 콘솔 참조 — 이 페이지(build-console)에서만 적용되는 스코프 스타일.
+ * App.css(기관 대시보드와 공유)는 건드리지 않고, .gcp-console 아래에서만 이긴다. */
+function GcpStyle() {
+  return (
+    <>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" />
+      <style>{`
+        .gcp-console, .gcp-console input, .gcp-console select, .gcp-console button, .gcp-console textarea {
+          font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        .gcp-console { background: #f8f9fa; color: #202124; }
+        .gcp-console .section {
+          background: #fff;
+          border: 1px solid #dadce0;
+          border-radius: 8px;
+          box-shadow: 0 1px 2px 0 rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15);
+          padding: 20px 24px;
+        }
+        .gcp-console .section-title { color: #202124; font-size: 15px; font-weight: 500; }
+        .gcp-console .btn-primary {
+          background: #1a73e8; color: #fff; border: 1px solid #1a73e8; border-radius: 4px;
+          font-weight: 500; font-size: 13.5px; padding: 8px 20px; letter-spacing: .01em;
+        }
+        .gcp-console .btn-primary:hover { background: #1765cc; border-color: #1765cc; }
+        .gcp-console .btn-primary:disabled { background: #f1f3f4; border-color: #f1f3f4; color: #9aa0a6; }
+        .gcp-console .btn-secondary, .gcp-console .btn-download {
+          background: #fff; color: #1a73e8; border: 1px solid #dadce0; border-radius: 4px;
+          font-weight: 500; font-size: 13px; padding: 7px 16px;
+        }
+        .gcp-console .btn-secondary:hover, .gcp-console .btn-download:hover { background: #e8f0fe; border-color: #d2e3fc; }
+        .gcp-console .form-input {
+          border: 1px solid #dadce0; border-radius: 4px; color: #202124; font-size: 14px;
+        }
+        .gcp-console .form-input:focus { border-color: #1a73e8; outline: none; box-shadow: 0 0 0 1px #1a73e8; }
+        .gcp-console table thead tr { color: #5f6368; font-weight: 500; border-bottom: 1px solid #dadce0 !important; }
+        .gcp-console table tbody tr { border-bottom: 1px solid #f1f3f4 !important; }
+        .gcp-console table tbody tr:hover { background: #f8f9fa; }
+        .gcp-console .gcp-chip {
+          display: inline-block; font-size: 11.5px; font-weight: 500; padding: 2px 10px;
+          border-radius: 999px; letter-spacing: .01em;
+        }
+        .gcp-console .gcp-sidebar { background: #fff; border-right: 1px solid #dadce0; }
+        .gcp-console .gcp-nav-item {
+          display: flex; align-items: center; gap: 14px; padding: 9px 16px 9px 20px;
+          margin: 1px 8px 1px 0; border-radius: 0 20px 20px 0; cursor: pointer; border: none;
+          background: transparent; color: #3c4043; font-size: 13.5px; font-weight: 500;
+          width: calc(100% - 8px); text-align: left;
+        }
+        .gcp-console .gcp-nav-item:hover { background: #f1f3f4; }
+        .gcp-console .gcp-nav-item.is-active { background: #e8f0fe; color: #1a73e8; }
+        .gcp-console .gcp-nav-item.is-active svg { color: #1a73e8; }
+        .gcp-console .gcp-topbar { background: #fff; border-bottom: 1px solid #dadce0; }
+        .gcp-console .toast-viewport .toast { font-family: 'Roboto', sans-serif; }
+      `}</style>
+    </>
+  );
+}
 
 function LoginScreen({ onLoggedIn }: { onLoggedIn?: () => void }) {
   const [email, setEmail] = useState('');
@@ -26,20 +102,22 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn?: () => void }) {
     setBusy(false);
   };
   return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0f172a',padding:24}}>
-      <div style={{background:'#fff',borderRadius:16,padding:40,width:400,maxWidth:'100%',boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
-        <div style={{textAlign:'center',marginBottom:22}}>
-          <div style={{fontSize:22,fontWeight:900,color:NAVY}}>AI영실이 운영 콘솔</div>
-          <div style={{fontSize:13,color:'#64748b',marginTop:4}}>총괄 관리자 전용 — 일반 기관 계정은 접근할 수 없습니다</div>
+    <div className="gcp-console" style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8f9fa',padding:24}}>
+      <GcpStyle />
+      <div style={{background:'#fff',borderRadius:8,border:'1px solid #dadce0',boxShadow:'0 1px 2px 0 rgba(60,64,67,.30), 0 2px 6px 2px rgba(60,64,67,.15)',padding:'40px 40px 32px',width:400,maxWidth:'100%'}}>
+        <div style={{textAlign:'center',marginBottom:26}}>
+          <div style={{width:44,height:44,borderRadius:11,background:'#1a73e8',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,margin:'0 auto 14px'}}>영</div>
+          <div style={{fontSize:20,fontWeight:500,color:'#202124'}}>AI영실이 운영 콘솔</div>
+          <div style={{fontSize:13,color:'#5f6368',marginTop:6}}>총괄 관리자 전용 — 일반 기관 계정은 접근할 수 없습니다</div>
         </div>
-        <div style={{fontSize:14,fontWeight:700,margin:'14px 0 6px'}}>이메일</div>
-        <input style={{width:'100%',height:48,padding:'0 14px',borderRadius:8,border:'1px solid #cbd5e1',boxSizing:'border-box',fontSize:15}}
+        <div style={{fontSize:12.5,fontWeight:500,color:'#5f6368',margin:'14px 0 6px'}}>이메일</div>
+        <input className="form-input" style={{width:'100%',height:44,padding:'0 14px',boxSizing:'border-box',fontSize:14.5,margin:0}}
           type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="username" />
-        <div style={{fontSize:14,fontWeight:700,margin:'14px 0 6px'}}>비밀번호</div>
-        <input style={{width:'100%',height:48,padding:'0 14px',borderRadius:8,border:'1px solid #cbd5e1',boxSizing:'border-box',fontSize:15}}
+        <div style={{fontSize:12.5,fontWeight:500,color:'#5f6368',margin:'16px 0 6px'}}>비밀번호</div>
+        <input className="form-input" style={{width:'100%',height:44,padding:'0 14px',boxSizing:'border-box',fontSize:14.5,margin:0}}
           type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==='Enter' && doLogin()} autoComplete="current-password" />
-        {err && <div style={{color:'#b42318',fontSize:13,marginTop:10,background:'#fff3f2',padding:'10px 12px',borderRadius:4,borderLeft:'3px solid #d92d20'}}>{err}</div>}
-        <button style={{width:'100%',height:48,borderRadius:8,border:'none',background:BLUE,color:'#fff',fontWeight:700,fontSize:15,cursor:'pointer',marginTop:20}}
+        {err && <div style={{color:'#c5221f',fontSize:13,marginTop:12,background:'#fce8e6',padding:'10px 12px',borderRadius:4}}>{err}</div>}
+        <button className="btn-primary" style={{width:'100%',height:44,fontSize:14.5,cursor:'pointer',marginTop:22}}
           disabled={busy} onClick={doLogin}>{busy ? '로그인 중...' : '로그인'}</button>
       </div>
     </div>
@@ -48,12 +126,13 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn?: () => void }) {
 
 function AccessDenied({ email, onLogout }: { email?: string; onLogout: () => void }) {
   return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0f172a',padding:24}}>
-      <div style={{background:'#fff',borderRadius:16,padding:40,width:420,maxWidth:'100%',textAlign:'center'}}>
-        <div style={{fontSize:40}}>🔒</div>
-        <div style={{fontSize:18,fontWeight:800,color:'#0f172a',marginTop:12}}>운영 콘솔 접근 권한이 없습니다</div>
-        <div style={{fontSize:14,color:'#64748b',marginTop:8}}>{email ? `${email} 계정은 ` : ''}총괄 관리자 전용 콘솔입니다.</div>
-        <button className="btn-secondary" style={{marginTop:20}} onClick={onLogout}>다른 계정으로 로그인</button>
+    <div className="gcp-console" style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8f9fa',padding:24}}>
+      <GcpStyle />
+      <div style={{background:'#fff',borderRadius:8,border:'1px solid #dadce0',boxShadow:'0 1px 2px 0 rgba(60,64,67,.30), 0 2px 6px 2px rgba(60,64,67,.15)',padding:40,width:420,maxWidth:'100%',textAlign:'center'}}>
+        <div style={{width:48,height:48,borderRadius:'50%',background:'#fce8e6',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',fontSize:22}}>🔒</div>
+        <div style={{fontSize:17,fontWeight:500,color:'#202124',marginTop:16}}>운영 콘솔 접근 권한이 없습니다</div>
+        <div style={{fontSize:13.5,color:'#5f6368',marginTop:8}}>{email ? `${email} 계정은 ` : ''}총괄 관리자 전용 콘솔입니다.</div>
+        <button className="btn-secondary" style={{marginTop:22}} onClick={onLogout}>다른 계정으로 로그인</button>
       </div>
     </div>
   );
@@ -76,19 +155,81 @@ function Pager({ page, setPage, total }: { page: number; setPage: (fn: (p: numbe
   );
 }
 
+type MonthlyRow = { month: string; total: number; completed: number; missed: number; failed: number; riskCritical: number; riskUrgent: number; riskWarning: number };
+
+/** 월별 통화 스택바(연결/미연결/실패) + 위험알림 추이 라인 — SVG로 직접 그린 경량 차트 */
+function MonthlyChart({ data }: { data: MonthlyRow[] }) {
+  if (!data.length) return null;
+  const W = 720, H = 200, padL = 34, padB = 24, padT = 10, padR = 10;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = data.length;
+  const slot = plotW / n;
+  const barW = Math.min(38, slot * 0.55);
+  const maxTotal = Math.max(1, ...data.map(d => d.total));
+  const maxRisk = Math.max(1, ...data.map(d => d.riskCritical + d.riskUrgent + d.riskWarning));
+  const yFor = (v: number) => padT + plotH - (v / maxTotal) * plotH;
+  const riskYFor = (v: number) => padT + plotH - (v / maxRisk) * plotH * 0.85; // 살짝 여유(라인이 막대 위에 안 붙게)
+
+  const gridLines = [0, 0.25, 0.5, 0.75, 1];
+  const riskPoints = data.map((d, i) => {
+    const x = padL + slot * i + slot / 2;
+    const y = riskYFor(d.riskCritical + d.riskUrgent + d.riskWarning);
+    return { x, y };
+  });
+  const linePath = riskPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block'}}>
+      {/* 옅은 그리드 */}
+      {gridLines.map((g,i) => {
+        const y = padT + plotH * (1-g);
+        return <line key={i} x1={padL} x2={W-padR} y1={y} y2={y} stroke="#e8eaed" strokeWidth={1} />;
+      })}
+      {/* Y축 라벨(전체 발신 기준) */}
+      {gridLines.map((g,i) => (
+        <text key={i} x={padL-6} y={padT + plotH*(1-g)+4} fontSize={9.5} fill="#9aa0a6" textAnchor="end" fontFamily="Roboto Mono, monospace">
+          {Math.round(maxTotal*g)}
+        </text>
+      ))}
+      {/* 스택 바: 연결(초록) / 미연결(호박) / 실패(빨강) */}
+      {data.map((d, i) => {
+        const x = padL + slot*i + (slot-barW)/2;
+        const yCompleted = yFor(d.completed);
+        const yMissedTop = yFor(d.completed + d.missed);
+        const yFailedTop = yFor(d.completed + d.missed + d.failed);
+        const base = padT + plotH;
+        return (
+          <g key={d.month}>
+            <rect x={x} y={yCompleted} width={barW} height={Math.max(0, base-yCompleted)} fill="#34a853" rx={2} />
+            <rect x={x} y={yMissedTop} width={barW} height={Math.max(0, yCompleted-yMissedTop)} fill="#f9ab00" />
+            <rect x={x} y={yFailedTop} width={barW} height={Math.max(0, yMissedTop-yFailedTop)} fill="#d93025" rx={0} />
+            <text x={x+barW/2} y={H-6} fontSize={10.5} fill="#5f6368" textAnchor="middle">{d.month.slice(2).replace('-', '.')}</text>
+          </g>
+        );
+      })}
+      {/* 위험알림 추이 라인 */}
+      <path d={linePath} fill="none" stroke="#7b1fa2" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      {riskPoints.map((p,i) => {
+        const isLast = i === riskPoints.length-1;
+        return <circle key={i} cx={p.x} cy={p.y} r={isLast?4:2.5} fill="#7b1fa2" stroke="#fff" strokeWidth={isLast?1.5:0} />;
+      })}
+    </svg>
+  );
+}
+
 const NAV = [
-  { id: 'health', label: '시스템 모니터링' },
-  { id: 'stats', label: '통계' },
-  { id: 'calls', label: '통화 이력' },
-  { id: 'subscriptions', label: '정기결제 현황' },
-  { id: 'payments', label: '결제 내역' },
-  { id: 'refunds', label: '환불' },
-  { id: 'orgs', label: '기관 관리' },
-  { id: 'users', label: '사용자' },
-  { id: 'elders', label: '어르신' },
-  { id: 'notices', label: '공지' },
-  { id: 'audit', label: '감사 로그' },
-  { id: 'test', label: '기능 테스트' },
+  { id: 'health', label: '시스템 모니터링', icon: Activity },
+  { id: 'stats', label: '통계', icon: BarChart3 },
+  { id: 'calls', label: '통화 이력', icon: Phone },
+  { id: 'subscriptions', label: '정기결제 현황', icon: CreditCard },
+  { id: 'payments', label: '결제 내역', icon: Receipt },
+  { id: 'refunds', label: '환불', icon: RotateCcw },
+  { id: 'orgs', label: '기관 관리', icon: Building2 },
+  { id: 'users', label: '사용자', icon: UsersIcon },
+  { id: 'elders', label: '어르신', icon: HeartHandshake },
+  { id: 'notices', label: '공지', icon: Megaphone },
+  { id: 'audit', label: '감사 로그', icon: FileClock },
+  { id: 'test', label: '기능 테스트', icon: FlaskConical },
 ] as const;
 type PageId = typeof NAV[number]['id'];
 
@@ -609,13 +750,16 @@ export default function ConsoleApp() {
   if (!authUser) return <LoginScreen />;
   if (authCheckError) {
     return (
-      <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0f172a',padding:24}}>
-        <div style={{background:'#fff',borderRadius:16,padding:40,width:420,maxWidth:'100%',textAlign:'center'}}>
-          <div style={{fontSize:40}}>⚠️</div>
-          <div style={{fontSize:18,fontWeight:800,color:'#0f172a',marginTop:12}}>권한 확인 실패</div>
-          <div style={{fontSize:14,color:'#64748b',marginTop:8}}>{authCheckError}</div>
-          <button className="btn-primary" style={{marginTop:20,marginRight:8}} onClick={()=>setAuthCheckRetry(n=>n+1)}>다시 시도</button>
-          <button className="btn-secondary" style={{marginTop:20}} onClick={()=>signOut(auth as any)}>로그아웃</button>
+      <div className="gcp-console" style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8f9fa',padding:24}}>
+        <GcpStyle />
+        <div style={{background:'#fff',borderRadius:8,border:'1px solid #dadce0',boxShadow:'0 1px 2px 0 rgba(60,64,67,.30), 0 2px 6px 2px rgba(60,64,67,.15)',padding:40,width:420,maxWidth:'100%',textAlign:'center'}}>
+          <div style={{width:48,height:48,borderRadius:'50%',background:'#fef7e0',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',fontSize:22}}>⚠️</div>
+          <div style={{fontSize:17,fontWeight:500,color:'#202124',marginTop:16}}>권한 확인 실패</div>
+          <div style={{fontSize:13.5,color:'#5f6368',marginTop:8}}>{authCheckError}</div>
+          <div style={{marginTop:20,display:'flex',gap:8,justifyContent:'center'}}>
+            <button className="btn-primary" onClick={()=>setAuthCheckRetry(n=>n+1)}>다시 시도</button>
+            <button className="btn-secondary" onClick={()=>signOut(auth as any)}>로그아웃</button>
+          </div>
         </div>
       </div>
     );
@@ -624,28 +768,42 @@ export default function ConsoleApp() {
   if (authorized === false) return <AccessDenied email={authUser.email} onLogout={() => signOut(auth as any)} />;
 
   return (
-    <div style={{display:'flex',minHeight:'100vh',background:'#f5f7fa'}}>
+    <div className="gcp-console" style={{display:'flex',minHeight:'100vh'}}>
+      <GcpStyle />
       {toast && (
         <div className="toast-viewport">
           <div className={`toast toast--${toast.tone}`}>{toast.message}</div>
         </div>
       )}
-      <div style={{width:220,background:'#0f172a',color:'#fff',padding:'20px 12px',display:'flex',flexDirection:'column',flexShrink:0}}>
-        <div style={{fontSize:16,fontWeight:900,padding:'0 10px 20px'}}>AI영실이 <span style={{fontSize:11,fontWeight:700,color:'#94a3b8',border:'1px solid #334155',borderRadius:4,padding:'1px 5px',marginLeft:4}}>OPS</span></div>
-        {NAV.map(item => (
-          <button key={item.id} onClick={()=>setPage(item.id)}
-            style={{textAlign:'left',padding:'10px 12px',borderRadius:8,border:'none',cursor:'pointer',fontSize:14,fontWeight:700,marginBottom:2,
-              background: page===item.id ? '#1e293b' : 'transparent', color: page===item.id ? '#fff' : '#94a3b8'}}>
-            {item.label}
-          </button>
-        ))}
-        <div style={{marginTop:'auto',paddingTop:16,borderTop:'1px solid #1e293b'}}>
-          <div style={{fontSize:12,color:'#64748b',padding:'0 10px 8px'}}>{authUser.email}</div>
-          <button className="btn-secondary" style={{width:'100%'}} onClick={()=>signOut(auth as any)}>로그아웃</button>
+      <div className="gcp-sidebar" style={{width:232,padding:'16px 0',display:'flex',flexDirection:'column',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,padding:'6px 20px 18px'}}>
+          <div style={{width:28,height:28,borderRadius:7,background:'#1a73e8',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>영</div>
+          <div>
+            <div style={{fontSize:14.5,fontWeight:500,color:'#202124',lineHeight:1.2}}>AI영실이</div>
+            <div style={{fontSize:11,color:'#5f6368',lineHeight:1.2}}>운영 콘솔</div>
+          </div>
+        </div>
+        {NAV.map(item => {
+          const Icon = item.icon;
+          const active = page === item.id;
+          return (
+            <button key={item.id} onClick={()=>setPage(item.id)} className={`gcp-nav-item ${active?'is-active':''}`}>
+              <Icon size={18} strokeWidth={active?2.25:1.75} style={{flexShrink:0,color: active?'#1a73e8':'#5f6368'}} />
+              {item.label}
+            </button>
+          );
+        })}
+        <div style={{marginTop:'auto',paddingTop:14,borderTop:'1px solid #dadce0',margin:'14px 16px 0'}}>
+          <div style={{fontSize:12,color:'#5f6368',padding:'0 4px 10px',wordBreak:'break-all'}}>{authUser.email}</div>
+          <button className="btn-secondary" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:7}} onClick={()=>signOut(auth as any)}><LogOut size={14}/> 로그아웃</button>
         </div>
       </div>
-      <div style={{flex:1,padding:'28px 32px',overflowY:'auto'}}>
-        <div style={{fontSize:20,fontWeight:900,color:'#0f172a',marginBottom:20}}>{NAV.find(n=>n.id===page)?.label}</div>
+      <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column'}}>
+        <div className="gcp-topbar" style={{padding:'18px 32px',flexShrink:0}}>
+          <div style={{fontSize:11.5,color:'#5f6368',fontWeight:500,letterSpacing:'.02em',marginBottom:2}}>AI영실이 운영 콘솔</div>
+          <div style={{fontSize:21,fontWeight:500,color:'#202124'}}>{NAV.find(n=>n.id===page)?.label}</div>
+        </div>
+        <div style={{flex:1,padding:'24px 32px',overflowY:'auto'}}>
 
         {page === 'health' && (
           <div className="fade-in">
@@ -708,33 +866,35 @@ export default function ConsoleApp() {
                 </select>
               </div>
               {!statsData ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{statsLoading?'불러오는 중...':'데이터 없음 — 조회 버튼을 눌러주세요'}</div> : (
-                <div style={{overflowX:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
-                    <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
-                      <th style={{padding:'8px 10px'}}>월</th><th style={{padding:'8px 10px'}}>전체 발신</th><th style={{padding:'8px 10px'}}>연결</th>
-                      <th style={{padding:'8px 10px'}}>미연결</th><th style={{padding:'8px 10px'}}>실패</th><th style={{padding:'8px 10px'}}>연결률</th>
-                      <th style={{padding:'8px 10px'}}>위험알림(긴급/주의)</th><th style={{padding:'8px 10px'}}>추이</th>
-                    </tr></thead>
-                    <tbody>{(statsData.monthly || []).map((m:any) => {
-                      const maxTotal = Math.max(1, ...(statsData.monthly || []).map((x:any)=>x.total));
-                      return (
-                      <tr key={m.month} style={{borderBottom:'1px solid #f1f3f4'}}>
-                        <td style={{padding:'10px',fontWeight:700}}>{m.month}</td>
-                        <td style={{padding:'10px'}}>{m.total}건</td>
-                        <td style={{padding:'10px',color:'#1e8e3e'}}>{m.completed}건</td>
-                        <td style={{padding:'10px',color:'#754d00'}}>{m.missed}건</td>
-                        <td style={{padding:'10px',color:'#c5221f'}}>{m.failed}건</td>
-                        <td style={{padding:'10px'}}>{m.connectRate != null ? `${Math.round(m.connectRate*100)}%` : '-'}</td>
-                        <td style={{padding:'10px'}}>{m.riskCritical+m.riskUrgent > 0 ? <span style={{color:'#c5221f',fontWeight:700}}>{m.riskCritical+m.riskUrgent}건</span> : '-'}{m.riskWarning>0 && <span style={{color:'#754d00'}}> / 주의 {m.riskWarning}건</span>}</td>
-                        <td style={{padding:'10px',minWidth:120}}>
-                          <div style={{background:'#e2e8f0',borderRadius:4,height:10,width:120,overflow:'hidden'}}>
-                            <div style={{background:'#246BEB',height:'100%',width:`${(m.total/maxTotal)*100}%`}} />
-                          </div>
-                        </td>
-                      </tr>
-                    );})}</tbody>
-                  </table>
-                </div>
+                <>
+                  <div style={{display:'flex',gap:18,flexWrap:'wrap',alignItems:'center',fontSize:12,color:'#5f6368',marginBottom:4}}>
+                    <span><span style={{display:'inline-block',width:9,height:9,borderRadius:2,background:'#34a853',marginRight:5}}/>연결</span>
+                    <span><span style={{display:'inline-block',width:9,height:9,borderRadius:2,background:'#f9ab00',marginRight:5}}/>미연결</span>
+                    <span><span style={{display:'inline-block',width:9,height:9,borderRadius:2,background:'#d93025',marginRight:5}}/>실패</span>
+                    <span><span style={{display:'inline-block',width:9,height:9,borderRadius:'50%',background:'#7b1fa2',marginRight:5}}/>위험알림 추이(우측 축)</span>
+                  </div>
+                  <MonthlyChart data={statsData.monthly || []} />
+                  <div style={{overflowX:'auto',marginTop:18}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                      <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                        <th style={{padding:'8px 10px'}}>월</th><th style={{padding:'8px 10px'}}>전체 발신</th><th style={{padding:'8px 10px'}}>연결</th>
+                        <th style={{padding:'8px 10px'}}>미연결</th><th style={{padding:'8px 10px'}}>실패</th><th style={{padding:'8px 10px'}}>연결률</th>
+                        <th style={{padding:'8px 10px'}}>위험알림(긴급/주의)</th>
+                      </tr></thead>
+                      <tbody>{(statsData.monthly || []).map((m:any) => (
+                        <tr key={m.month} style={{borderBottom:'1px solid #f1f3f4'}}>
+                          <td style={{padding:'10px',fontWeight:700}}>{m.month}</td>
+                          <td style={{padding:'10px'}}>{m.total}건</td>
+                          <td style={{padding:'10px',color:'#1e8e3e'}}>{m.completed}건</td>
+                          <td style={{padding:'10px',color:'#754d00'}}>{m.missed}건</td>
+                          <td style={{padding:'10px',color:'#c5221f'}}>{m.failed}건</td>
+                          <td style={{padding:'10px'}}>{m.connectRate != null ? `${Math.round(m.connectRate*100)}%` : '-'}</td>
+                          <td style={{padding:'10px'}}>{m.riskCritical+m.riskUrgent > 0 ? <span style={{color:'#c5221f',fontWeight:700}}>{m.riskCritical+m.riskUrgent}건</span> : '-'}{m.riskWarning>0 && <span style={{color:'#754d00'}}> / 주의 {m.riskWarning}건</span>}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </section>
             {statsData && statsData.byOrg?.length > 0 && (
@@ -745,14 +905,22 @@ export default function ConsoleApp() {
                     <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
                       <th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>전체 발신</th><th style={{padding:'8px 10px'}}>연결</th><th style={{padding:'8px 10px'}}>연결률</th>
                     </tr></thead>
-                    <tbody>{statsData.byOrg.map((o:any) => (
+                    <tbody>{(() => {
+                      const maxOrgTotal = Math.max(1, ...statsData.byOrg.map((o:any)=>o.total));
+                      return statsData.byOrg.map((o:any) => (
                       <tr key={o.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
-                        <td style={{padding:'10px'}}>{orgName(o.orgId)}</td>
-                        <td style={{padding:'10px'}}>{o.total}건</td>
-                        <td style={{padding:'10px',color:'#1e8e3e'}}>{o.completed}건</td>
-                        <td style={{padding:'10px'}}>{o.connectRate != null ? `${Math.round(o.connectRate*100)}%` : '-'}</td>
+                        <td style={{padding:'10px',minWidth:220}}>
+                          <div style={{marginBottom:4}}>{orgName(o.orgId)}</div>
+                          <div style={{background:'#f1f3f4',borderRadius:3,height:6,width:'100%',overflow:'hidden'}}>
+                            <div style={{background:'#1a73e8',height:'100%',width:`${(o.total/maxOrgTotal)*100}%`}} />
+                          </div>
+                        </td>
+                        <td style={{padding:'10px',fontVariantNumeric:'tabular-nums'}}>{o.total}건</td>
+                        <td style={{padding:'10px',color:'#1e8e3e',fontVariantNumeric:'tabular-nums'}}>{o.completed}건</td>
+                        <td style={{padding:'10px',fontVariantNumeric:'tabular-nums'}}>{o.connectRate != null ? `${Math.round(o.connectRate*100)}%` : '-'}</td>
                       </tr>
-                    ))}</tbody>
+                      ));
+                    })()}</tbody>
                   </table>
                 </div>
               </section>
@@ -885,13 +1053,15 @@ export default function ConsoleApp() {
                           : <span style={{color:'#94a3b8',fontSize:12}}>-</span>}
                       </td>
                       <td style={{padding:'10px',color:'#5f6368',fontSize:12}}>{p.refundRequestReason || '-'}</td>
-                      <td style={{padding:'10px',display:'flex',gap:6}}>
-                        <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:'#c5221f'}} disabled={refundBusy===p.id} onClick={()=>doRefund(p)}>
-                          {refundBusy===p.id ? '처리 중...' : '환불'}
-                        </button>
-                        {p.refundRequestStatus==='pending' && (
-                          <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px'}} disabled={refundBusy===p.id} onClick={()=>doRejectRefund(p)}>거절</button>
-                        )}
+                      <td style={{padding:'10px',whiteSpace:'nowrap'}}>
+                        <div style={{display:'flex',gap:6}}>
+                          <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:'#c5221f'}} disabled={refundBusy===p.id} onClick={()=>doRefund(p)}>
+                            {refundBusy===p.id ? '처리 중...' : '환불'}
+                          </button>
+                          {p.refundRequestStatus==='pending' && (
+                            <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px'}} disabled={refundBusy===p.id} onClick={()=>doRejectRefund(p)}>거절</button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}</tbody>
@@ -920,9 +1090,11 @@ export default function ConsoleApp() {
                       <td style={{padding:'10px'}}>{o.creditBalance == null ? <span style={{color:'#94a3b8'}}>무제한(구기관)</span> : <span style={{fontWeight:700,color:o.creditBalance<=0?'#c5221f':'#0f172a'}}>{Number(o.creditBalance).toLocaleString()}원</span>}</td>
                       <td style={{padding:'10px'}}>{o.elderCount}명</td>
                       <td style={{padding:'10px'}}><span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:suspended?'#fce8e6':'#e6f4ea',color:suspended?'#c5221f':'#1e8e3e'}}>{suspended?'정지됨':'정상'}</span></td>
-                      <td style={{padding:'10px',display:'flex',gap:6}}>
-                        <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:'#246BEB'}} disabled={orgBusy===o.orgId} onClick={()=>creditOrg(o)}>충전</button>
-                        <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:suspended?'#1e8e3e':'#c5221f'}} disabled={orgBusy===o.orgId} onClick={()=>toggleOrgSuspend(o,!suspended)}>{orgBusy===o.orgId?'처리 중...':(suspended?'재개':'정지')}</button>
+                      <td style={{padding:'10px',whiteSpace:'nowrap'}}>
+                        <div style={{display:'flex',gap:6}}>
+                          <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:'#1a73e8'}} disabled={orgBusy===o.orgId} onClick={()=>creditOrg(o)}>충전</button>
+                          <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:suspended?'#1e8e3e':'#c5221f'}} disabled={orgBusy===o.orgId} onClick={()=>toggleOrgSuspend(o,!suspended)}>{orgBusy===o.orgId?'처리 중...':(suspended?'재개':'정지')}</button>
+                        </div>
                       </td>
                     </tr>
                     );
@@ -958,12 +1130,14 @@ export default function ConsoleApp() {
                       <td style={{padding:'10px'}}>{u.email}</td>
                       <td style={{padding:'10px'}}>{u.name || '-'}</td>
                       <td style={{padding:'10px'}}>{orgName(u.orgId)}</td>
-                      <td style={{padding:'10px'}}><span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:'#f1f3f4',color:'#5f6368'}}>{u.role}</span></td>
-                      <td style={{padding:'10px',display:'flex',gap:6,flexWrap:'wrap'}}>
-                        <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>changeUserRole(u)}>역할변경</button>
-                        <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>toggleUserLock(u,true)}>잠금</button>
-                        <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>toggleUserLock(u,false)}>잠금해제</button>
-                        <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px',color:'#246BEB'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>resetUserPasswordAction(u)}>비번재설정</button>
+                      <td style={{padding:'10px'}}><RoleBadge role={u.role} /></td>
+                      <td style={{padding:'10px'}}>
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap',minWidth:280}}>
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>changeUserRole(u)}>역할변경</button>
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>toggleUserLock(u,true)}>잠금</button>
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>toggleUserLock(u,false)}>잠금해제</button>
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px',color:'#1a73e8'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>resetUserPasswordAction(u)}>비번재설정</button>
+                        </div>
                       </td>
                     </tr>
                   ))}</tbody>
@@ -1182,6 +1356,7 @@ export default function ConsoleApp() {
             </section>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
