@@ -131,6 +131,7 @@ export default function ConsoleApp() {
   const [testRefundReason, setTestRefundReason] = useState('테스트 환불 요청');
   const [testBusy, setTestBusy] = useState('');
   const [testCallTarget, setTestCallTarget] = useState<any>(null); // {configured, phone, name, orgId}
+  const [testCallTargetInput, setTestCallTargetInput] = useState('');
   const [testPublicData, setTestPublicData] = useState<any[]>([]); // ComponentHealth[]
   const [auditLoading, setAuditLoading] = useState(false);
   const [authCheckError, setAuthCheckError] = useState('');   // 네트워크/CORS 등 판정 자체가 실패한 경우 — "권한 없음"과 구분해야 함
@@ -370,6 +371,19 @@ export default function ConsoleApp() {
       const r = await authFetch(`${SERVER_URL}/console/test/call-target`);
       setTestCallTarget(await r.json().catch(()=>null));
     } catch { setTestCallTarget(null); }
+  };
+  const saveTestCallTarget = async () => {
+    if (!testCallTargetInput.trim()) { notify('전화번호를 입력하세요'); return; }
+    setTestBusy('call-target-save');
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/test/call-target`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ phone: testCallTargetInput.trim() }) });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { notify(errMsg(d, '등록 실패')); return; }
+      notify('테스트 대상 번호가 등록됐습니다', 'success');
+      setTestCallTargetInput('');
+      fetchTestCallTarget();
+    } catch { notify('네트워크 오류 — 등록 실패'); }
+    finally { setTestBusy(''); }
   };
   const testCallFlow = async (kind: 'checkin' | 'alert') => {
     if (!testCallTarget?.configured) { notify('TEST_ELDER_PHONE이 설정돼 있지 않습니다(서버 .env)'); return; }
@@ -750,17 +764,21 @@ export default function ConsoleApp() {
               {testCallTarget === null ? (
                 <div style={{color:'#94a3b8',fontSize:14}}>불러오는 중...</div>
               ) : !testCallTarget.configured ? (
-                <div style={{color:'#c5221f',fontSize:13}}>TEST_ELDER_PHONE이 서버에 설정돼 있지 않습니다 — .env에 테스트 전용 어르신 번호를 등록해야 이 기능을 쓸 수 있습니다(실제 어르신에게 오발신되지 않도록 서버가 이 번호로만 하드 제한합니다).</div>
+                <div style={{color:'#c5221f',fontSize:13,marginBottom:12}}>테스트 대상 번호가 등록돼 있지 않습니다 — 아래에 테스트 전용 어르신 번호를 등록해야 이 기능을 쓸 수 있습니다(실제 어르신에게 오발신되지 않도록 이 번호로만 하드 제한됩니다).</div>
               ) : (
-                <>
-                  <div style={{fontSize:13,color:'#5f6368',marginBottom:10}}>
-                    테스트 대상: <b style={{color:'#0f172a'}}>{testCallTarget.name || '(이름 없음)'}</b> ({testCallTarget.phone}) · {testCallTarget.orgId || '소속 기관 확인 불가'}
-                  </div>
-                  <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-                    <button className="btn-primary" disabled={!!testBusy} onClick={()=>testCallFlow('checkin')}>{testBusy==='call-checkin'?'발신 중...':'안부확인 테스트 발신'}</button>
-                    <button className="btn-secondary" disabled={!!testBusy} onClick={()=>testCallFlow('alert')}>{testBusy==='call-alert'?'발신 중...':'경보 테스트 발신'}</button>
-                  </div>
-                </>
+                <div style={{fontSize:13,color:'#5f6368',marginBottom:12}}>
+                  테스트 대상: <b style={{color:'#0f172a'}}>{testCallTarget.name || '(이름 없음)'}</b> ({testCallTarget.phone}) · {testCallTarget.orgId || '소속 기관 확인 불가'}
+                </div>
+              )}
+              <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:testCallTarget?.configured ? 14 : 0}}>
+                <input className="form-input" style={{width:220,margin:0}} value={testCallTargetInput} onChange={e=>setTestCallTargetInput(e.target.value)} placeholder="테스트 어르신 번호(숫자만)" />
+                <button className="btn-secondary" disabled={testBusy==='call-target-save'} onClick={saveTestCallTarget}>{testBusy==='call-target-save'?'등록 중...':(testCallTarget?.configured?'대상 변경':'대상 등록')}</button>
+              </div>
+              {testCallTarget?.configured && (
+                <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                  <button className="btn-primary" disabled={!!testBusy} onClick={()=>testCallFlow('checkin')}>{testBusy==='call-checkin'?'발신 중...':'안부확인 테스트 발신'}</button>
+                  <button className="btn-secondary" disabled={!!testBusy} onClick={()=>testCallFlow('alert')}>{testBusy==='call-alert'?'발신 중...':'경보 테스트 발신'}</button>
+                </div>
               )}
             </section>
 
