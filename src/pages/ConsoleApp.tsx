@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
   Activity, BarChart3, Phone, CreditCard, Receipt, RotateCcw, Building2,
-  Users as UsersIcon, HeartHandshake, Megaphone, FileClock, FlaskConical, LogOut,
+  Users as UsersIcon, HeartHandshake, Megaphone, FileClock, FlaskConical, LogOut, UserCog,
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -22,6 +22,7 @@ const ROLE_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
   staff:      { bg: '#e8f0fe', fg: '#1a73e8', label: 'staff' },
   admin:      { bg: '#f3e8fd', fg: '#9334e6', label: 'admin' },
   superadmin: { bg: '#fce8e6', fg: '#c5221f', label: 'superadmin' },
+  cs:         { bg: '#e6f4ea', fg: '#188038', label: 'CS 담당자' },
 };
 function RoleBadge({ role }: { role: string }) {
   const s = ROLE_STYLE[role] || ROLE_STYLE.worker;
@@ -230,13 +231,18 @@ const NAV = [
   { id: 'notices', label: '공지', icon: Megaphone },
   { id: 'audit', label: '감사 로그', icon: FileClock },
   { id: 'test', label: '기능 테스트', icon: FlaskConical },
+  { id: 'staff', label: '콘솔 계정', icon: UserCog },
 ] as const;
 type PageId = typeof NAV[number]['id'];
+
+/** CS 담당자(role:'cs')에게 보이는 사이드바 범위 — 백엔드 @AllowCs() 라우트와 1:1로 맞춘다 */
+const CS_ALLOWED_PAGES: PageId[] = ['stats', 'calls', 'payments', 'refunds', 'users', 'elders', 'notices'];
 
 export default function ConsoleApp() {
   const [authUser, setAuthUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [authorized, setAuthorized] = useState<boolean | null>(null); // null=확인 중, true/false=결과
+  const [consoleRole, setConsoleRole] = useState<string | null>(null); // 'superadmin' | 'cs' — 사이드바 범위 결정용
   const [page, setPage] = useState<PageId>('health');
   const [toast, setToast] = useState<{message:string; tone:'info'|'success'|'error'}|null>(null);
   const notify = (message: unknown, tone: 'info'|'success'|'error' = 'error') => {
@@ -311,6 +317,14 @@ export default function ConsoleApp() {
   const [noticeTargetOrgs, setNoticeTargetOrgs] = useState(''); // 콤마 구분 orgId, 빈 값=전체
   const [noticeBusy, setNoticeBusy] = useState(false);
 
+  // ── 콘솔 CS 계정 관리(superadmin 전용) ──
+  const [csAccounts, setCsAccounts] = useState<any[]>([]);
+  const [csAccountsLoading, setCsAccountsLoading] = useState(false);
+  const [csEmail, setCsEmail] = useState('');
+  const [csPassword, setCsPassword] = useState('');
+  const [csName, setCsName] = useState('');
+  const [csBusy, setCsBusy] = useState(false);
+
   useEffect(() => {
     if (!authEnabled) { setAuthChecked(true); return; }
     const unsub = onAuthStateChanged(auth as any, u => { setAuthUser(u); setAuthChecked(true); setAuthorized(null); });
@@ -322,7 +336,7 @@ export default function ConsoleApp() {
   // 구분해야 한다 — 둘 다 "권한 없음"으로 뭉개면 실제로는 superadmin인 계정도 인프라
   // 문제(CORS_ORIGINS 미등록 등) 때문에 "권한 없음" 오진을 받는다(2026-08-31 실사용 발견).
   useEffect(() => {
-    if (!authUser) { setAuthorized(null); setAuthCheckError(''); return; }
+    if (!authUser) { setAuthorized(null); setAuthCheckError(''); setConsoleRole(null); return; }
     let cancelled = false;
     (async () => {
       setAuthCheckError('');
@@ -334,6 +348,13 @@ export default function ConsoleApp() {
         const d = await r.json().catch(() => null);
         setAuthorized(true);
         if (d && Array.isArray(d.components)) setHealth(d);
+        // /console/health는 superadmin·cs 둘 다 통과하므로, 사이드바를 실제 역할에 맞게
+        // 좁히려면 /me로 정확한 role을 한 번 더 확인해야 한다.
+        try {
+          const meRes = await authFetch(`${SERVER_URL}/me`);
+          const me = await meRes.json().catch(() => null);
+          if (!cancelled && me?.role) setConsoleRole(me.role);
+        } catch { /* 역할 확인 실패해도 기본(제한된) 화면으로 동작 — 아래 NAV 필터가 안전 쪽으로 처리 */ }
       } catch (e: any) {
         if (!cancelled) setAuthCheckError(`네트워크 오류로 권한을 확인하지 못했습니다: ${e?.message || e}`);
       }
@@ -729,8 +750,45 @@ export default function ConsoleApp() {
     } catch { notify('네트워크 오류 — 삭제 실패'); }
   };
 
+  // ── 콘솔 CS 계정 관리(superadmin 전용) ──
+  const fetchCsAccounts = async () => {
+    setCsAccountsLoading(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/staff`);
+      const d = await r.json().catch(() => []);
+      setCsAccounts(Array.isArray(d) ? d : []);
+    } catch { notify('CS 계정 목록 조회 실패'); }
+    finally { setCsAccountsLoading(false); }
+  };
+  const createCsAccountAction = async () => {
+    if (!csEmail.trim() || csPassword.length < 6) { notify('이메일과 6자 이상 비밀번호를 입력하세요'); return; }
+    setCsBusy(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/staff`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: csEmail.trim(), password: csPassword, name: csName.trim() || undefined }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) { notify('CS 계정을 생성했습니다.', 'success'); setCsEmail(''); setCsPassword(''); setCsName(''); fetchCsAccounts(); }
+      else notify(errMsg(d, '생성 실패'));
+    } catch { notify('네트워크 오류 — 생성 실패'); }
+    finally { setCsBusy(false); }
+  };
+  const deleteCsAccountAction = async (u: any) => {
+    if (!window.confirm(`"${u.email}" CS 계정을 삭제할까요?`)) return;
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/staff/${u.uid}`, { method: 'DELETE' });
+      if (r.ok) { notify('CS 계정을 삭제했습니다.', 'success'); fetchCsAccounts(); }
+      else notify('삭제 실패');
+    } catch { notify('네트워크 오류 — 삭제 실패'); }
+  };
+
   useEffect(() => {
     if (authorized !== true) return;
+    // consoleRole이 아직 안 정해졌으면(=/me 응답 전) 기다린다 — 안 그러면 기본 진입 화면인
+    // '시스템 모니터링'용 fetchHealth()가 role 확정·리다이렉트보다 먼저 한 번 실행돼 CS
+    // 계정에서 GET /console/calls/active(비허용 라우트) 403이 콘솔에 찍힌다(2026-09-01 발견).
+    if (consoleRole === null) return;
     if (page === 'test') fetchTestCallTarget();
     if (page === 'health') fetchHealth();
     if (page === 'calls') fetchHistory();
@@ -744,7 +802,15 @@ export default function ConsoleApp() {
     if (page === 'users') { fetchUsers(); if (orgs.length === 0) fetchOrgs(); }
     if (page === 'elders') { fetchElders(); if (orgs.length === 0) fetchOrgs(); }
     if (page === 'notices') fetchNotices();
-  }, [page, authorized]); // eslint-disable-line
+    if (page === 'staff') fetchCsAccounts();
+  }, [page, authorized, consoleRole]); // eslint-disable-line
+
+  // CS 담당자는 기본 진입 화면(시스템 모니터링)을 못 보므로, 역할 확인이 끝나면 허용된
+  // 화면으로 옮겨준다(그 전까지 짧게 시스템 모니터링이 보이는 건 렌더링뿐 — 실제 데이터 접근은
+  // 백엔드가 막는다).
+  useEffect(() => {
+    if (consoleRole === 'cs' && !CS_ALLOWED_PAGES.includes(page)) setPage('stats');
+  }, [consoleRole]); // eslint-disable-line
 
   if (!authChecked) return null;
   if (!authUser) return <LoginScreen />;
@@ -783,7 +849,7 @@ export default function ConsoleApp() {
             <div style={{fontSize:11,color:'#5f6368',lineHeight:1.2}}>운영 콘솔</div>
           </div>
         </div>
-        {NAV.map(item => {
+        {(consoleRole==='cs' ? NAV.filter(n=>CS_ALLOWED_PAGES.includes(n.id)) : NAV).map(item => {
           const Icon = item.icon;
           const active = page === item.id;
           return (
@@ -1129,14 +1195,16 @@ export default function ConsoleApp() {
                     <tr key={u.uid} style={{borderBottom:'1px solid #f1f3f4'}}>
                       <td style={{padding:'10px'}}>{u.email}</td>
                       <td style={{padding:'10px'}}>{u.name || '-'}</td>
-                      <td style={{padding:'10px'}}>{orgName(u.orgId)}</td>
+                      <td style={{padding:'10px'}}>{u.role==='cs' ? <span style={{color:'#94a3b8'}}>—(콘솔 전용)</span> : orgName(u.orgId)}</td>
                       <td style={{padding:'10px'}}><RoleBadge role={u.role} /></td>
                       <td style={{padding:'10px'}}>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap',minWidth:280}}>
-                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>changeUserRole(u)}>역할변경</button>
-                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>toggleUserLock(u,true)}>잠금</button>
-                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>toggleUserLock(u,false)}>잠금해제</button>
-                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px',color:'#1a73e8'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>resetUserPasswordAction(u)}>비번재설정</button>
+                          {consoleRole!=='cs' && (
+                            <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin'} onClick={()=>changeUserRole(u)}>역할변경</button>
+                          )}
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin' || u.role==='cs'} onClick={()=>toggleUserLock(u,true)}>잠금</button>
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={userBusy===u.uid || u.role==='superadmin' || u.role==='cs'} onClick={()=>toggleUserLock(u,false)}>잠금해제</button>
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px',color:'#1a73e8'}} disabled={userBusy===u.uid || u.role==='superadmin' || u.role==='cs'} onClick={()=>resetUserPasswordAction(u)}>비번재설정</button>
                         </div>
                       </td>
                     </tr>
@@ -1226,6 +1294,52 @@ export default function ConsoleApp() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
+        {page === 'staff' && (
+          <div className="fade-in">
+            <section className="section" style={{marginBottom:16}}>
+              <div className="section-title" style={{marginBottom:10}}>CS 계정 생성</div>
+              <div style={{fontSize:12.5,color:'#5f6368',marginBottom:14}}>CS 담당자는 특정 기관에 속하지 않고, 콘솔의 통계·통화이력·결제내역·환불·사용자(비번재설정/잠금)·어르신·공지 화면만 사용할 수 있습니다.</div>
+              <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
+                <div>
+                  <div style={{fontSize:12,color:'#5f6368',marginBottom:4}}>이메일</div>
+                  <input className="form-input" style={{width:220,margin:0}} type="email" value={csEmail} onChange={e=>setCsEmail(e.target.value)} />
+                </div>
+                <div>
+                  <div style={{fontSize:12,color:'#5f6368',marginBottom:4}}>비밀번호(6자 이상)</div>
+                  <input className="form-input" style={{width:180,margin:0}} type="password" value={csPassword} onChange={e=>setCsPassword(e.target.value)} />
+                </div>
+                <div>
+                  <div style={{fontSize:12,color:'#5f6368',marginBottom:4}}>이름(선택)</div>
+                  <input className="form-input" style={{width:140,margin:0}} value={csName} onChange={e=>setCsName(e.target.value)} />
+                </div>
+                <button className="btn-primary" disabled={csBusy} onClick={createCsAccountAction}>{csBusy?'생성 중...':'생성'}</button>
+              </div>
+            </section>
+            <section className="section">
+              <div className="script-editor-header" style={{marginBottom:10}}>
+                <div className="section-title" style={{marginBottom:0}}>CS 계정 목록 ({csAccounts.length}명)</div>
+                <button className={`btn-download ${csAccountsLoading?'btn-calling':''}`} onClick={fetchCsAccounts} disabled={csAccountsLoading}>{csAccountsLoading?'조회 중...':'새로고침'}</button>
+              </div>
+              {csAccounts.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{csAccountsLoading?'불러오는 중...':'생성된 CS 계정이 없습니다'}</div> : (
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                    <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                      <th style={{padding:'8px 10px'}}>이메일</th><th style={{padding:'8px 10px'}}>이름</th><th style={{padding:'8px 10px'}}></th>
+                    </tr></thead>
+                    <tbody>{csAccounts.map((u:any) => (
+                      <tr key={u.uid} style={{borderBottom:'1px solid #f1f3f4'}}>
+                        <td style={{padding:'10px'}}>{u.email}</td>
+                        <td style={{padding:'10px'}}>{u.name || '-'}</td>
+                        <td style={{padding:'10px'}}><button className="btn-secondary" style={{fontSize:12,padding:'4px 8px',color:'#c5221f'}} onClick={()=>deleteCsAccountAction(u)}>삭제</button></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
                 </div>
               )}
             </section>
