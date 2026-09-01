@@ -2941,11 +2941,15 @@ export default function App() {
                 );
               })}
             </div>
-            <div style={{display:'flex',gap:8}}>
-              <button className="btn-secondary" style={{flex:1}} disabled={topupBusy} onClick={()=>setPendingTopup(null)}>취소</button>
-              <button className="btn-primary" style={{flex:2}} disabled={topupBusy} onClick={async ()=>{ const amt = pendingTopup.amount; await startTopup(amt); setPendingTopup(null); }}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
+              <button className="btn-primary" style={{width:'100%'}} disabled={topupBusy} onClick={async ()=>{ const amt = pendingTopup.amount; await startTopup(amt); setPendingTopup(null); }}>
                 {topupBusy ? '처리 중...' : '결제하기'}
               </button>
+              <button
+                style={{background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:14,fontWeight:600,padding:4}}
+                disabled={topupBusy}
+                onClick={()=>setPendingTopup(null)}
+              >취소</button>
             </div>
           </div>
         </div>
