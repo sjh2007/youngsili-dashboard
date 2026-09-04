@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type CSSProperties } from 'react';
+import { useState, useEffect, useRef, useMemo, type CSSProperties } from 'react';
 import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from '../components/help/HelpGuide';
@@ -1263,7 +1263,6 @@ export default function App() {
   const danger  = elders.filter(e => e.status==='danger').length;
   const warning = elders.filter(e => e.status==='warning').length;
   const normal  = elders.filter(e => e.status==='normal').length;
-  const filtered = filter==='all' ? elders : elders.filter(e => e.status===filter); // eslint-disable-line
   const cycleLabel = (c, days) => c==='daily'?'매일':c==='custom'?((days&&days.length)?`매주 ${days.join('·')}`:'요일 미정'):c==='every2days'?'격일':'주 1회';
   // 통화기록의 전화번호로 현재 명단(elders)의 이름을 찾음 — 이름 변경/재등록돼도 통화기록이 명단과 일치
   const nameByPhone = (phone, fallback) => {
@@ -1301,7 +1300,7 @@ export default function App() {
   };
 
   // R4 지역 라벨 하드코딩 금지 — 등록된 어르신 지역 + 기관 관할 지역에서 동적 생성
-  const REGIONS = ['전체', ...[...new Set([...elders.map(e => (e.region || '').trim()), (me?.orgRegion || '').trim()])].filter(Boolean).sort()];
+  const REGIONS = useMemo(() => ['전체', ...[...new Set([...elders.map(e => (e.region || '').trim()), (me?.orgRegion || '').trim()])].filter(Boolean).sort()], [elders, me?.orgRegion]);
   // 특보 등급 시맨틱: 경보급('매우 더움'·'많은 비'·'…경보')=danger(레드), 그 외 특보=warn(앰버), 없음=none
   const alertSeverity = w => (!w || w.alert === 'none') ? 'none' : (/매우|많은|경보/.test(w.alertText || '') ? 'danger' : 'warn');
 
@@ -1491,12 +1490,12 @@ export default function App() {
   // 안전확인 관리에서 이름 클릭 → 곧장 돌봄군·주기 설정(정보수정 3단계)으로 (탭 왕복 불편 해소)
   const openEditSchedule = elder => { setForm({...elder}); setFormStep(3); setFormErrors({}); setSaveSuccess(false); setEditMode(true); setPage('register'); };
 
-  const smartElders = (() => {
+  const smartElders = useMemo(() => {
     if (smartFilter==='danger')  return elders.filter(e=>e.status==='danger'||e.status==='warning');
     if (smartFilter==='noCall')  return elders.filter(e=>e.lastCall==='아직 없음'||(e.lastCall||'').includes('어제')||(e.lastCall||'').includes('2일'));
     if (smartFilter==='active')  return elders.filter(e=>e.callActive);
     return elders;
-  })();
+  }, [elders, smartFilter]);
 
   const toggleCheck = id => setChecked(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
   const checkAll    = () => setChecked(smartElders.map(e=>e.id));
