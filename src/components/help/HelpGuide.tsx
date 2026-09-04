@@ -2,7 +2,7 @@
 // ⚙️ 계속 업데이트: 아래 HELP_ITEMS 배열에 항목을 추가/수정하면 바로 반영됩니다.
 //    업데이트 소식을 추가하면 ANNOUNCEMENTS 맨 앞에 넣고 App.js의 LATEST_NOTICE도 같은 id로 올리세요.
 import { useState, useMemo } from 'react';
-import { BookOpen, Search, X, ExternalLink, Megaphone, ChevronDown } from 'lucide-react';
+import { BookOpen, Search, X, ExternalLink, Megaphone, ChevronDown, FileText } from 'lucide-react';
 
 export const LATEST_NOTICE = 4;
 
@@ -55,6 +55,10 @@ const Card = ({ children, className = '' }: any) => <section className={`help-ca
 export default function HelpGuide(_props: any) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState({});
+  // "전체 가이드"는 27쪽짜리 AI영실이 제품 문서(소개·요금·기능별 안내·FAQ 등) — 다중 페이지
+  // 네비게이션·목차·테마전환을 갖춘 자체완결형 HTML이라 React로 재구현하지 않고 정적 파일로
+  // 두고 iframe으로 그대로 띄운다(기능 유지 + 약 1MB라 JS 번들에 직접 넣지 않고 필요할 때만 로드).
+  const [tab, setTab] = useState('staff'); // staff | guide
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     if (!q) return HELP_ITEMS;
@@ -98,6 +102,29 @@ export default function HelpGuide(_props: any) {
         <p>궁금한 내용을 검색하거나 업무별 안내에서 찾아보세요.</p></div>
       </Card>
 
+      {/* 요약 FAQ / 27쪽짜리 전체 가이드 전환 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+        <button
+          className={tab === 'staff' ? 'btn-primary' : 'btn-secondary'}
+          style={{ fontSize: 14, padding: '8px 16px' }}
+          onClick={() => setTab('staff')}
+        >요약 FAQ</button>
+        <button
+          className={tab === 'guide' ? 'btn-primary' : 'btn-secondary'}
+          style={{ fontSize: 14, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
+          onClick={() => setTab('guide')}
+        ><FileText size={16}/> 전체 가이드</button>
+      </div>
+
+      {tab === 'guide' ? (
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <iframe
+            title="AI영실이 문서"
+            src="/help/ai-youngsili-guide.html"
+            style={{ width: '100%', height: '78vh', border: 0, display: 'block' }}
+          />
+        </Card>
+      ) : (<>
       {/* 검색 */}
       <div className="help-search">
         <Search size={20}/>
@@ -159,6 +186,7 @@ export default function HelpGuide(_props: any) {
       <div className="help-contact">
         더 궁금한 점은 kraft@krafte.net · 1877-1979 로 문의해 주세요.
       </div>
+      </>)}
     </div>
   );
 }
