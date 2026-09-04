@@ -1,6 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- 2026-09-04: lang="en"이었는데 실제 내용은 한국어라 크롬이 "영어 페이지 번역할까요?"
+     배너를 한국어 페이지에 띄우는 원인이었다. 구글 번역이 DOM을 직접 고쳐쓰면 React가
+     나중에 그 노드를 손대려다 removeChild 에러로 화면이 완전히 빈 화면이 되는 사고가
+     실사용에서 확인됨 — lang="ko" 교정 + translate="no"로 구글 번역 자체를 차단한다. -->
+<html lang="ko" translate="no">
   <head>
+    <meta name="google" content="notranslate" />
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="%PUBLIC_URL%/favicon.svg" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
