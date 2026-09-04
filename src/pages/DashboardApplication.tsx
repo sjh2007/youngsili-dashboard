@@ -580,6 +580,23 @@ export default function App() {
       if (r.ok) setBilling(parseOr(BillingBalanceSchema, await r.json(), null));
     } catch {}
   };
+  // 30일 무료체험 시작 — 요금제 업그레이드 모달의 "시범사업" 카드. 기관당 1회만 가능(서버가 재시작 차단).
+  const startTrial = async () => {
+    if (subscribeBusy) return;
+    setSubscribeBusy('trial');
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/start-trial`, { method: 'POST' });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { notify(errMsg(d, '체험 시작 실패')); return; }
+      setShowUpgradeModal(false);
+      notify('30일 무료체험이 시작됐습니다.', 'success');
+      fetchBillingBalance();
+    } catch {
+      notify('네트워크 오류 — 체험 시작 실패');
+    } finally {
+      setSubscribeBusy(null);
+    }
+  };
   // 크레딧 충전(2단계, 포트원) — 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동
   // 폴백한다(운영에 아직 포트원 키가 안 들어간 동안도 화면이 안 깨지게). 설정돼 있으면
   // PortOne.js 결제창을 띄우고, 실제 크레딧 반영은 서버 웹훅이 비동기로 처리하므로 결제
@@ -2756,20 +2773,22 @@ export default function App() {
   // 선불 충전식 크레딧(1단계) — 잔액 0 이하면 서버(OrgGuard)가 다른 요청을 전부 403으로
   // 막으므로, 화면도 "왜 막혔는지"를 바로 보여주고 다른 메뉴 진입을 막는다. superadmin(orgId='*')과
   // 잔액 미조회(billing===null, 로딩 중이거나 구기관=무제한)는 차단하지 않는다.
-  if (me && me.role !== 'superadmin' && billing && typeof billing.creditBalance === 'number' && billing.creditBalance <= 0) {
+  const trialActive = !!billing?.trialEndsAt && new Date(billing.trialEndsAt).getTime() > Date.now();
+  if (me && me.role !== 'superadmin' && billing && typeof billing.creditBalance === 'number' && billing.creditBalance <= 0 && !trialActive && !showUpgradeModal) {
     return (
       <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8fafc',padding:20}}>
         <div style={{maxWidth:420,background:'#fff',borderRadius:16,padding:'40px 32px',textAlign:'center',boxShadow:'0 4px 20px rgba(0,0,0,0.06)'}}>
           <div style={{fontSize:40,marginBottom:12}}>💳</div>
           <h2 style={{margin:'0 0 8px',fontSize:20,fontWeight:800,color:'#0f172a'}}>충전 잔액이 없습니다</h2>
           <p style={{color:'#64748b',fontSize:15,lineHeight:1.6,margin:'0 0 24px'}}>
-            {me.orgName || '소속 기관'}의 이용 크레딧이 모두 소진되어 서비스 이용이 일시 중단되었습니다.<br/>
-            담당자에게 문의해 충전 후 이용해 주세요.
+            {me.orgName || '소속 기관'}의 이용 크레딧이 없어 서비스 이용이 제한되어 있습니다.<br/>
+            아래에서 바로 충전하시면 확인 후 이용하실 수 있습니다.
           </p>
           <div style={{background:'#f1f5f9',borderRadius:10,padding:'12px 16px',fontSize:14,color:'#334155',marginBottom:20}}>
             현재 잔액: <b>{billing.creditBalance.toLocaleString()}원</b>
           </div>
-          <button className="btn-secondary" onClick={()=>{fetchBillingBalance();}}>새로고침</button>
+          <button className="btn-primary" style={{width:'100%',marginBottom:10}} onClick={()=>{ setUpgradeTab('metered'); setShowUpgradeModal(true); }}>충전하기</button>
+          <button className="btn-secondary" style={{width:'100%'}} onClick={()=>{fetchBillingBalance();}}>새로고침</button>
         </div>
       </div>
     );
@@ -2931,16 +2950,15 @@ export default function App() {
                       <div style={{width:'100%',textAlign:'center',fontSize:13,fontWeight:700,color:'#1e8e3e',background:'#e6f4ea',borderRadius:10,padding:'9px 0'}}>자동결제 중</div>
                     ) : (
                       // 2026-09-01: 이니시스 정기결제 채널 연동으로 빌링키 발급이 가능해져
-                      // startSubscription() 실결제 흐름을 다시 켠다(trial만 예외).
+                      // startSubscription() 실결제 흐름을 다시 켠다(trial은 결제 없이 startTrial()).
+                      // 2026-09-04: trial 카드가 "신청 접수" 토스트만 띄우고 실제로 아무 것도 안
+                      // 바꾸던 문제 수정 — POST /billing/start-trial로 실제 30일 체험을 시작한다.
                       <button
                         className="btn-primary"
                         style={{width:'100%'}}
-                        disabled={subscribeBusy === p.key}
-                        onClick={()=> p.key === 'trial'
-                          ? (()=>{ setShowUpgradeModal(false); notify(`"${p.name}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success'); })()
-                          : startSubscription(p.key, p.name)
-                        }
-                      >{subscribeBusy === p.key ? '처리 중...' : '신청'}</button>
+                        disabled={subscribeBusy === p.key || (p.key === 'trial' && !!billing?.trialEndsAt)}
+                        onClick={()=> p.key === 'trial' ? startTrial() : startSubscription(p.key, p.name)}
+                      >{subscribeBusy === p.key ? '처리 중...' : (p.key === 'trial' && billing?.trialEndsAt) ? '이미 시작됨' : '신청'}</button>
                     )}
                   </div>
                   );

@@ -60,6 +60,7 @@ export type Me = z.infer<typeof MeSchema>;
 export const BillingBalanceSchema = loose({
   orgId: z.string().optional(),
   creditBalance: z.number().nullable().optional(),
+  trialEndsAt: z.string().nullable().optional(), // 30일 무료체험 종료 시각(ISO) — 미래면 크레딧 0이어도 통과
 });
 export type BillingBalance = z.infer<typeof BillingBalanceSchema>;
 
