@@ -2767,13 +2767,14 @@ export default function App() {
                   onClick={()=>setPendingTopup({amount:Number(customAmount)})}
                 >직접 충전</button>
               </div>
-              {/* 실결제 파이프라인(포트원 연동·웹훅) 자체가 살아있는지 1원으로 실제 결제해 확인하는
-                  테스트 버튼 — 서버가 amount===1만 예외로 허용한다(일반 충전 최소단위는 그대로 유지). */}
+              {/* 실결제 파이프라인(포트원 연동·웹훅) 자체가 살아있는지 실제 결제해 확인하는
+                  테스트 버튼 — 서버가 amount===1000만 예외로 허용한다(일반 충전 최소단위는 그대로
+                  유지). 처음엔 1원으로 뒀는데 PG사 최소 결제금액 미만이라 결제가 안 돼 1,000원으로 조정. */}
               <button
                 className="btn-secondary"
                 style={{marginTop:8,fontSize:12,color:'#94a3b8'}}
-                onClick={()=>setPendingTopup({amount:1})}
-              >1원 테스트 결제</button>
+                onClick={()=>setPendingTopup({amount:1000})}
+              >1,000원 테스트 결제</button>
               <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정확한 채널 배정·이용 패턴별 견적은 담당 매니저에게 문의해 주세요.</p>
             </>) : upgradeTab==='flat' ? (<>
               <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
