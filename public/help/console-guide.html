@@ -1,0 +1,507 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>영실이 콘솔 도움말</title>
+<style>
+:root{
+  /* 영실이 운영 콘솔(ConsoleApp.tsx) 팔레트에 맞춤 — 구글 클라우드 콘솔 참조 톤 */
+  --ink:#202124; --ink-2:#3c4043; --muted:#5f6368; --faint:#94a3b8;
+  --paper:#FFFFFF; --sunk:#f8f9fa; --raise:#FFFFFF;
+  --line:#dadce0; --line-2:#f1f3f4;
+  --accent:#1a73e8; --accent-soft:#e8f0fe;
+  --ok:#1e8e3e; --ok-soft:#e6f4ea;
+  --warn:#754d00; --warn-soft:#fff8e1;
+  --crit:#c5221f; --crit-soft:#fce8e6;
+  --mono:'Roboto Mono',Consolas,ui-monospace,monospace;
+  --sans:'Roboto',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+     font-size:14.5px;line-height:1.74;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+button{font-family:inherit}
+
+.shell{display:grid;grid-template-columns:246px minmax(0,760px) 196px}
+
+.side{padding:20px 12px 60px 20px}
+.grp{margin-bottom:18px}
+.grp-h{display:flex;align-items:center;gap:7px;padding:0 8px 6px;font-size:11px;font-weight:700;
+  color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.nav-i{display:flex;align-items:center;gap:8px;width:100%;padding:6px 9px;border-radius:6px;
+  font-size:13px;line-height:1.5;color:var(--ink-2);background:none;border:0;cursor:pointer;text-align:left}
+.nav-i:hover{background:var(--sunk);color:var(--ink)}
+.nav-i[aria-current="page"]{background:var(--accent-soft);color:var(--accent);font-weight:700}
+.nav-i .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none}
+.nav-i .txt{flex:1}
+
+main{padding:34px 42px 110px;min-width:0}
+.eyebrow{font-size:11.5px;font-weight:700;color:var(--accent);letter-spacing:.02em;margin-bottom:8px}
+h1{font-size:27px;font-weight:700;letter-spacing:-.03em;margin:0 0 12px;text-wrap:balance}
+.lead{font-size:14.5px;color:var(--ink-2);max-width:64ch;margin:0 0 8px}
+h2{font-size:17.5px;font-weight:700;letter-spacing:-.02em;margin:38px 0 11px}
+h3{font-size:14px;font-weight:700;margin:22px 0 7px}
+p{max-width:66ch;margin:0 0 12px}
+
+.status-row{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+.stat{flex:1;min-width:160px;padding:13px 15px;border:1px solid var(--line);border-radius:9px;background:var(--raise)}
+.stat .lb{font-size:11.5px;color:var(--faint);margin-bottom:5px}
+.stat .vv{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:13px;font-weight:700}
+.dot2{width:7px;height:7px;border-radius:50%;flex:none}
+.dot2.ok{background:var(--ok)} .dot2.warn{background:var(--warn)} .dot2.crit{background:var(--crit)}
+
+.tw{overflow-x:auto;margin:14px 0;border:1px solid var(--line);border-radius:9px;background:var(--raise)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line-2);vertical-align:top;white-space:nowrap}
+td.wrap{white-space:normal}
+th{font-size:10.5px;color:var(--faint);font-weight:700;background:var(--sunk);letter-spacing:.02em}
+tr:last-child td{border-bottom:0}
+td.k{font-weight:700;color:var(--ink)}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr.crit td{background:var(--crit-soft)} tr.crit td.k{color:var(--crit)}
+tr.hi td{background:var(--ok-soft)}
+
+.note{display:flex;gap:11px;margin:14px 0;padding:12px 15px;border-radius:8px;background:var(--sunk);border:1px solid var(--line-2)}
+.note p{margin:0;font-size:13.5px;color:var(--ink-2)}
+.note .ic{flex:none;width:17px;height:17px;margin-top:2px}
+.note.warn{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 25%,transparent)}
+.note.crit{background:var(--crit-soft);border-color:color-mix(in srgb,var(--crit) 25%,transparent)}
+.note.ok{background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 22%,transparent)}
+
+.chip{font-family:var(--mono);font-size:12px;background:var(--sunk);border:1px solid var(--line-2);
+  border-radius:5px;padding:2px 7px;color:var(--ink-2);white-space:nowrap}
+ul.plain{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-direction:column;gap:8px}
+ul.plain li{display:flex;gap:10px;font-size:13.5px;color:var(--ink-2);max-width:62ch}
+ul.plain li::before{content:"";flex:none;width:5px;height:5px;margin-top:9px;border-radius:50%;background:var(--accent)}
+
+.qs{counter-reset:q;margin-top:18px}
+.qstep{position:relative;padding:0 0 24px 40px;border-left:1px solid var(--line)}
+.qstep:last-child{border-left-color:transparent;padding-bottom:0}
+.qstep::before{counter-increment:q;content:counter(q);position:absolute;left:-13px;top:-2px;
+  width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;
+  font-family:var(--mono);font-size:12px;display:grid;place-items:center}
+.qstep h3{margin:0 0 6px}
+.qstep p{margin:0 0 8px;font-size:13.5px;color:var(--ink-2)}
+
+.next{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:10px;margin-top:16px}
+.nx{display:block;padding:13px 15px;border:1px solid var(--line);border-radius:9px;
+  background:var(--raise);color:var(--ink);font-size:13.5px;font-weight:700;
+  transition:border-color .15s,transform .15s}
+.nx:hover{border-color:var(--accent);transform:translateY(-1px);text-decoration:none}
+.nx small{display:block;font-size:11px;color:var(--faint);font-weight:400;margin-bottom:3px}
+
+.toc{padding:0 20px 40px 8px;font-size:12.5px}
+.toc .t{font-size:11px;font-weight:700;color:var(--ink);margin-bottom:9px;text-transform:uppercase;letter-spacing:.04em}
+.toc a{display:block;padding:4px 0;color:var(--muted);line-height:1.5}
+.toc a:hover{color:var(--accent);text-decoration:none}
+
+@media (max-width:1140px){.shell{grid-template-columns:220px minmax(0,1fr)}.toc{display:none}}
+@media (max-width:760px){.shell{grid-template-columns:1fr}
+  .side{border-bottom:1px solid var(--line-2)}
+  main{padding:26px 18px 80px} h1{font-size:23px}}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <nav class="side" id="side"></nav>
+  <main>
+    <article id="p-overview" class="sec">
+      <div class="eyebrow">개요</div>
+      <h1>영실이 콘솔이란</h1>
+      <p class="lead">기관 담당자가 쓰는 youngsili-dashboard.krafte.net과 달리, 이 콘솔은 크래프트 운영팀이 전체 기관을 관리하는 화면입니다.</p>
+      <div class="note crit"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--crit)" stroke-width="1.7" stroke-linecap="round"><path d="M10 3.5 18 17H2z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.5" r=".6" fill="var(--crit)" stroke="none"/></svg><p>이 계정으로 할 수 있는 일은 <b>모든 기관의 어르신 개인정보와 결제 정보에 접근하는 것</b>을 포함합니다. 로그인 정보를 공유하거나 개인 기기에 저장하지 마십시오.</p></div>
+
+      <h2 id="ov1">이 콘솔이 다른 이유</h2>
+      <p>기관 담당자가 쓰는 <b>youngsili-dashboard.krafte.net</b>은 한 기관의 어르신만 다룹니다.
+        이 콘솔(ops.krafte.net)은 <b>전체 기관을 총괄 관리자가 관리하는 화면</b>이며,
+        일반 기관 계정(센터장·전담직원·지원사)에는 이 메뉴들이 보이지 않습니다.</p>
+
+      <h2 id="ov2">세 그룹, 여덟 화면</h2>
+      <div class="tw"><table>
+        <thead><tr><th>그룹</th><th>화면</th><th>무엇을 하는 곳인가</th></tr></thead>
+        <tbody>
+          <tr><td class="k">시스템 모니터링</td><td>시스템 상태</td><td>백엔드·AI서버·콜엔진 응답 상태 확인</td></tr>
+          <tr><td></td><td>진행 중인 통화</td><td>전체 기관의 실시간 통화 확인</td></tr>
+          <tr><td></td><td>통화 이력 조회</td><td>기관별 과거 통화 조회, 장애 문의 대응</td></tr>
+          <tr><td class="k">정기결제 현황</td><td>—</td><td>기관별 요금제·청구 상태 조회(조회 전용)</td></tr>
+          <tr><td class="k">기관 관리</td><td>구성원 초대</td><td>역할별 초대 링크 발급</td></tr>
+          <tr><td></td><td>새 기관 만들기</td><td>기관 생성과 기관코드 발급</td></tr>
+          <tr><td></td><td>계정 직접 생성</td><td>초대 없이 즉시 계정 생성</td></tr>
+          <tr><td></td><td>기관·계정 목록</td><td>전체 기관과 계정 현황 조회</td></tr>
+        </tbody>
+      </table></div>
+      <p style="font-size:12.5px;color:var(--faint)">이 문서는 ops.krafte.net에 직접 로그인하지 않고,
+        같은 데이터를 보여주는 youngsili-dashboard.krafte.net의 운영자 메뉴를 관찰해 작성했습니다.
+        실제 화면 문구와 다를 수 있으므로 개발팀 검토 후 반영을 권장합니다.</p>
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="health"><small>시스템 모니터링</small>시스템 상태</a>
+        <a class="nx" href="#" data-go="orglist"><small>기관 관리</small>기관·계정 목록</a>
+      </div>
+
+    </article>
+
+    <article id="p-health" class="sec" hidden>
+      <div class="eyebrow">시스템 모니터링</div>
+      <h1>시스템 상태</h1>
+      <p class="lead">전체 기관을 통틀어 지금 시스템이 정상인지 확인합니다. 장애 문의가 들어왔을 때 가장 먼저 여는 화면입니다.</p>
+      <h2 id="he1">세 구성요소</h2>
+      <div class="status-row">
+        <div class="stat"><div class="lb">NCP 백엔드</div><div class="vv"><span class="dot2 ok"></span>정상 응답 (78ms)</div></div>
+        <div class="stat"><div class="lb">AI서버</div><div class="vv"><span class="dot2 ok"></span>정상 응답 (5ms)</div></div>
+        <div class="stat"><div class="lb">070 콜엔진</div><div class="vv"><span class="dot2 ok"></span>정상 응답 (8ms)</div></div>
+      </div>
+      <div class="tw"><table>
+        <thead><tr><th>구성요소</th><th>역할</th><th>지연 시 영향</th></tr></thead>
+        <tbody>
+          <tr><td class="k">NCP 백엔드</td><td>전체 서비스의 기반 서버</td><td>대시보드 전체 응답 지연</td></tr>
+          <tr><td class="k">AI서버</td><td>대화 처리와 위험 감지</td><td>통화 품질 저하, 응답 지연</td></tr>
+          <tr><td class="k">070 콜엔진</td><td>실제 발신을 처리</td><td>발신 자체가 지연되거나 실패</td></tr>
+        </tbody>
+      </table></div>
+            <div class="note"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5" stroke-linecap="round"/><circle cx="10" cy="6.3" r=".7" fill="var(--muted)" stroke="none"/></svg><p>응답 시간이 눈에 띄게 느려지거나(수백 ms 이상) 상태가 <b>비정상</b>으로 바뀌면 해당 구성요소부터 점검합니다. 기관 담당자로부터 「전화가 안 걸린다」는 문의가 몰리면 이 화면을 가장 먼저 확인하십시오.</p></div>
+
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="livecalls"><small>시스템 모니터링</small>진행 중인 통화</a>
+        <a class="nx" href="#" data-go="overview"><small>개요</small>콘솔 개요</a>
+      </div>
+
+    </article>
+
+    <article id="p-livecalls" class="sec" hidden>
+      <div class="eyebrow">시스템 모니터링</div>
+      <h1>진행 중인 통화</h1>
+      <p class="lead">전체 기관에서 현재 연결되어 있는 통화를 실시간으로 봅니다.</p>
+      <p>전체 기관에서 현재 연결되어 있는 통화를 실시간으로 봅니다.</p>
+      <h2 id="lc1">보이는 열</h2>
+      <div class="tw"><table>
+        <thead><tr><th>열</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td class="k">어르신 · 기관</td><td>통화 중인 어르신과 소속 기관</td></tr>
+          <tr><td class="k">채널</td><td>앱 · 070(일반전화) 구분</td></tr>
+          <tr><td class="k">상태</td><td>통화 중</td></tr>
+          <tr><td class="k">경과 시간</td><td>통화가 시작된 뒤 지난 시간(초)</td></tr>
+          <tr><td class="k">통화 ID</td><td>개발팀에 문의할 때 함께 전달하는 식별자</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="lc2">좀비 세션 확인하기</h2>
+            <div class="note crit"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--crit)" stroke-width="1.7" stroke-linecap="round"><path d="M10 3.5 18 17H2z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.5" r=".6" fill="var(--crit)" stroke="none"/></svg><p>경과 시간이 비정상적으로 긴 항목을 주기적으로 확인하십시오. 정상 통화는 대개 몇 분 안에 끝납니다. 경과 시간이 수 시간, 길게는 며칠 단위로 찍히는 항목은 통화가 끝났는데도 세션이 종료 처리되지 않은 <b>좀비 세션</b>일 가능성이 높습니다.</p></div>
+
+      <p>이런 항목은 통화 채널을 계속 점유한 채로 남아 있어, 실제로 그 기관이 쓸 수 있는 발신 채널 수를
+        줄이는 실질적인 문제가 됩니다. 이 화면에서 직접 종료하는 기능은 확인되지 않았으므로,
+        반복적으로 나타나면 통화 ID를 기록해 개발팀에 세션 정리를 요청하십시오.</p>
+      <h3>판단 기준 예시</h3>
+      <div class="tw"><table>
+        <thead><tr><th>경과 시간</th><th>판단</th></tr></thead>
+        <tbody>
+          <tr><td class="n">~10분</td><td>정상 범위</td></tr>
+          <tr><td class="n">10분~1시간</td><td>통화가 길어지고 있는지 확인. 위험 감지로 복지사 연결이 걸려 있을 수 있음</td></tr>
+          <tr class="crit"><td class="n">1시간 이상</td><td>좀비 세션으로 의심. 개발팀 공유 대상</td></tr>
+        </tbody>
+      </table></div>
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="callhistory"><small>시스템 모니터링</small>통화 이력 조회</a>
+        <a class="nx" href="#" data-go="issues"><small>참고</small>확인이 필요한 사항</a>
+      </div>
+
+    </article>
+
+    <article id="p-callhistory" class="sec" hidden>
+      <div class="eyebrow">시스템 모니터링</div>
+      <h1>통화 이력 조회</h1>
+      <p class="lead">기관별 과거 통화를 조회합니다. 기관 담당자의 문의에 대응할 때 주로 씁니다.</p>
+      <p>기본은 최근 30일·최근 200건입니다. <span class="chip">조회</span> 드롭다운에서
+        기관을 특정해 그 기관의 통화만 볼 수 있습니다.</p>
+      <h2 id="ch1">보이는 열</h2>
+      <div class="tw"><table>
+        <thead><tr><th>열</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td class="k">어르신 · 전화번호</td><td>통화 대상</td></tr>
+          <tr><td class="k">기관</td><td>소속 기관명</td></tr>
+          <tr><td class="k">채널</td><td>앱 · 070</td></tr>
+          <tr><td class="k">상태</td><td>정상 등 통화 결과</td></tr>
+          <tr><td class="k">시간 · 통화시간</td><td>발신 시각과 통화 길이</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="ch2">기관 문의 대응 절차</h2>
+      <div class="qs">
+        <div class="qstep"><h3>기관 특정</h3><p><span class="chip">조회</span> 드롭다운에서 문의한 기관을 선택합니다.</p></div>
+        <div class="qstep"><h3>기간 확인</h3><p>문의받은 날짜가 기본 30일 범위 안에 있는지 확인합니다. 범위 밖이면 별도 조회가 필요할 수 있습니다.</p></div>
+        <div class="qstep"><h3>발신 여부 확인</h3><p>해당 어르신에게 실제로 발신 기록이 있는지, 채널(앱/070)과 결과를 확인합니다.</p></div>
+        <div class="qstep"><h3>회신</h3><p>발신 여부와 결과를 기관 담당자에게 안내합니다. 발신 자체가 없었다면
+          <span class="chip">시스템 상태</span> 와 그 기관의 <span class="chip">전화 발신 관리</span> 설정을 함께 확인합니다.</p></div>
+      </div>
+            <div class="note"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5" stroke-linecap="round"/><circle cx="10" cy="6.3" r=".7" fill="var(--muted)" stroke="none"/></svg><p>070과 앱 채널의 통화 시간을 비교하면 특정 채널만의 문제인지 구분할 수 있습니다. 한쪽 채널만 실패가 몰려 있다면 콜엔진 또는 앱 푸시 쪽 문제일 가능성이 큽니다.</p></div>
+
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="orglist"><small>기관 관리</small>기관·계정 목록</a>
+        <a class="nx" href="#" data-go="health"><small>시스템 모니터링</small>시스템 상태</a>
+      </div>
+
+    </article>
+
+    <article id="p-billing" class="sec" hidden>
+      <div class="eyebrow">정기결제 현황</div>
+      <h1>정기결제 현황</h1>
+      <p class="lead">전체 기관의 요금제와 자동결제(포트원 빌링키) 등록 여부를 조회합니다.</p>
+      <p>전체 기관의 요금제와 자동결제(포트원 빌링키) 등록 여부를 조회합니다.
+        화면 안내대로 <b>조회 전용</b>이며, 여기서 직접 결제를 처리하거나 변경하지 않습니다.</p>
+
+      <h2 id="bl1">보이는 열</h2>
+      <div class="tw"><table>
+        <thead><tr><th>항목</th><th>의미</th></tr></thead>
+        <tbody>
+          <tr><td class="k">요금제</td><td>trial(체험) · pilot(파일럿) · standard(정식) 등</td></tr>
+          <tr><td class="k">대상자</td><td>그 기관이 등록한 어르신 수</td></tr>
+          <tr><td class="k">월 청구액</td><td>정액 요금제 기준 월 청구 예정 금액</td></tr>
+          <tr><td class="k">자동결제</td><td>포트원 빌링키 등록 여부 — 등록 · 미등록</td></tr>
+          <tr><td class="k">다음 청구일 · 최근 오류</td><td>결제 스케줄과 실패 이력</td></tr>
+        </tbody>
+      </table></div>
+
+            <div class="note warn"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--warn)" stroke-width="1.7" stroke-linecap="round"><path d="M10 3.5 18 17H2z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.5" r=".6" fill="var(--warn)" stroke="none"/></svg><p>현재 모든 기관의 자동결제가 <b>미등록</b> 상태이고 청구액·다음 청구일이 비어 있습니다. 정량제(선불 충전) 요금 정책과 이 화면의 정액제 빌링 구조가 어떻게 연결될지는 별도 확인이 필요합니다 — 정량제 충전은 이 화면이 아닌 다른 방식으로 처리되고 있을 수 있습니다.</p></div>
+
+
+      <h2 id="bl2">기관에서 결제 문의가 오면</h2>
+      <div class="qs">
+        <div class="qstep"><h3>기관 찾기</h3><p>목록에서 기관명으로 찾아 현재 요금제와 자동결제 등록 여부를 확인합니다.</p></div>
+        <div class="qstep"><h3>정량제 문의인지 확인</h3><p>잔액·충전 관련 문의는 이 화면에서 조회되지 않습니다.
+          정량제 충전 이력을 관리하는 담당 채널로 연결하십시오.</p></div>
+        <div class="qstep"><h3>정액제 문의인지 확인</h3><p>월 청구·자동결제 등록 관련 문의는 이 화면 정보를 기준으로 안내합니다.</p></div>
+      </div>
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="orglist"><small>기관 관리</small>기관·계정 목록</a>
+        <a class="nx" href="#" data-go="issues"><small>참고</small>확인이 필요한 사항</a>
+      </div>
+
+    </article>
+
+    <article id="p-invite" class="sec" hidden>
+      <div class="eyebrow">기관 관리</div>
+      <h1>구성원 초대</h1>
+      <p class="lead">역할을 선택해 전용 가입 링크를 발급합니다.</p>
+      <p>역할을 선택해 전용 가입 링크를 발급합니다. 기관 담당자가 신규 직원 계정을 요청할 때 쓰는 방법입니다.</p>
+
+      <h2 id="iv1">역할 세 가지</h2>
+      <div class="tw"><table>
+        <thead><tr><th>역할</th><th>기관 내 범위</th></tr></thead>
+        <tbody>
+          <tr><td class="k">센터장(관리자)</td><td>기관 전체 어르신, 보고서·설정 전체</td></tr>
+          <tr><td class="k">전담직원</td><td>기관 전체 어르신, 등록·상담·발신 설정</td></tr>
+          <tr><td class="k">지원사</td><td>배정된 어르신만</td></tr>
+        </tbody>
+      </table></div>
+            <div class="note warn"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--warn)" stroke-width="1.7" stroke-linecap="round"><path d="M10 3.5 18 17H2z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.5" r=".6" fill="var(--warn)" stroke="none"/></svg><p>링크는 <b>7일 동안 한 번만</b> 사용할 수 있습니다. 기간이 지나거나 이미 사용된 링크는 재사용할 수 없으니, 요청자가 늦게 가입하면 새로 발급해야 합니다.</p></div>
+
+
+      <h2 id="iv2">처리 절차</h2>
+      <div class="qs">
+        <div class="qstep"><h3>요청 접수</h3><p>기관 담당자로부터 신규 직원의 이름, 역할, 소속 기관을 확인합니다.</p></div>
+        <div class="qstep"><h3>기관·역할 선택</h3><p>초대 링크 발급 화면에서 해당 기관과 역할을 선택합니다.</p></div>
+        <div class="qstep"><h3>링크 발급 및 전달</h3><p>생성된 링크를 요청한 담당자에게 전달합니다. 직접 신규 직원에게 전달하지 않고
+          기존 담당자를 거치면 소속 확인이 한 번 더 됩니다.</p></div>
+        <div class="qstep"><h3>가입 확인</h3><p><span class="chip">기관·계정 목록</span> 에서 새 계정이 생성됐는지 확인합니다.</p></div>
+      </div>
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="newaccount"><small>기관 관리</small>계정 직접 생성</a>
+        <a class="nx" href="#" data-go="orglist"><small>기관 관리</small>기관·계정 목록</a>
+      </div>
+
+    </article>
+
+    <article id="p-neworg" class="sec" hidden>
+      <div class="eyebrow">기관 관리</div>
+      <h1>새 기관 만들기</h1>
+      <p class="lead">새 기관을 만들고 기관코드를 발급합니다.</p>
+      <p>기관 유형을 선택하고 생성하면 기관코드가 자동 발급됩니다.
+        이 코드를 복지사에게 전달하면 복지사가 어르신 폰 앱에 입력해 해당 기관으로 등록됩니다.</p>
+
+      <h2 id="no1">기관 유형 두 가지</h2>
+      <div class="tw"><table>
+        <thead><tr><th>유형</th><th>제도 기준</th></tr></thead>
+        <tbody>
+          <tr><td class="k">노인맞춤돌봄</td><td>일반돌봄군 주 2회, 중점돌봄군 주 1회(방문 주 2회) 안전확인 기준 적용</td></tr>
+          <tr><td class="k">장애인활동지원</td><td>별도 기준 적용</td></tr>
+        </tbody>
+      </table></div>
+            <div class="note warn"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--warn)" stroke-width="1.7" stroke-linecap="round"><path d="M10 3.5 18 17H2z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.5" r=".6" fill="var(--warn)" stroke="none"/></svg><p>유형은 생성 후 <b>기관의 안전확인 관리 제도 기준(주기·돌봄군 명칭)</b>에 직접 영향을 줍니다. 잘못된 유형으로 만들면 기관 담당자 화면의 주간 목표 계산이 어긋나므로, 생성 전 유형을 다시 한번 확인하십시오.</p></div>
+
+
+      <h2 id="no2">처리 절차</h2>
+      <div class="qs">
+        <div class="qstep"><h3>기관 정보 확인</h3><p>정식 기관명과 유형(노인맞춤돌봄/장애인활동지원)을 확인합니다.</p></div>
+        <div class="qstep"><h3>기관 생성</h3><p>새 기관 만들기 화면에서 정보를 입력하고 생성합니다. 기관코드가 자동 발급됩니다.</p></div>
+        <div class="qstep"><h3>최초 계정 생성</h3><p><span class="chip">계정 직접 생성</span> 또는 <span class="chip">구성원 초대</span> 로
+          그 기관의 첫 센터장 계정을 만듭니다.</p></div>
+        <div class="qstep"><h3>기관코드 전달</h3><p>발급된 기관코드를 기관 담당자에게 전달합니다.
+          담당자는 이 코드로 어르신을 앱 등록시킬 수 있습니다.</p></div>
+      </div>
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="newaccount"><small>기관 관리</small>계정 직접 생성</a>
+        <a class="nx" href="#" data-go="orglist"><small>기관 관리</small>기관·계정 목록</a>
+      </div>
+
+    </article>
+
+    <article id="p-newaccount" class="sec" hidden>
+      <div class="eyebrow">기관 관리</div>
+      <h1>계정 직접 생성</h1>
+      <p class="lead">초대 링크 없이 계정 정보를 직접 입력해 즉시 생성합니다.</p>
+      <p>초대 링크 대신 정보를 직접 입력해 계정을 즉시 만듭니다.
+        이름·전화번호·이메일(로그인 ID)·초기 비밀번호·소속 기관·역할을 입력합니다.</p>
+
+      <h2 id="na1">입력 항목</h2>
+      <div class="tw"><table>
+        <thead><tr><th>항목</th><th>주의</th></tr></thead>
+        <tbody>
+          <tr><td class="k">이메일(로그인 ID)</td><td>중복 확인 필요. 개인 이메일보다 기관 업무용 이메일을 권장</td></tr>
+          <tr><td class="k">초기 비밀번호</td><td>안전한 채널로 본인에게 직접 전달. 메신저 평문 전달은 피할 것</td></tr>
+          <tr><td class="k">소속 기관</td><td>기존 기관 목록에서 선택</td></tr>
+          <tr><td class="k">역할</td><td>센터장(관리자) · 전담직원 · 지원사 · <b>운영자(전체 + 기관관리)</b></td></tr>
+        </tbody>
+      </table></div>
+
+            <div class="note crit"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--crit)" stroke-width="1.7" stroke-linecap="round"><path d="M10 3.5 18 17H2z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.5" r=".6" fill="var(--crit)" stroke="none"/></svg><p>역할 목록에 <b>운영자(전체 + 기관관리)</b>가 포함되어 있습니다. 이 역할은 지금 이 문서를 보고 있는 계정과 동일한 권한, 즉 전체 기관의 개인정보와 결제 정보에 접근할 수 있는 권한입니다. 신중하게 부여하고, 부여 대상과 사유를 별도로 기록해 두는 것을 권장합니다.</p></div>
+
+
+      <h2 id="na2">지원사 계정을 만들 때</h2>
+      <p>지원사 계정은 배정된 이용자만 볼 수 있습니다. 계정을 만든 뒤에는 해당 기관의 담당자에게
+        <span class="chip">어르신 관리 → 담당 지원사 배정</span> 을 완료하도록 안내하십시오.
+        배정하지 않으면 그 지원사에게는 담당 어르신이 보이지 않습니다.</p>
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="invite"><small>기관 관리</small>구성원 초대</a>
+        <a class="nx" href="#" data-go="orglist"><small>기관 관리</small>기관·계정 목록</a>
+      </div>
+
+    </article>
+
+    <article id="p-orglist" class="sec" hidden>
+      <div class="eyebrow">기관 관리</div>
+      <h1>기관·계정 목록</h1>
+      <p class="lead">전체 기관과 그 안의 대시보드 계정 현황을 조회합니다.</p>
+      <p>전체 기관과 그 안의 대시보드 계정이 표로 보입니다.</p>
+
+      <h2 id="ol1">기관 목록 예시 구조</h2>
+      <div class="tw"><table>
+        <thead><tr><th>기관명</th><th>유형</th><th>기관코드</th><th>대상자</th><th>계정</th></tr></thead>
+        <tbody>
+          <tr><td class="k">○○복지관</td><td>노인맞춤돌봄</td><td class="n">YS-XXXXX</td><td class="n">10명</td><td class="n">3개</td></tr>
+          <tr><td class="k">○○치매안심센터</td><td>노인맞춤돌봄</td><td class="n">YS-XXXXX</td><td class="n">0명</td><td class="n">1개</td></tr>
+          <tr><td class="k">○○활동지원센터</td><td>장애인활동지원</td><td class="n">YS-XXXXX</td><td class="n">0명</td><td class="n">1개</td></tr>
+        </tbody>
+      </table></div>
+      <p style="font-size:12.5px;color:var(--faint)">위 표는 구조 설명용 예시이며 실제 기관명·코드는 콘솔에서 직접 확인하십시오.</p>
+            <div class="note warn"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--warn)" stroke-width="1.7" stroke-linecap="round"><path d="M10 3.5 18 17H2z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.5" r=".6" fill="var(--warn)" stroke="none"/></svg><p>대상자가 0명이거나 계정이 0개인 기관은 <b>가입만 하고 실제 사용을 시작하지 않은 기관</b>입니다. 영업·온보딩 후속 대상으로 별도 관리하는 것을 권장합니다.</p></div>
+
+
+      <h2 id="ol2">대시보드 계정 목록</h2>
+      <p>이름, 전화번호, 이메일, 소속 기관, 역할이 열로 표시되고 <span class="chip">삭제</span> 로 계정을 제거할 수 있습니다.</p>
+            <div class="note crit"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--crit)" stroke-width="1.7" stroke-linecap="round"><path d="M10 3.5 18 17H2z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.5" r=".6" fill="var(--crit)" stroke="none"/></svg><p>이 목록에는 실제 담당자의 이메일·전화번호가 그대로 노출됩니다. 화면을 캡처해 외부로 공유하거나 다른 문서에 옮겨 적지 마십시오. 계정 확인이 필요하면 이 화면에서 직접 조회하는 것을 원칙으로 합니다.</p></div>
+
+
+      <h2 id="ol3">계정 삭제 전 확인</h2>
+      <ul class="plain">
+        <li>본인 확인 — 퇴사·인사이동이 맞는지 기관 담당자에게 재확인</li>
+        <li>지원사라면 배정된 이용자가 있는지 확인하고, 있다면 다른 지원사에게 재배정 후 삭제</li>
+        <li>센터장(관리자)이 한 명뿐인 기관이라면 삭제 전 후임 계정을 먼저 생성</li>
+      </ul>
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="callhistory"><small>시스템 모니터링</small>통화 이력 조회</a>
+        <a class="nx" href="#" data-go="issues"><small>참고</small>확인이 필요한 사항</a>
+      </div>
+
+    </article>
+
+    <article id="p-issues" class="sec" hidden>
+      <div class="eyebrow">참고</div>
+      <h1>확인이 필요한 사항</h1>
+      <p class="lead">콘솔 구조를 살펴보며 눈에 띈, 운영팀이 확인하면 좋을 항목을 정리했습니다.</p>
+      <p>콘솔 구조를 살펴보며 눈에 띈, 운영팀이 확인하면 좋을 항목입니다. 도움말과 별개로 개발팀 공유용 메모입니다.</p>
+      <div class="tw"><table>
+        <thead><tr><th>#</th><th>항목</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr class="crit"><td class="n">1</td><td class="k">좀비 통화 세션</td>
+            <td class="wrap">「진행 중인 통화」에 경과 시간이 수 시간~14일에 달하는 항목이 다수 확인됨.
+              실제 통화가 아니라 종료 처리가 안 된 세션으로 추정됨. 통화 채널을 계속 점유해
+              실제 발신 가능 채널 수에 영향을 줄 수 있음. 자세히: <span class="chip">진행 중인 통화</span></td></tr>
+          <tr><td class="n">2</td><td class="k">정액제·정량제 정합성</td>
+            <td class="wrap">정기결제 현황은 정액제(월 청구) 기준 화면으로 보이나, 실제 판매 중인 요금은
+              정량제(선불 충전) 구조임. 두 체계가 이 화면에서 어떻게 반영되는지, 정량제 잔액·충전 이력을
+              조회할 별도 화면이 있는지 확인 필요. 자세히: <span class="chip">정기결제 현황</span></td></tr>
+          <tr><td class="n">3</td><td class="k">부재중 비율</td>
+            <td class="wrap">기관 담당자 문서 작성 중 확인된 사항 — 파일럿 기관의 통화 종료 사유 중
+              부재중(무응답) 비율이 53%로 정상 종료(45%)보다 높음. 발신 시간대·발신번호 표시
+              설정을 점검할 필요가 있음</td></tr>
+          <tr><td class="n">4</td><td class="k">가입 후 미사용 기관</td>
+            <td class="wrap">기관 목록 중 대상자 0명·계정 0~1개인 기관이 다수 확인됨.
+              가입만 하고 온보딩이 진행되지 않은 상태로 추정됨. 자세히: <span class="chip">기관·계정 목록</span></td></tr>
+          <tr><td class="n">5</td><td class="k">계정 이메일 정책 부재</td>
+            <td class="wrap">대시보드 계정 목록에 개인 gmail 등 사설 이메일로 가입된 센터장·지원사 계정이 다수 확인됨.
+              계정 복구·본인 확인 시 어려움이 있을 수 있어 기관 업무용 이메일 사용을 권장하는 정책 검토 필요</td></tr>
+        </tbody>
+      </table></div>
+            <div class="note ok"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--ok)" stroke-width="1.7" stroke-linecap="round"><path d="M10 2.5a5 5 0 0 0-3 9v2h6v-2a5 5 0 0 0-3-9z"/><path d="M8.5 17h3"/></svg><p>이 문서는 ops.krafte.net 콘솔의 실제 화면 구조를 youngsili-dashboard.krafte.net에서 관찰해 작성했습니다. ops.krafte.net 자체에는 로그인하지 않았으므로, 실제 콘솔 화면과 세부 문구가 다를 수 있어 개발팀 검토 후 반영을 권장합니다.</p></div>
+
+      <h2>다음</h2>
+      <div class="next">
+        <a class="nx" href="#" data-go="overview"><small>개요</small>콘솔 개요</a>
+        <a class="nx" href="#" data-go="livecalls"><small>시스템 모니터링</small>진행 중인 통화</a>
+      </div>
+
+    </article>
+
+  </main>
+  <aside class="toc"><div class="t">이 페이지에서</div><div id="toc"></div></aside>
+</div>
+
+<script>
+const NAV=[
+ ['개요',[['콘솔 개요','overview']]],
+ ['시스템 모니터링',[['시스템 상태','health'],['진행 중인 통화','livecalls'],['통화 이력 조회','callhistory']]],
+ ['정기결제 현황',[['정기결제 현황','billing']]],
+ ['기관 관리',[['구성원 초대','invite'],['새 기관 만들기','neworg'],['계정 직접 생성','newaccount'],['기관·계정 목록','orglist']]],
+ ['참고',[['확인이 필요한 사항','issues']]],
+];
+const side=document.getElementById('side');
+NAV.forEach(([g,pages])=>{
+  const d=document.createElement('div'); d.className='grp';
+  const h=document.createElement('div'); h.className='grp-h'; h.textContent=g;
+  d.appendChild(h);
+  pages.forEach(([t,id])=>{
+    const b=document.createElement('button'); b.className='nav-i'; b.dataset.page=id;
+    b.innerHTML='<span class="dot"></span><span class="txt">'+t+'</span>';
+    b.addEventListener('click',()=>go(id));
+    d.appendChild(b);
+  });
+  side.appendChild(d);
+});
+function go(id){
+  document.querySelectorAll('main .sec').forEach(a=>a.hidden = a.id!=='p-'+id);
+  document.querySelectorAll('.nav-i').forEach(b=>{
+    if(b.dataset.page===id) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
+  const t=document.getElementById('toc'); t.innerHTML='';
+  document.querySelectorAll('#p-'+id+' h2[id]').forEach(h=>{
+    const a=document.createElement('a'); a.href='#'+h.id; a.textContent=h.textContent; t.appendChild(a);
+  });
+  scrollTo({top:0,behavior:'instant'});
+}
+document.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',e=>{ e.preventDefault(); go(a.dataset.go); }));
+go('overview');
+</script>
+
+</body>
+</html>

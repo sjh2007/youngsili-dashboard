@@ -2,11 +2,11 @@
 // 같은 레포·같은 authFetch/SERVER_URL/Firebase 로그인을 재사용하되, 진입점만 다르다
 // (src/index.tsx가 REACT_APP_TARGET=console일 때 App 대신 이 컴포넌트를 렌더).
 // 권한 판정은 별도 API 없이 GET /console/health 호출 결과(403이면 비superadmin)로 대신한다.
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
   Activity, BarChart3, Phone, CreditCard, Receipt, RotateCcw, Building2,
-  Users as UsersIcon, HeartHandshake, Megaphone, FileClock, FlaskConical, LogOut, UserCog,
+  Users as UsersIcon, HeartHandshake, Megaphone, FileClock, FlaskConical, LogOut, UserCog, BookOpen,
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -232,6 +232,7 @@ const NAV = [
   { id: 'audit', label: '감사 로그', icon: FileClock },
   { id: 'test', label: '기능 테스트', icon: FlaskConical },
   { id: 'staff', label: '콘솔 계정', icon: UserCog },
+  { id: 'help', label: '도움말 보기', icon: BookOpen },
 ] as const;
 type PageId = typeof NAV[number]['id'];
 
@@ -244,6 +245,18 @@ export default function ConsoleApp() {
   const [authorized, setAuthorized] = useState<boolean | null>(null); // null=확인 중, true/false=결과
   const [consoleRole, setConsoleRole] = useState<string | null>(null); // 'superadmin' | 'cs' — 사이드바 범위 결정용
   const [page, setPage] = useState<PageId>('health');
+  // 도움말 보기 — 별도 정적 HTML(같은 origin)을 iframe으로 띄우고, 내부 스크롤 없이 콘텐츠
+  // 실제 높이만큼 자동으로 늘어나게 한다(기관 대시보드 HelpGuide.tsx와 동일 패턴).
+  const [helpHeight, setHelpHeight] = useState(600);
+  const onHelpLoad = useCallback((e: any) => {
+    const iframe = e.target;
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+    const sync = () => setHelpHeight(doc.documentElement.scrollHeight);
+    sync();
+    const ro = new (iframe.contentWindow.ResizeObserver)(sync);
+    ro.observe(doc.body);
+  }, []);
   const [toast, setToast] = useState<{message:string; tone:'info'|'success'|'error'}|null>(null);
   const notify = (message: unknown, tone: 'info'|'success'|'error' = 'error') => {
     setToast({ message: String(message), tone });
@@ -1347,6 +1360,18 @@ export default function ConsoleApp() {
               )}
             </section>
           </div>
+        )}
+
+        {page === 'help' && (
+          <section className="section fade-in" style={{padding:0,overflow:'hidden'}}>
+            <iframe
+              title="영실이 콘솔 도움말"
+              src="/help/console-guide.html"
+              onLoad={onHelpLoad}
+              scrolling="no"
+              style={{width:'100%',height:helpHeight,border:0,display:'block'}}
+            />
+          </section>
         )}
 
         {page === 'audit' && (
