@@ -3976,7 +3976,7 @@ export default function App() {
                         </div>
                       </td></tr>
                     )}
-                    {elders.sort((a,b)=>{const order={danger:0,warning:1,normal:2};return order[a.status]-order[b.status];}).map(elder=>{
+                    {[...elders].sort((a,b)=>{const order={danger:0,warning:1,normal:2};return order[a.status]-order[b.status];}).map(elder=>{
                       const risk = getSolitudeRisk(elder);
                       const days = getNoResponseDays(elder.lastCall, elder.lastCallAt);
                       return (
@@ -4811,7 +4811,12 @@ export default function App() {
             </div>
           )}
 
-          {page==='calls' && (
+          {page==='calls' && (() => {
+            // 뱃지 카운트(총 N건)와 아래 목록이 같은 필터 조건을 각자 다시 계산하고 있었다 —
+            // 렌더 1회당 한 번만 계산해서 재사용(callsHistory가 몇 백 건이면 검색창 타이핑마다
+            // 두 번씩 도는 게 체감된다).
+            const filteredCalls = callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch))&&callsRiskMatch(c));
+            return (
             <div className="fade-in calls-page">
               {/* 기간 선택 (일/월별 조회) — 서버 calls 컬렉션 실데이터 */}
               <div className="calls-toolbar">
@@ -4833,7 +4838,7 @@ export default function App() {
                   {elders.map(e=>{const k=String(e.phone||'').replace(/\D/g,'');return <option key={k} value={k}>{e.name}</option>;})}
                 </select>
                 </div>
-                <span className="calls-total">총 {callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch))&&callsRiskMatch(c)).length}건</span>
+                <span className="calls-total">총 {filteredCalls.length}건</span>
               </div>
               <div className="calls-risk-filter">
                 <span style={{fontSize:16,color:'#64748b',fontWeight:600}}>위험도:</span>
@@ -4848,7 +4853,7 @@ export default function App() {
               {callsHistory.length===0 ? (
                 <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
               ) : (()=>{
-                const src = callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch))&&callsRiskMatch(c));
+                const src = filteredCalls;
                 const grouped: Record<string, any[]> = {};
                 src.forEach(c=>{ const dk=c.date||(c.at?c.at.slice(0,10):'미상'); (grouped[dk]=grouped[dk]||[]).push(c); });
                 // P2-9: 발신 이력과 동일한 일자별 아코디언 — 기본 오늘만 펼침, 필터·검색 사용 시 전체 자동 펼침
@@ -4899,7 +4904,7 @@ export default function App() {
                 );});
               })()}
             </div>
-          )}
+            ); })()}
 
           {page==='report' && (
             <div className="fade-in report-page">
