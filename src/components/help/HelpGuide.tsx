@@ -1,7 +1,7 @@
 // 복지사용 도움말 센터 (대시보드 '도움말 보기' 페이지) — 검색 가능
 // ⚙️ 계속 업데이트: 아래 HELP_ITEMS 배열에 항목을 추가/수정하면 바로 반영됩니다.
 //    업데이트 소식을 추가하면 ANNOUNCEMENTS 맨 앞에 넣고 App.js의 LATEST_NOTICE도 같은 id로 올리세요.
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { BookOpen, Search, X, ExternalLink, Megaphone, ChevronDown, FileText } from 'lucide-react';
 
 export const LATEST_NOTICE = 4;
@@ -59,6 +59,19 @@ export default function HelpGuide(_props: any) {
   // 네비게이션·목차·테마전환을 갖춘 자체완결형 HTML이라 React로 재구현하지 않고 정적 파일로
   // 두고 iframe으로 그대로 띄운다(기능 유지 + 약 1MB라 JS 번들에 직접 넣지 않고 필요할 때만 로드).
   const [tab, setTab] = useState('staff'); // staff | guide
+  // 전체 가이드는 iframe 자체 스크롤 없이, 실제 콘텐츠 높이만큼 늘어나서 페이지 스크롤 하나로만
+  // 보이게 한다(같은 출처라 contentDocument 접근 가능) — 페이지 전환(사이드바 클릭)마다
+  // 보이는 article이 바뀌어 높이도 바뀌므로 ResizeObserver로 계속 맞춘다.
+  const [guideHeight, setGuideHeight] = useState(600);
+  const onGuideLoad = useCallback((e) => {
+    const iframe = e.target;
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+    const sync = () => setGuideHeight(doc.documentElement.scrollHeight);
+    sync();
+    const ro = new (iframe.contentWindow.ResizeObserver)(sync);
+    ro.observe(doc.body);
+  }, []);
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     if (!q) return HELP_ITEMS;
@@ -121,7 +134,9 @@ export default function HelpGuide(_props: any) {
           <iframe
             title="AI영실이 문서"
             src="/help/ai-youngsili-guide.html"
-            style={{ width: '100%', height: '78vh', border: 0, display: 'block' }}
+            onLoad={onGuideLoad}
+            scrolling="no"
+            style={{ width: '100%', height: guideHeight, border: 0, display: 'block' }}
           />
         </Card>
       ) : (<>
