@@ -146,6 +146,7 @@ export default function App() {
   const [customAmount, setCustomAmount] = useState('');
   const [topupPayMethod, setTopupPayMethod] = useState('CARD'); // 'CARD'(이니시스) | 'TRANSFER'(계좌이체) | 'VIRTUAL_ACCOUNT'(무통장입금) — 카카오페이는 제외(2026-09-01)
   const [pendingTopup, setPendingTopup] = useState(null); // {amount} — "신청" 클릭 시 결제수단 선택 모달을 띄우기 위한 대기 상태
+  const [showPlanModal, setShowPlanModal] = useState(false); // 사이드바 크레딧 잔액 클릭 → 현재 플랜·잔액·결제수단 요약 모달
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
   const [refundTarget, setRefundTarget] = useState(null); // {id, amount} — 환불 요청 사유 선택 모달
@@ -2716,6 +2717,62 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* 사이드바 크레딧 잔액 클릭 → 현재 플랜·남은 크레딧·정기결제(결제수단) 요약. 새 데이터를
+          따로 안 받고 이미 떠 있는 billing·subStatus를 그대로 보여주는 조회 전용 모달이다. */}
+      {showPlanModal && (
+        <div className="modal-overlay" onClick={()=>setShowPlanModal(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420,width:'92%',textAlign:'left'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
+              <div className="modal-title" style={{textAlign:'left',marginBottom:0}}>내 요금제</div>
+              <button onClick={()=>setShowPlanModal(false)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:12,color:'#94a3b8',marginBottom:4}}>현재 플랜</div>
+                <div style={{fontSize:18,fontWeight:800,color:'#0f172a'}}>
+                  {subStatus?.autoRenew
+                    ? (UPGRADE_PLANS.find(p=>p.key===subStatus.plan)?.name || subStatus.plan)
+                    : trialActive ? '시범사업(30일 체험)'
+                    : '정량제(선불 충전)'}
+                </div>
+                {trialActive && !subStatus?.autoRenew && (
+                  <div style={{fontSize:13,color:'#64748b',marginTop:4}}>
+                    체험 종료: {new Date(billing.trialEndsAt).toLocaleDateString('ko-KR')}까지
+                  </div>
+                )}
+              </div>
+
+              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:12,color:'#94a3b8',marginBottom:4}}>남은 크레딧</div>
+                <div style={{fontSize:22,fontWeight:900,color: billing?.creditBalance<=200?'#dc2626':'#0f172a'}}>
+                  {typeof billing?.creditBalance === 'number' ? billing.creditBalance.toLocaleString()+'원' : '-'}
+                </div>
+              </div>
+
+              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:12,color:'#94a3b8',marginBottom:4}}>결제수단(정기결제)</div>
+                {subStatus?.autoRenew ? (
+                  <>
+                    <div style={{fontSize:15,fontWeight:700,color:'#1e8e3e'}}>등록됨 — 자동결제 중</div>
+                    {subStatus.nextChargeAt && <div style={{fontSize:13,color:'#64748b',marginTop:4}}>다음 청구일 {new Date(subStatus.nextChargeAt).toLocaleDateString('ko-KR')}</div>}
+                    {subStatus.monthlyAmount != null && <div style={{fontSize:13,color:'#64748b'}}>{subStatus.monthlyAmount.toLocaleString()}원/월</div>}
+                    {subStatus.lastChargeError && <div style={{fontSize:13,color:'#c5221f',marginTop:4}}>최근 청구 실패: {subStatus.lastChargeError}</div>}
+                  </>
+                ) : (
+                  <div style={{fontSize:15,color:'#64748b'}}>등록 안 됨 — 정량제 충전으로만 이용 중</div>
+                )}
+              </div>
+            </div>
+
+            <div style={{display:'flex',gap:8,marginTop:20}}>
+              <button className="btn-primary" style={{flex:1}} onClick={()=>{ setShowPlanModal(false); setShowUpgradeModal(true); }}>충전·플랜 변경</button>
+              <button className="btn-secondary" style={{flex:1}} onClick={()=>{ setShowPlanModal(false); setShowUpgradeModal(true); setUpgradeTab('history'); fetchPaymentHistory(); }}>결제 내역 보기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 요금제 업그레이드 — 요금 정책 v1.0(2026-08-28) §3(정량제)·§5(정액제 4등급). 1단계(포트원
           연동 전)라 "신청 접수"만 하고 실제 충전·플랜 전환은 담당자가 후속 처리한다. */}
       {showUpgradeModal && (
@@ -3473,7 +3530,8 @@ export default function App() {
               경로다(콘솔은 superadmin 전용, 차단화면은 잔액 0일 때만 뜬다). superadmin은
               소속 기관이 없어(orgId='*') billing이 항상 null이라 자동으로 안 보인다. */}
           {billing && typeof billing.creditBalance === 'number' && (
-            <div className="sidebar-org-code sidebar-credit-balance" style={{cursor:'default'}} title="선불 충전식 크레딧 잔액">
+            <div className="sidebar-org-code sidebar-credit-balance" style={{cursor:'pointer'}} title="클릭하면 현재 플랜·잔액·결제수단을 볼 수 있어요"
+              onClick={()=>{ setShowPlanModal(true); fetchSubscriptionStatus(); }}>
               <span className="sidebar-org-label">크레딧 잔액</span>
               <span className="sidebar-org-value" style={{color: billing.creditBalance <= 200 ? '#dc2626' : undefined}}>
                 {billing.creditBalance.toLocaleString()}
@@ -5342,7 +5400,7 @@ export default function App() {
                   {popData.sidoName} 인구 통계를 처음 수집하고 있습니다 — 잠시 후 자동으로 표시됩니다 (수십 초 소요)
                 </div>
               )}
-              {popData && !popData.collecting && (
+              {popData && !popData.collecting && popData.total && (
                 <>
                   <div className="data-total-row">
                     {[{num:popData.total.population.toLocaleString()+'명',label:(popData.sidoName||'대구광역시')+' 전체 인구'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인'},{num:elders.length+'명',label:'영실이 현재 관리'},{num:(elders.length/popData.total.solitary*100).toFixed(2)+'%',label:'관리 비율'},{num:popData.total.elderlyRatio+'%',label:'고령화율'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num">{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
