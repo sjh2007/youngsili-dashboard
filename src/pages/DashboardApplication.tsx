@@ -14,7 +14,7 @@ import { AlertCircle, AlertTriangle, CheckCircle2, ArrowLeft, ArrowRight, Plus,
          UserRound, UserRoundCheck, X, Search, Copy, LogOut, ChevronDown, List,
          Sun, Snowflake, CloudRain, CloudSun, Wind, Flame, CircleCheck, Clock,
          LayoutGrid, Activity, Users, ShieldCheck, Phone, FileText, PencilLine,
-         Database, Building2 } from 'lucide-react';
+         Database, Building2, Wallet, CreditCard, Crown } from 'lucide-react';
 import {
   EMPTY_FORM, normalizeRegion, HISTORY_PAGE_SIZE, REFUND_REASON_PRESETS, PAY_METHOD_OPTIONS,
   BANK_LABELS, UPGRADE_PLANS, CHARGE_TIERS, juminToBirth, CARE_GROUPS, TITLE_OPTIONS,
@@ -2721,53 +2721,70 @@ export default function App() {
           따로 안 받고 이미 떠 있는 billing·subStatus를 그대로 보여주는 조회 전용 모달이다. */}
       {showPlanModal && (
         <div className="modal-overlay" onClick={()=>setShowPlanModal(false)}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420,width:'92%',textAlign:'left'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
-              <div className="modal-title" style={{textAlign:'left',marginBottom:0}}>내 요금제</div>
-              <button onClick={()=>setShowPlanModal(false)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:400,width:'92%',textAlign:'left',padding:0,overflow:'hidden',borderRadius:20}}>
+            <div style={{
+              background:'linear-gradient(135deg,#1e293b 0%,#334155 100%)',
+              padding:'24px 24px 60px',position:'relative'
+            }}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,color:'#e2e8f0',fontSize:13,fontWeight:600,letterSpacing:0.2}}>
+                  <Crown size={16} color="#fbbf24"/> 내 요금제
+                </div>
+                <button onClick={()=>setShowPlanModal(false)} style={{background:'rgba(255,255,255,0.1)',border:0,borderRadius:8,cursor:'pointer',color:'#cbd5e1',padding:5,display:'flex'}}><X size={16}/></button>
+              </div>
+              <div style={{marginTop:18,fontSize:20,fontWeight:800,color:'#fff'}}>
+                {subStatus?.autoRenew
+                  ? (UPGRADE_PLANS.find(p=>p.key===subStatus.plan)?.name || subStatus.plan)
+                  : trialActive ? '시범사업(30일 체험)'
+                  : '정량제(선불 충전)'}
+              </div>
+              {trialActive && !subStatus?.autoRenew && (
+                <div style={{fontSize:12.5,color:'#94a3b8',marginTop:4}}>
+                  체험 종료 {new Date(billing.trialEndsAt).toLocaleDateString('ko-KR')}까지
+                </div>
+              )}
             </div>
 
-            <div style={{display:'flex',flexDirection:'column',gap:14}}>
-              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 16px'}}>
-                <div style={{fontSize:12,color:'#94a3b8',marginBottom:4}}>현재 플랜</div>
-                <div style={{fontSize:18,fontWeight:800,color:'#0f172a'}}>
-                  {subStatus?.autoRenew
-                    ? (UPGRADE_PLANS.find(p=>p.key===subStatus.plan)?.name || subStatus.plan)
-                    : trialActive ? '시범사업(30일 체험)'
-                    : '정량제(선불 충전)'}
+            <div style={{padding:'0 24px 24px'}}>
+              <div style={{
+                background:'#fff',border:'1px solid #eef1f5',borderRadius:16,padding:'18px 20px',
+                marginTop:-40,marginBottom:16,boxShadow:'0 8px 24px -8px rgba(15,23,42,0.18)',position:'relative'
+              }}>
+                <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#94a3b8',fontWeight:600}}>
+                  <Wallet size={14}/> 남은 크레딧
                 </div>
-                {trialActive && !subStatus?.autoRenew && (
-                  <div style={{fontSize:13,color:'#64748b',marginTop:4}}>
-                    체험 종료: {new Date(billing.trialEndsAt).toLocaleDateString('ko-KR')}까지
-                  </div>
+                <div style={{fontSize:28,fontWeight:900,marginTop:6,letterSpacing:-0.5,color: billing?.creditBalance<=200?'#dc2626':'#0f172a'}}>
+                  {typeof billing?.creditBalance === 'number' ? billing.creditBalance.toLocaleString() : '-'}
+                  <span style={{fontSize:15,fontWeight:700,marginLeft:4,color:'#94a3b8'}}>원</span>
+                </div>
+                {billing?.creditBalance<=200 && (
+                  <div style={{fontSize:12,color:'#dc2626',marginTop:6,fontWeight:600}}>잔액이 얼마 남지 않았어요</div>
                 )}
               </div>
 
-              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 16px'}}>
-                <div style={{fontSize:12,color:'#94a3b8',marginBottom:4}}>남은 크레딧</div>
-                <div style={{fontSize:22,fontWeight:900,color: billing?.creditBalance<=200?'#dc2626':'#0f172a'}}>
-                  {typeof billing?.creditBalance === 'number' ? billing.creditBalance.toLocaleString()+'원' : '-'}
+              <div style={{display:'flex',alignItems:'flex-start',gap:10,padding:'14px 4px',borderTop:'1px solid #f1f5f9'}}>
+                <div style={{width:32,height:32,borderRadius:10,background:'#f1f5f9',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <CreditCard size={16} color="#64748b"/>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,color:'#94a3b8',fontWeight:600}}>결제수단(정기결제)</div>
+                  {subStatus?.autoRenew ? (
+                    <>
+                      <div style={{fontSize:14.5,fontWeight:700,color:'#15803d',marginTop:2}}>등록됨 · 자동결제 중</div>
+                      {subStatus.nextChargeAt && <div style={{fontSize:12.5,color:'#64748b',marginTop:3}}>다음 청구일 {new Date(subStatus.nextChargeAt).toLocaleDateString('ko-KR')}</div>}
+                      {subStatus.monthlyAmount != null && <div style={{fontSize:12.5,color:'#64748b'}}>{subStatus.monthlyAmount.toLocaleString()}원/월</div>}
+                      {subStatus.lastChargeError && <div style={{fontSize:12.5,color:'#c5221f',marginTop:3}}>최근 청구 실패: {subStatus.lastChargeError}</div>}
+                    </>
+                  ) : (
+                    <div style={{fontSize:14,color:'#64748b',marginTop:2}}>등록 안 됨 · 정량제 충전으로만 이용 중</div>
+                  )}
                 </div>
               </div>
 
-              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 16px'}}>
-                <div style={{fontSize:12,color:'#94a3b8',marginBottom:4}}>결제수단(정기결제)</div>
-                {subStatus?.autoRenew ? (
-                  <>
-                    <div style={{fontSize:15,fontWeight:700,color:'#1e8e3e'}}>등록됨 — 자동결제 중</div>
-                    {subStatus.nextChargeAt && <div style={{fontSize:13,color:'#64748b',marginTop:4}}>다음 청구일 {new Date(subStatus.nextChargeAt).toLocaleDateString('ko-KR')}</div>}
-                    {subStatus.monthlyAmount != null && <div style={{fontSize:13,color:'#64748b'}}>{subStatus.monthlyAmount.toLocaleString()}원/월</div>}
-                    {subStatus.lastChargeError && <div style={{fontSize:13,color:'#c5221f',marginTop:4}}>최근 청구 실패: {subStatus.lastChargeError}</div>}
-                  </>
-                ) : (
-                  <div style={{fontSize:15,color:'#64748b'}}>등록 안 됨 — 정량제 충전으로만 이용 중</div>
-                )}
+              <div style={{display:'flex',gap:8,marginTop:18}}>
+                <button className="btn-primary" style={{flex:1}} onClick={()=>{ setShowPlanModal(false); setShowUpgradeModal(true); }}>충전·플랜 변경</button>
+                <button className="btn-secondary" style={{flex:1}} onClick={()=>{ setShowPlanModal(false); setShowUpgradeModal(true); setUpgradeTab('history'); fetchPaymentHistory(); }}>결제 내역 보기</button>
               </div>
-            </div>
-
-            <div style={{display:'flex',gap:8,marginTop:20}}>
-              <button className="btn-primary" style={{flex:1}} onClick={()=>{ setShowPlanModal(false); setShowUpgradeModal(true); }}>충전·플랜 변경</button>
-              <button className="btn-secondary" style={{flex:1}} onClick={()=>{ setShowPlanModal(false); setShowUpgradeModal(true); setUpgradeTab('history'); fetchPaymentHistory(); }}>결제 내역 보기</button>
             </div>
           </div>
         </div>
@@ -5336,7 +5353,7 @@ export default function App() {
           {page==='data' && (
             <div className="fade-in">
               <div className="data-banner">
-                <div><div className="data-banner-title">{popData?.sidoName || '대구광역시'} 독거노인 현황</div><div className="data-banner-sub">기관 주소 기준 자동 연동 · 출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && !popData.collecting && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
+                <div><div className="data-banner-title">{popData?.sidoName || '대구광역시'} 독거노인 현황</div><div className="data-banner-sub">기관 주소 기준 자동 연동 · 출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && !popData.collecting && popData.year && popData.month && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
                 <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={() => { fetchPopulation(); fetchWeather(); }} disabled={popLoading}>{popLoading ? '불러오는 중...' : '데이터 갱신'}</button>
               </div>
               {/* 발효 중 특보 배너 — "{특보명} 발효 중 · {지역} 외 N개 지역", 경보급=레드/주의보급=앰버 */}
