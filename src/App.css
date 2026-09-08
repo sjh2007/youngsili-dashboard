@@ -5385,3 +5385,39 @@ textarea, select {
 @media (max-width: 560px) {
   .script-page .weather-compact-grid { grid-template-columns: 1fr; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   2026-09-09: 모바일 화면을 PC와 동일한 구조로 고정 (사용자 요청).
+   그동안 여러 차례의 디자인 변경이 .app/.sidebar/.main/.nav 위에 겹겹이
+   쌓이면서, 폭이 좁아지면 사이드바 메뉴 전체가 본문 위에 세로로 쭉
+   나열되는 "모바일 전용" 레이아웃(.app{display:block} 등)이 최종
+   승자가 되어 있었다 — PC의 "왼쪽 고정 사이드바 + 오른쪽 본문" 구조와
+   완전히 달라서 사용자가 혼란스러워했다. 파일 여기저기 흩어진 개별
+   모바일 규칙을 일일이 지우는 대신(찾기 누락 위험), 이 파일의 가장
+   마지막 규칙으로 데스크톱 실측 계산값(getComputedStyle, 1440px 기준)을
+   그대로 다시 선언해 모든 좁은 화면에서 PC와 동일한 구조를 강제한다.
+   화면이 좁아진 만큼 본문 폭이 줄어들 뿐, 사이드바가 위로 쌓이거나
+   메뉴가 숨겨지지 않는다 — 필요하면 좌우로 스크롤/축소해서 본다. */
+@media (max-width: 1200px) {
+  .app { display: flex !important; flex-direction: row !important; }
+  .sidebar {
+    display: flex !important; position: fixed !important; flex-direction: column !important;
+    width: 276px !important; max-height: none !important; height: 100vh !important;
+    top: 0 !important; left: 0 !important; border-right: 1px solid #e8eaed !important; border-bottom: 0 !important;
+  }
+  .main { margin-left: 276px !important; width: calc(100% - 276px) !important; }
+  .header { position: sticky !important; top: 0 !important; align-items: center !important; }
+  .header-date, .header-sync { display: inline !important; }
+  .logo { padding: 20px 22px !important; }
+  .nav {
+    display: flex !important; flex-direction: column !important; overflow-x: hidden !important;
+    overflow-y: auto !important; padding: 16px 14px 20px !important;
+  }
+  .nav-cta { display: block !important; }
+  .nav-quick { display: grid !important; }
+  .nav-search { display: flex !important; }
+  .nav-group { display: block !important; }
+  .nav-group-label { display: flex !important; }
+  .nav-item { flex: initial !important; white-space: normal !important; min-height: 46px !important; }
+  .sidebar-footer { display: grid !important; }
+}
