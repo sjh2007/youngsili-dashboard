@@ -4,7 +4,7 @@ import { type CSSProperties } from 'react';
 
 export default function NoteModal(props: any) {
   const {
-    noteModal, noteForm, setNoteModal, setNoteForm, elders, CASE_TYPE_META, CASE_CAT_META,
+    noteForm, setNoteModal, setNoteForm, elders, CASE_TYPE_META, CASE_CAT_META,
     CASE_TOPIC_META, TIME_OPTS, fmtTimeK, copyNote, copiedNoteId, saveNote, noteSaving,
   } = props;
 
