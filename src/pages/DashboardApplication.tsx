@@ -3558,15 +3558,6 @@ export default function App() {
               </span>
             </div>
           )}
-          {billing && typeof billing.creditBalance === 'number' && (
-            // 1단계(포트원 연동 전) — 실제 결제창은 없고, 요금 정책(정액제 4등급) 안내 후
-            // "신청"을 담당자 확인 대상으로만 접수한다. 2단계에서 실제 결제창(PortOne.js)으로 교체.
-            <button
-              className="sidebar-org-code sidebar-credit-charge"
-              style={{width:'100%', display:'flex', alignItems:'center', justifyContent:'center', textAlign:'center', fontWeight:700, color:'#246BEB'}}
-              onClick={()=>{ setShowUpgradeModal(true); fetchSubscriptionStatus(); }}
-            >업그레이드</button>
-          )}
           {authEnabled&&authUser&&<button className="sidebar-logout" onClick={doLogout}><LogOut size={15}/> 로그아웃</button>}
         </div>
       </aside>
