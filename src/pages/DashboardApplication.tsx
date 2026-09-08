@@ -18,6 +18,10 @@ import AdminPage from './dashboard/AdminPage';
 import RegisterPage from './dashboard/RegisterPage';
 import ConsoleSubscriptionsPage from './dashboard/ConsoleSubscriptionsPage';
 import FormsPage from './dashboard/FormsPage';
+import UpgradeModal from './dashboard/UpgradeModal';
+import ScheduleModal from './dashboard/ScheduleModal';
+import WeeklyReportModal from './dashboard/WeeklyReportModal';
+import NoteModal from './dashboard/NoteModal';
 import AuthScreen from '../components/auth/AuthScreen';
 import { ElderListSchema, MeSchema, BillingBalanceSchema, TopupResponseSchema, PaymentStatusSchema, SubscribeRegisterResponseSchema, SubscriptionStatusSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
 import { CallTranscript, GroupHeader, PageErrorBoundary } from '../components/common';
@@ -2808,158 +2812,16 @@ export default function App() {
       {/* 요금제 업그레이드 — 요금 정책 v1.0(2026-08-28) §3(정량제)·§5(정액제 4등급). 1단계(포트원
           연동 전)라 "신청 접수"만 하고 실제 충전·플랜 전환은 담당자가 후속 처리한다. */}
       {showUpgradeModal && (
-        <div className="modal-overlay" onClick={()=>setShowUpgradeModal(false)}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:920,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
-              <div className="modal-title" style={{textAlign:'left',marginBottom:0}}>요금제 선택</div>
-              <button onClick={()=>setShowUpgradeModal(false)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
-            </div>
-            <div style={{display:'flex',gap:6,marginBottom:18}}>
-              {[['metered','정량제'],['flat','정액제'],['history','결제 내역']].map(([k,label])=>(
-                <button key={k} onClick={()=>{ setUpgradeTab(k); if (k==='history') fetchPaymentHistory(); }} style={{padding:'8px 16px',borderRadius:10,border:'1px solid '+(upgradeTab===k?'#246BEB':'#e2e8f0'),background:upgradeTab===k?'#eff6ff':'#fff',color:upgradeTab===k?'#246BEB':'#64748b',fontWeight:700,fontSize:14,cursor:'pointer'}}>{label}</button>
-              ))}
-            </div>
-
-            {upgradeTab==='metered' ? (<>
-              <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
-                발신 시도마다 <b>발신 기본료 40원</b> + 실제 연결된 통화에만 <b>통화 요금</b>이 충전액에서 차감됩니다.
-                발신이 없는 달은 차감도 청구도 없습니다(VAT 별도). 아래는 대표적인 충전 단위입니다 — 원하는 금액을 직접 입력해도 됩니다.
-              </p>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:14}}>
-                {CHARGE_TIERS.map(c=>(
-                  <div key={c.key} style={{border:c.recommended?'2px solid #246BEB':'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:10}}>
-                    <div style={{fontWeight:900,fontSize:22,color:'#0f172a'}}>{c.amount.toLocaleString()}원</div>
-                    <div style={{fontSize:14,fontWeight:700,color:'#246BEB'}}>{c.calls} 도달(3분 통화 기준)</div>
-                    <div style={{fontSize:13,color:'#475467',lineHeight:1.5,flex:1}}>{c.usage}</div>
-                    <button
-                      className="btn-primary"
-                      style={{width:'100%'}}
-                      onClick={()=>setPendingTopup({amount:c.amount})}
-                    >신청</button>
-                  </div>
-                ))}
-              </div>
-              <div style={{display:'flex',gap:8,alignItems:'center',marginTop:16}}>
-                <input
-                  className="form-input"
-                  style={{marginBottom:0,flex:1}}
-                  type="number"
-                  min={10000}
-                  step={1000}
-                  placeholder="직접 입력(원, 10,000원 이상)"
-                  value={customAmount}
-                  onChange={e=>setCustomAmount(e.target.value)}
-                />
-                <button
-                  className="btn-secondary"
-                  disabled={!customAmount || Number(customAmount) < 10000}
-                  onClick={()=>setPendingTopup({amount:Number(customAmount)})}
-                >직접 충전</button>
-              </div>
-              {/* 실결제 파이프라인(포트원 연동·웹훅) 자체가 살아있는지 실제 결제해 확인하는
-                  테스트 버튼 — 서버가 amount===1000만 예외로 허용한다(일반 충전 최소단위는 그대로
-                  유지). 처음엔 1원으로 뒀는데 PG사 최소 결제금액 미만이라 결제가 안 돼 1,000원으로 조정. */}
-              <button
-                className="btn-secondary"
-                style={{marginTop:8,fontSize:12,color:'#94a3b8'}}
-                onClick={()=>setPendingTopup({amount:1000})}
-              >1,000원 테스트 결제</button>
-              <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정확한 채널 배정·이용 패턴별 견적은 담당 매니저에게 문의해 주세요.</p>
-            </>) : upgradeTab==='flat' ? (<>
-              <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
-                예산을 매월 고정해야 하는 기관을 위한 인·월 정액 요금제입니다(앱 설치 방식 기준, VAT 별도).
-              </p>
-              {subStatus?.autoRenew && (
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:12,padding:'12px 16px',marginBottom:16,flexWrap:'wrap'}}>
-                  <div style={{fontSize:14,color:'#1e3a6e'}}>
-                    <b>{UPGRADE_PLANS.find(p=>p.key===subStatus.plan)?.name || subStatus.plan}</b> 플랜 자동결제 중
-                    {subStatus.nextChargeAt && <> · 다음 청구일 {new Date(subStatus.nextChargeAt).toLocaleDateString('ko-KR')}</>}
-                    {subStatus.monthlyAmount != null && <> · {subStatus.monthlyAmount.toLocaleString()}원/월</>}
-                    {subStatus.lastChargeError && <div style={{color:'#c5221f',marginTop:4}}>최근 청구 실패: {subStatus.lastChargeError}</div>}
-                  </div>
-                  <button className="btn-secondary" style={{fontSize:13,padding:'6px 14px',color:'#c5221f',flexShrink:0}} disabled={subCancelBusy} onClick={cancelSubscription}>
-                    {subCancelBusy ? '처리 중...' : '자동결제 해지'}
-                  </button>
-                </div>
-              )}
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(190px, 1fr))',gap:14}}>
-                {UPGRADE_PLANS.map(p=>{
-                  const isCurrent = subStatus?.autoRenew && subStatus.plan === p.key;
-                  return (
-                  <div key={p.key} style={{border:isCurrent?'2px solid #1e8e3e':p.recommended?'2px solid #246BEB':'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:12}}>
-                    <div style={{fontWeight:800,fontSize:16,color:'#0f172a'}}>{p.name}</div>
-                    <div><span style={{fontWeight:900,fontSize:22,color:'#0f172a'}}>{p.price}</span><span style={{fontSize:13,color:'#94a3b8',marginLeft:4}}>/{p.unit}</span></div>
-                    <ul style={{margin:0,padding:0,listStyle:'none',display:'flex',flexDirection:'column',gap:6,flex:1}}>
-                      {p.features.map(f=>(
-                        <li key={f} style={{fontSize:13,color:'#475467',display:'flex',gap:6,alignItems:'flex-start'}}>
-                          <CheckCircle2 size={14} color="#246BEB" style={{flexShrink:0,marginTop:2}}/>{f}
-                        </li>
-                      ))}
-                    </ul>
-                    {isCurrent ? (
-                      <div style={{width:'100%',textAlign:'center',fontSize:13,fontWeight:700,color:'#1e8e3e',background:'#e6f4ea',borderRadius:10,padding:'9px 0'}}>자동결제 중</div>
-                    ) : (
-                      // 2026-09-01: 이니시스 정기결제 채널 연동으로 빌링키 발급이 가능해져
-                      // startSubscription() 실결제 흐름을 다시 켠다(trial은 결제 없이 startTrial()).
-                      // 2026-09-04: trial 카드가 "신청 접수" 토스트만 띄우고 실제로 아무 것도 안
-                      // 바꾸던 문제 수정 — POST /billing/start-trial로 실제 30일 체험을 시작한다.
-                      <button
-                        className="btn-primary"
-                        style={{width:'100%'}}
-                        disabled={subscribeBusy === p.key || (p.key === 'trial' && !!billing?.trialEndsAt)}
-                        onClick={()=> p.key === 'trial' ? startTrial() : startSubscription(p.key, p.name)}
-                      >{subscribeBusy === p.key ? '처리 중...' : (p.key === 'trial' && billing?.trialEndsAt) ? '이미 시작됨' : '신청'}</button>
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-              <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정액제 세부 조건은 담당 매니저에게 문의해 주세요.</p>
-            </>) : (<>
-              <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
-                크레딧 충전·정액제 결제 내역입니다. 완료된 크레딧 충전 건은 환불을 요청할 수 있습니다(실제 처리는 담당자 확인 후 진행됩니다).
-              </p>
-              {paymentHistoryLoading ? (
-                <div style={{color:'#94a3b8',fontSize:14,padding:'20px 4px'}}>불러오는 중...</div>
-              ) : paymentHistory.length === 0 ? (
-                <div style={{color:'#94a3b8',fontSize:14,padding:'20px 4px'}}>결제 내역이 없습니다</div>
-              ) : (
-                <div style={{overflowX:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
-                    <thead><tr style={{textAlign:'left',color:'#94a3b8',borderBottom:'1px solid #e2e8f0'}}>
-                      <th style={{padding:'8px 10px',fontWeight:600}}>시각</th><th style={{padding:'8px 10px',fontWeight:600}}>종류</th>
-                      <th style={{padding:'8px 10px',fontWeight:600}}>금액</th><th style={{padding:'8px 10px',fontWeight:600}}>상태</th><th style={{padding:'8px 10px',fontWeight:600}}></th>
-                    </tr></thead>
-                    <tbody>{paymentHistory.map((p:any)=>{
-                      const canRequest = p.status==='paid' && p.type!=='subscription' && !p.refundRequestStatus;
-                      return (
-                      <tr key={p.id} style={{borderBottom:'1px solid #f1f5f9'}}>
-                        <td style={{padding:'10px',color:'#94a3b8'}}>{p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '-'}</td>
-                        <td style={{padding:'10px'}}>{p.type==='subscription' ? `정액제${p.planKey?`(${p.planKey})`:''}` : '크레딧 충전'}</td>
-                        <td style={{padding:'10px',fontWeight:700}}>{p.amount.toLocaleString()}원</td>
-                        <td style={{padding:'10px'}}>
-                          {p.status==='cancelled' ? <span style={{color:'#94a3b8'}}>환불됨</span>
-                            : p.refundRequestStatus==='pending' ? <span style={{color:'#754d00'}}>환불 요청됨</span>
-                            : p.refundRequestStatus==='rejected' ? <span style={{color:'#c5221f'}}>환불 거절됨</span>
-                            : p.status==='paid' ? <span style={{color:'#1e8e3e'}}>완료</span>
-                            : <span style={{color:'#94a3b8'}}>{p.status}</span>}
-                        </td>
-                        <td style={{padding:'10px'}}>
-                          {canRequest && (
-                            <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px'}}
-                              onClick={()=>{ setRefundTarget({id:p.id, amount:p.amount}); setRefundReasonPreset(REFUND_REASON_PRESETS[0]); setRefundReasonCustom(''); }}
-                            >환불 요청</button>
-                          )}
-                        </td>
-                      </tr>
-                      );
-                    })}</tbody>
-                  </table>
-                </div>
-              )}
-            </>)}
-          </div>
-        </div>
+        <UpgradeModal
+          setShowUpgradeModal={setShowUpgradeModal} upgradeTab={upgradeTab} setUpgradeTab={setUpgradeTab}
+          fetchPaymentHistory={fetchPaymentHistory} setPendingTopup={setPendingTopup}
+          customAmount={customAmount} setCustomAmount={setCustomAmount} subStatus={subStatus}
+          subCancelBusy={subCancelBusy} cancelSubscription={cancelSubscription} subscribeBusy={subscribeBusy}
+          billing={billing} startTrial={startTrial} startSubscription={startSubscription}
+          paymentHistoryLoading={paymentHistoryLoading} paymentHistory={paymentHistory}
+          setRefundTarget={setRefundTarget} setRefundReasonPreset={setRefundReasonPreset}
+          setRefundReasonCustom={setRefundReasonCustom}
+        />
       )}
       {/* 환불 요청 — 프리셋 사유 5개 + 직접 입력. 실제 환불은 담당자 승인 후 처리됨(요청만 접수) */}
       {refundTarget !== null && (
@@ -3145,273 +3007,32 @@ export default function App() {
         </div>
       )}
 
-      {schedModal && (()=>{
-        const [y, m] = schedModal.ym.split('-').map(Number);
-        const lastDay = new Date(y, m, 0).getDate();
-        const DOW = ['일','월','화','수','목','금','토'];
-        const hset = new Set(schedModal.holidays || []);
-        const dowOf = (d) => new Date(y, m-1, d).getDay();
-        const is15 = (d) => dowOf(d) === 0 || dowOf(d) === 6 || hset.has(d);   // 주말·공휴일 = 1.5배
-        const recOf = (d) => Number((schedModal.days||{})[String(d)]||0) * (is15(d) ? SCHED_RATE : 1);
-        const totalInput = Object.values((schedModal.days||{}) as Record<string, any>).reduce((a,b)=>a+Number(b),0);
-        const totalRec = Math.round(Array.from({length:lastDay},(_,i)=>recOf(i+1)).reduce((a,b)=>a+b,0)*100)/100;
-        const overCap = totalRec > SCHED_CAP;
-        const setDay = (d, v) => setSchedModal(f=>{
-          const days = { ...(f.days||{}) };
-          const h = Math.round(Number(v)*2)/2;
-          if (!v || h <= 0) delete days[String(d)]; else days[String(d)] = h;
-          return { ...f, days };
-        });
-        // 평일을 공휴일로(대체·임시공휴일) 지정/해제 — 날짜 클릭. 주말은 이미 1.5배라 토글 불필요.
-        const toggleHoliday = (d) => { if (dowOf(d)===0||dowOf(d)===6) return; setSchedModal(f=>{ const hs = new Set(f.holidays||[]); hs.has(d)?hs.delete(d):hs.add(d); return { ...f, holidays: [...hs] }; }); };
-        // 주간 소계(일~토, 인정시간): 각 토요일 뒤에 표시
-        const weekSumUpTo = (d) => { let s=0; for(let i=d; i>=1; i--){ s += recOf(i); if(dowOf(i)===0) break; } return Math.round(s*100)/100; };
-        // PC: 달력형 셀 데이터 (일~토, 오프셋 포함)
-        const offset = new Date(y, m-1, 1).getDay();
-        const cells = [...Array(offset).fill(null), ...Array.from({length:lastDay},(_,i)=>i+1)];
-        while (cells.length % 7 !== 0) cells.push(null);
-        const calWeeks = []; for (let i=0;i<cells.length;i+=7) calWeeks.push(cells.slice(i,i+7));
-        const rowSum = (w)=>Math.round(w.reduce((a,d)=>a+(d?recOf(d):0),0)*100)/100;
-        return (
-        <div className="modal-overlay" onClick={()=>setSchedModal(null)}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:winWide?1000:520,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
-            <h3 style={{margin:'0 0 6px'}}>급여제공 일정표</h3>
-            <div style={{fontSize:16,color:'#64748b',marginBottom:8}}>날짜별 제공시간을 입력하고 저장하세요. 인쇄하면 공식 달력 양식(PDF)으로 출력됩니다.</div>
-            <div style={{fontSize:15,fontWeight:700,color:'#7c3aed',background:'#f5f3ff',border:'1px solid #ddd6fe',borderRadius:8,padding:'7px 10px',marginBottom:12}}>
-              산정 규칙: 월 인정시간 <b>한도 120시간</b> · <b>주말·공휴일은 1.5배 인정</b> (2시간 근무 → 3시간 인정). 공휴일(<span style={{color:'#dc2626'}}>×1.5</span>)은 자동 표시되며, 평일 날짜를 클릭하면 공휴일로 지정/해제할 수 있어요.
-            </div>
-            <div style={{display:'flex',gap:8,marginBottom:10}}>
-              <select className="form-input" style={{flex:1,margin:0}} value={schedModal.phone} onChange={e=>{ const p=e.target.value; setSchedModal(f=>({...f,phone:p,loaded:false})); loadSchedule(p, schedModal.ym); }}>
-                {elders.map(e=>(<option key={e.id} value={String(e.phone||'').replace(/\D/g,'')}>{e.name} ({e.phone})</option>))}
-              </select>
-              <input type="month" className="form-input" style={{width:150,margin:0}} value={schedModal.ym} onChange={e=>{ const ym=e.target.value; setSchedModal(f=>({...f,ym,loaded:false})); loadSchedule(schedModal.phone, ym); }}/>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-              <input className="form-input" style={{margin:0}} placeholder="수급자 생년월일 (예: 1948.05.12)" value={schedModal.birth} onChange={e=>setSchedModal(f=>({...f,birth:e.target.value}))}/>
-              <input className="form-input" style={{margin:0}} placeholder="활동지원사 성명" value={schedModal.workerName} onChange={e=>setSchedModal(f=>({...f,workerName:e.target.value}))}/>
-            </div>
-            {!schedModal.loaded ? (
-              <div style={{textAlign:'center',color:'#94a3b8',padding:20}}>불러오는 중…</div>
-            ) : winWide ? (
-            /* PC: 공식 양식과 같은 달력형 그리드 (일~토 + 주 합계 열) — 한 달이 한 화면에 */
-            <div style={{border:'1px solid #e2e8f0',borderRadius:10,overflow:'hidden',marginBottom:12}}>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr) 96px',background:'#1e3a6e'}}>
-                {[...DOW,'주 합계'].map((d,i)=>(<div key={d} style={{padding:'7px 4px',textAlign:'center',fontSize:16,fontWeight:800,color:i===0?'#fca5a5':i===6?'#93c5fd':'#fff'}}>{d}</div>))}
-              </div>
-              {calWeeks.map((w,wi)=>(
-                <div key={wi} style={{display:'grid',gridTemplateColumns:'repeat(7,1fr) 96px',borderTop:'1px solid #e2e8f0'}}>
-                  {w.map((d,ci)=>(
-                    <div key={ci} style={{padding:'6px 6px 8px',borderLeft:ci>0?'1px solid #f1f5f9':'none',background:d?(ci===0?'#fef7f7':ci===6?'#f6f9ff':'#fff'):'#fafafa',minHeight:62}}>
-                      {d && <>
-                        <div onClick={()=>toggleHoliday(d)} title={(dowOf(d)!==0&&dowOf(d)!==6)?'클릭: 공휴일 지정/해제 (1.5배 인정)':''}
-                          style={{fontSize:15,fontWeight:800,color:is15(d)?'#dc2626':ci===6?'#246BEB':'#334155',marginBottom:4,cursor:(dowOf(d)!==0&&dowOf(d)!==6)?'pointer':'default'}}>
-                          {m}/{d}{is15(d)&&<span style={{fontSize:14,marginLeft:3,fontWeight:900,color:'#7c3aed'}}>×1.5</span>}
-                        </div>
-                        <input type="number" min="0" max="24" step="0.5" className="form-input" style={{width:'100%',margin:0,padding:'5px 6px',fontSize:17,textAlign:'center'}}
-                          value={(schedModal.days||{})[String(d)]??''} placeholder="시간" onChange={e=>setDay(d, e.target.value)}/>
-                      </>}
-                    </div>
-                  ))}
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',borderLeft:'2px solid #e2e8f0',background:'#f8fafc',fontSize:16,fontWeight:900,color:'#1e3a6e'}}>{rowSum(w)||''}{rowSum(w)?'시간':''}</div>
-                </div>
-              ))}
-              <div style={{textAlign:'right',fontSize:17,fontWeight:900,color:overCap?'#dc2626':'#1e3a6e',background:overCap?'#fef2f2':'#eff6ff',padding:'9px 14px',borderTop:'1px solid #e2e8f0'}}>
-                입력 {totalInput}시간 · <b>인정 {totalRec} / {SCHED_CAP}시간</b>{overCap && ' · 한도 초과'}
-              </div>
-            </div>
-            ) : (
-            /* 모바일: 세로 날짜 리스트 — 한 손 입력·큰 터치 영역 */
-            <div style={{border:'1px solid #e2e8f0',borderRadius:10,overflow:'hidden',marginBottom:12}}>
-              {Array.from({length:lastDay},(_,i)=>i+1).map(d=>{
-                const dow = new Date(y, m-1, d).getDay();
-                const isSat = dow === 6, isSun = dow === 0;
-                return (
-                <div key={d}>
-                  <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',background:is15(d)?'#fef7f7':isSat?'#eff6ff':'#fff',borderTop:d>1?'1px solid #f1f5f9':'none'}}>
-                    <span onClick={()=>toggleHoliday(d)} style={{width:96,fontSize:16,fontWeight:700,color:is15(d)?'#dc2626':isSat?'#246BEB':'#334155',cursor:(!isSun&&!isSat)?'pointer':'default'}}
-                      title={(!isSun&&!isSat)?'클릭: 공휴일 지정/해제 (1.5배 인정)':''}>
-                      {m}/{d} ({DOW[dow]}){is15(d)&&<span style={{fontSize:14,marginLeft:3,fontWeight:900,color:'#7c3aed'}}>×1.5</span>}
-                    </span>
-                    <input type="number" min="0" max="24" step="0.5" className="form-input" style={{width:110,margin:0,padding:'6px 10px'}}
-                      value={(schedModal.days||{})[String(d)]??''} placeholder="시간" onChange={e=>setDay(d, e.target.value)}/>
-                    <span style={{fontSize:15,color:'#94a3b8'}}>시간{is15(d)&&(schedModal.days||{})[String(d)]?` → 인정 ${recOf(d)}시간`:''}</span>
-                  </div>
-                  {isSat && <div style={{textAlign:'right',fontSize:15,fontWeight:800,color:'#1e3a6e',background:'#f8fafc',padding:'4px 14px',borderTop:'1px dashed #e2e8f0'}}>주간 인정 합계 {weekSumUpTo(d)}시간</div>}
-                </div>
-                );
-              })}
-              <div style={{textAlign:'right',fontSize:17,fontWeight:900,color:overCap?'#dc2626':'#1e3a6e',background:overCap?'#fef2f2':'#eff6ff',padding:'8px 14px'}}>입력 {totalInput}시간 · <b>인정 {totalRec} / {SCHED_CAP}시간</b>{overCap && ' · 한도 초과'}</div>
-            </div>
-            )}
-            <div className="modal-btns" style={{justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
-              {isStaffUp ? <button className="btn-secondary" onClick={printScheduleBatch} title="이 달에 저장된 모든 이용자의 일정표를 한 번에 인쇄(PDF 한 파일)">일괄 출력</button> : <span/>}
-              <div style={{display:'flex',gap:8}}>
-                <button className="btn-secondary" onClick={()=>setSchedModal(null)}>닫기</button>
-                <button className="btn-secondary" onClick={printSchedule}>양식 인쇄</button>
-                <button className="btn-primary" onClick={saveSchedule} disabled={schedModal.saving||overCap} title={overCap?'월 인정시간 한도(120시간)를 초과해 저장할 수 없습니다':''}>{schedModal.saving?'저장 중…':overCap?'한도 초과':'파일로 저장'}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        );
-      })()}
-
-      {weeklyModal && (
-        <div className="modal-overlay" onClick={()=>{setWeeklyModal(null);setWeeklyDoc(null);}}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:winWide?1020:640,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
-            <h3 style={{margin:'0 0 6px'}}>주간업무 보고서 — 확인·수정·출력</h3>
-            <div style={{fontSize:16,color:'#64748b',marginBottom:12}}>지원사가 앱에서 주차별로 작성(음성→텍스트)한 내용입니다. 오타를 고치고 지시사항을 적은 뒤 저장·출력하세요.</div>
-            <div style={{display:'flex',gap:8,marginBottom:10}}>
-              <select className="form-input" style={{flex:1,margin:0}} value={weeklyModal.phone} onChange={e=>{const p=e.target.value;setWeeklyModal(f=>({...f,phone:p}));loadWeekly(p,weeklyModal.ym);}}>
-                {elders.map(e=>(<option key={e.id} value={String(e.phone||'').replace(/\D/g,'')}>{e.name} ({e.phone})</option>))}
-              </select>
-              <input type="month" className="form-input" style={{width:150,margin:0}} value={weeklyModal.ym} onChange={e=>{const ym=e.target.value;setWeeklyModal(f=>({...f,ym}));loadWeekly(weeklyModal.phone,ym);}}/>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
-              <input className="form-input" style={{margin:0}} placeholder="급여종류" value={weeklyModal.benefit} onChange={e=>setWeeklyModal(f=>({...f,benefit:e.target.value}))}/>
-              <input className="form-input" style={{margin:0}} placeholder="이용자 생년월일" value={(weeklyDoc&&weeklyDoc.birth)||''} onChange={e=>setWeeklyDoc(f=>({...f,birth:e.target.value}))}/>
-              <input className="form-input" style={{margin:0}} placeholder="지원사 성명" value={(weeklyDoc&&weeklyDoc.workerName)||''} onChange={e=>setWeeklyDoc(f=>({...f,workerName:e.target.value}))}/>
-            </div>
-            {(!weeklyDoc || !weeklyDoc.loaded) ? (
-              <div style={{textAlign:'center',color:'#94a3b8',padding:24}}>불러오는 중…</div>
-            ) : (
-              <>
-                {/* PC(와이드): 주차 2열 그리드로 모니터 폭 활용 (5주차는 전체 폭), 모바일: 세로 1열 */}
-                <div style={{display:'grid',gridTemplateColumns:winWide?'1fr 1fr':'1fr',gap:10,marginBottom:10}}>
-                {[1,2,3,4,5].map(i=>{
-                  const w = weeklyDoc.weeks[i] || { content:'', topics:[] };
-                  const setW = (patch)=>setWeeklyDoc(f=>({...f,weeks:{...f.weeks,[i]:{...(f.weeks[i]||{content:'',topics:[]}),...patch, _fromNotes:false}}}));
-                  return (
-                  <div key={i} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',background:w._fromNotes?'#fffbeb':'#fff',...(winWide&&i===5?{gridColumn:'1 / -1'}:{})}}>
-                    <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:6}}>
-                      <span style={{fontWeight:900,color:'#1e3a6e'}}>{i}주차</span>
-                      {w._fromNotes && <span style={{fontSize:15,fontWeight:700,color:'#b45309',background:'#fef3c7',padding:'2px 8px',borderRadius:12}}>상담일지에서 자동 채움 — 저장 시 확정</span>}
-                      <div style={{display:'flex',gap:10,marginLeft:'auto'}}>
-                        {Object.entries(CASE_TOPIC_META).map(([k,l])=>(
-                          <label key={k} style={{display:'flex',alignItems:'center',gap:4,fontSize:16,fontWeight:600,cursor:'pointer'}}>
-                            <input type="checkbox" checked={(w.topics||[]).includes(k)}
-                              onChange={e=>setW({topics:e.target.checked?[...(w.topics||[]),k]:(w.topics||[]).filter(t=>t!==k)})}/>
-                            {l}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <textarea className="form-input" style={{width:'100%',minHeight:winWide?96:64,margin:0,fontSize:16,lineHeight:1.5}} value={w.content}
-                      placeholder="이 주차 업무내용·특이사항 (지원사 앱에서 녹음하면 자동으로 채워집니다)"
-                      onChange={e=>setW({content:e.target.value})}/>
-                  </div>
-                  );
-                })}
-                </div>
-                <div style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 12px',marginBottom:12}}>
-                  <div style={{fontWeight:900,color:'#1e3a6e',marginBottom:6}}>전담인력 지시사항</div>
-                  <textarea className="form-input" style={{width:'100%',minHeight:48,margin:0,fontSize:16}} value={weeklyDoc.note}
-                    placeholder="검토 후 지원사에게 전달할 지시사항" onChange={e=>setWeeklyDoc(f=>({...f,note:e.target.value}))}/>
-                </div>
-              </>
-            )}
-            {isStaffUp && (()=>{
-              const authorName = (em)=>{ const a=accounts.find(u=>u.email===em); return (a&&a.name)?`${a.name} (${em.split('@')[0]})`:em; };
-              const authors = [...new Set(weeklyAll.map(w=>w.authorEmail).filter(Boolean))];
-              return (
-              <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:12,background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:'8px 10px'}}>
-                <select className="form-input" style={{flex:1,margin:0}} value={weeklyModal.author} onChange={e=>setWeeklyModal(f=>({...f,author:e.target.value}))}>
-                  <option value="">전체 작성자</option>
-                  {authors.map(em=>(<option key={em} value={em}>{authorName(em)}</option>))}
-                </select>
-                <button className="btn-secondary" style={{whiteSpace:'nowrap'}} onClick={printWeeklyBatch} title="그 달에 저장된 보고서 전체를 한 번에 — PDF 한 파일">일괄 출력</button>
-              </div>
-              );
-            })()}
-            <div className="modal-btns" style={{justifyContent:'flex-end',gap:8}}>
-              <button className="btn-secondary" onClick={()=>{setWeeklyModal(null);setWeeklyDoc(null);}}>닫기</button>
-              <button className="btn-secondary" onClick={printWeeklyReport}>양식 출력</button>
-              <button className="btn-primary" onClick={saveWeekly} disabled={!!(weeklyDoc&&weeklyDoc.saving)}>{weeklyDoc&&weeklyDoc.saving?'저장 중…':'파일로 저장'}</button>
-            </div>
-          </div>
-        </div>
+      {schedModal && (
+        <ScheduleModal
+          schedModal={schedModal} setSchedModal={setSchedModal} elders={elders} loadSchedule={loadSchedule}
+          winWide={winWide} isStaffUp={isStaffUp} printScheduleBatch={printScheduleBatch}
+          printSchedule={printSchedule} saveSchedule={saveSchedule} SCHED_CAP={SCHED_CAP}
+          SCHED_RATE={SCHED_RATE}
+        />
       )}
 
-      {noteModal && noteForm && (()=>{
-        const L: CSSProperties={display:'block',fontSize:16,fontWeight:700,color:'#334155',marginBottom:5,textAlign:'left'};
-        const I: CSSProperties={width:'100%',display:'block',boxSizing:'border-box',margin:0};
-        const close=()=>{setNoteModal(null);setNoteForm(null);};
-        return (
-        <div className="modal-overlay" onClick={close}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600,width:'94%',textAlign:'left'}}>
-            <div className="modal-title" style={{textAlign:'left',marginBottom:noteForm.autoDraft?10:18}}>{noteForm.id?'상담·방문 일지 수정':'새 상담·방문 일지'}</div>
-            {noteForm.autoDraft && (
-              <div style={{fontSize:16,color:'#b45309',background:'#fef3c7',border:'1px solid #fde68a',borderRadius:10,padding:'10px 12px',marginBottom:16,lineHeight:1.5}}>
-                통화 내용으로 <b>자동 작성된 초안</b>입니다. 내용을 확인·수정한 뒤 저장하면 <b>내 이름으로 확정</b>됩니다.
-              </div>
-            )}
-            <div style={{display:'flex',flexDirection:'column',gap:15,maxHeight:'66vh',overflowY:'auto',paddingRight:4}}>
-              <div>
-                <label style={L}>어르신</label>
-                <select className="form-input" style={I} value={noteForm.elderPhone} onChange={e=>{const el=elders.find(x=>String(x.phone)===e.target.value); setNoteForm(f=>({...f,elderPhone:e.target.value,elderName:el?el.name:''}));}}>
-                  <option value="">— 어르신 선택 —</option>
-                  {elders.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(e=>(<option key={e.id||e.phone} value={e.phone}>{e.name} ({e.phone})</option>))}
-                </select>
-              </div>
-              <div>
-                <label style={L}>상담 유형</label>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {Object.entries(CASE_TYPE_META).map(([k,m])=>(
-                    <button key={k} type="button" onClick={()=>setNoteForm(f=>({...f,type:k}))} style={{fontSize:16,padding:'7px 13px',borderRadius:20,cursor:'pointer',fontWeight:600,border:'1px solid '+(noteForm.type===k?m.color:'#d1d5db'),background:noteForm.type===k?m.bg:'#fff',color:noteForm.type===k?m.color:'#374151'}}>{m.label}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label style={L}>주제</label>
-                <select className="form-input" style={I} value={noteForm.category} onChange={e=>setNoteForm(f=>({...f,category:e.target.value}))}>
-                  {Object.entries(CASE_CAT_META).map(([k,l])=>(<option key={k} value={k}>{l}</option>))}
-                </select>
-              </div>
-              <div>
-                <label style={L}>업무 구분 <span style={{fontWeight:500,color:'#94a3b8'}}>(주간업무 보고서 체크란 — 복수 선택)</span></label>
-                <div style={{display:'flex',gap:14,flexWrap:'wrap',padding:'6px 2px'}}>
-                  {Object.entries(CASE_TOPIC_META).map(([k,l])=>(
-                    <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:17,fontWeight:600,color:'#374151',cursor:'pointer'}}>
-                      <input type="checkbox" checked={(noteForm.topics||[]).includes(k)}
-                        onChange={e=>setNoteForm(f=>({...f,topics:e.target.checked?[...(f.topics||[]),k]:(f.topics||[]).filter(t=>t!==k)}))}/>
-                      {l}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label style={L}>상담 일시</label>
-                <div style={{display:'flex',gap:8}}>
-                  <input type="date" className="form-input" style={{...I,flex:'3 1 0'}} value={noteForm.visitedDate} onChange={e=>setNoteForm(f=>({...f,visitedDate:e.target.value}))}/>
-                  <select className="form-input" style={{...I,flex:'2 1 0'}} value={noteForm.visitedTime} onChange={e=>setNoteForm(f=>({...f,visitedTime:e.target.value}))}>
-                    {(TIME_OPTS.includes(noteForm.visitedTime)?TIME_OPTS:[...TIME_OPTS,noteForm.visitedTime].sort()).map(t=>(<option key={t} value={t}>{fmtTimeK(t)}</option>))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label style={L}>상담·방문 내용</label>
-                <textarea className="form-input" style={{...I,resize:'vertical'}} rows={4} placeholder="예: 가정방문. 혈압약 잘 복용 중. 무릎 통증 호소하여..." value={noteForm.content} onChange={e=>setNoteForm(f=>({...f,content:e.target.value}))}/>
-              </div>
-              <div>
-                <label style={L}>조치사항 <span style={{color:'#94a3b8',fontWeight:400}}>(선택)</span></label>
-                <textarea className="form-input" style={{...I,resize:'vertical'}} rows={2} placeholder="예: 보건소 방문 안내, 밑반찬 지원 연계" value={noteForm.action} onChange={e=>setNoteForm(f=>({...f,action:e.target.value}))}/>
-              </div>
-              <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',paddingTop:2}}>
-                <label style={{fontSize:16,fontWeight:700,color:'#334155',display:'flex',alignItems:'center',gap:7,cursor:'pointer',margin:0}}>
-                  <input type="checkbox" checked={noteForm.followUpNeeded} onChange={e=>setNoteForm(f=>({...f,followUpNeeded:e.target.checked}))} style={{width:16,height:16}}/> 후속조치 필요
-                </label>
-                {noteForm.followUpNeeded && <input type="date" className="form-input" style={{width:180,margin:0}} value={noteForm.followUpDue} onChange={e=>setNoteForm(f=>({...f,followUpDue:e.target.value}))}/>}
-              </div>
-            </div>
-            <div className="modal-btns" style={{marginTop:20,justifyContent:'flex-end'}}>
-              <button className="btn-secondary" onClick={close}>취소</button>
-              <button className="btn-secondary" onClick={()=>copyNote({elderName:noteForm.elderName,type:noteForm.type,category:noteForm.category,content:noteForm.content,action:noteForm.action,visitedAt:(noteForm.visitedDate&&noteForm.visitedTime)?`${noteForm.visitedDate}T${noteForm.visitedTime}`:new Date().toISOString(),followUp:{needed:noteForm.followUpNeeded,dueDate:noteForm.followUpDue}},'modal')} title="정부 노인맞춤돌봄시스템 등에 붙여넣기용 텍스트 복사">{copiedNoteId==='modal'?'복사됨':'복사'}</button>
-              <button className="btn-primary" onClick={saveNote} disabled={noteSaving}>{noteSaving?'저장 중...':(noteForm.id?'수정 저장':'일지 저장')}</button>
-            </div>
-          </div>
-        </div>
-        );
-      })()}
+      {weeklyModal && (
+        <WeeklyReportModal
+          setWeeklyModal={setWeeklyModal} setWeeklyDoc={setWeeklyDoc} weeklyModal={weeklyModal}
+          elders={elders} loadWeekly={loadWeekly} weeklyDoc={weeklyDoc} winWide={winWide}
+          isStaffUp={isStaffUp} accounts={accounts} weeklyAll={weeklyAll} printWeeklyBatch={printWeeklyBatch}
+          printWeeklyReport={printWeeklyReport} saveWeekly={saveWeekly} CASE_TOPIC_META={CASE_TOPIC_META}
+        />
+      )}
+
+      {noteModal && noteForm && (
+        <NoteModal
+          noteModal={noteModal} noteForm={noteForm} setNoteModal={setNoteModal} setNoteForm={setNoteForm}
+          elders={elders} CASE_TYPE_META={CASE_TYPE_META} CASE_CAT_META={CASE_CAT_META}
+          CASE_TOPIC_META={CASE_TOPIC_META} TIME_OPTS={TIME_OPTS} fmtTimeK={fmtTimeK} copyNote={copyNote}
+          copiedNoteId={copiedNoteId} saveNote={saveNote} noteSaving={noteSaving}
+        />
+      )}
 
       <aside className="sidebar">
         <div className="logo" onClick={()=>goPage('dashboard')} style={{cursor:'pointer'}} title="대시보드 홈으로">
