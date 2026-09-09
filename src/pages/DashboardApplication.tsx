@@ -1316,7 +1316,10 @@ export default function App() {
     return () => clearInterval(t);
   }, []); // eslint-disable-line
 
-  const goPage  = p => { setPage(p); setSelected(null); setCallResult(null); };
+  // 2026-09-09: 모바일에서 사이드바를 서랍(off-canvas)으로 열고 닫는 상태. 좁은 화면에서만
+  // 의미가 있고(PC는 CSS에서 항상 펼친 상태), 메뉴를 고르면 자동으로 닫아야 본문이 보인다.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const goPage  = p => { setPage(p); setSelected(null); setCallResult(null); setMobileNavOpen(false); };
   // 헤더 새로고침 — 현재 페이지에 필요한 데이터만 다시 불러오기
   const refreshPage = () => {
     setLastSync(new Date());
@@ -2841,7 +2844,14 @@ export default function App() {
         />
       )}
 
-      <aside className="sidebar">
+      {/* 모바일 서랍이 열렸을 때 본문을 덮는 배경 — 눌러서 닫는다(PC에서는 CSS로 숨김) */}
+      <div
+        className={`nav-backdrop${mobileNavOpen ? ' is-open' : ''}`}
+        onClick={()=>setMobileNavOpen(false)}
+        aria-hidden="true"
+      />
+
+      <aside className={`sidebar${mobileNavOpen ? ' is-open' : ''}`}>
         <div className="logo" onClick={()=>goPage('dashboard')} style={{cursor:'pointer'}} title="대시보드 홈으로">
           <img src="/youngsili.png" alt="영실이" className="logo-icon" style={{width:42,height:42,borderRadius:12,objectFit:'cover',padding:0}} />
           <div><div className="logo-title">영실이</div><div className="logo-sub">어르신 관리 시스템</div></div>
@@ -3021,6 +3031,15 @@ export default function App() {
           </div>
         )}
         <header className="header">
+          {/* 모바일 전용 메뉴 버튼 — PC에서는 사이드바가 항상 보이므로 CSS로 숨긴다 */}
+          <button
+            className="nav-toggle"
+            onClick={()=>setMobileNavOpen(v=>!v)}
+            aria-label={mobileNavOpen ? '메뉴 닫기' : '메뉴 열기'}
+            aria-expanded={mobileNavOpen}
+          >
+            <span aria-hidden="true">{mobileNavOpen ? '✕' : '☰'}</span>
+          </button>
           {(()=>{
             const title =
               page==='dashboard'?'대시보드':page==='elders'?`${T.elder} 관리`:page==='schedule'?'전화 발신 관리'
