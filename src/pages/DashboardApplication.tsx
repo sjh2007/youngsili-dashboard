@@ -1319,6 +1319,13 @@ export default function App() {
   // 2026-09-09: 모바일에서 사이드바를 서랍(off-canvas)으로 열고 닫는 상태. 좁은 화면에서만
   // 의미가 있고(PC는 CSS에서 항상 펼친 상태), 메뉴를 고르면 자동으로 닫아야 본문이 보인다.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // 서랍을 열 때 메뉴 스크롤을 맨 위로 되돌린다 — 안 그러면 이전에 보던 위치(실측 56px)에
+  // 머물러 맨 위의 "오늘 전화 시작" 버튼이 잘린 채로 열린다.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const nav = document.querySelector('.nav');
+    if (nav) nav.scrollTop = 0;
+  }, [mobileNavOpen]);
   const goPage  = p => { setPage(p); setSelected(null); setCallResult(null); setMobileNavOpen(false); };
   // 헤더 새로고침 — 현재 페이지에 필요한 데이터만 다시 불러오기
   const refreshPage = () => {
