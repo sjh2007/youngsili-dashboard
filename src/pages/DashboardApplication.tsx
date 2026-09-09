@@ -34,6 +34,7 @@ import { CAREGIVERS, RISK_CONFIG } from '../constants/app';
 import { useCountdown } from '../hooks/useCountdown';
 import { AlertCircle, AlertTriangle, CheckCircle2, X, Search, Copy, LogOut, ChevronDown,
          Building2, Wallet, CreditCard, Crown } from 'lucide-react';
+import { BusinessInfo } from '../components/BusinessInfo';
 import {
   EMPTY_FORM, normalizeRegion, REFUND_REASON_PRESETS,
   UPGRADE_PLANS, juminToBirth, CARE_GROUPS,
@@ -3302,6 +3303,10 @@ export default function App() {
           )}
 
           </PageErrorBoundary>
+
+          {/* 사업자 정보 — 로그인 화면(초기화면)에 이어 본문 맨 아래에도 둔다. 사이드바
+              푸터는 기관명·계정·기관코드·크레딧으로 이미 차 있어 276px 폭에 넣으면 답답하다. */}
+          <BusinessInfo />
         </div>
       </main>
     </div>

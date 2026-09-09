@@ -7,6 +7,7 @@ import {
   sendEmailVerification, sendPasswordResetEmail,
   setPersistence, browserLocalPersistence, browserSessionPersistence,
 } from 'firebase/auth';
+import { BusinessInfo } from '../BusinessInfo';
 
 const NAVY = '#003675', BLUE = '#246beb', GREEN = '#1d7b38';
 const PW_RE = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,20}$/;
@@ -282,7 +283,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
             </div>
           </div>
         )}
-        <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#94a3b8' }}>© 2026 KRAFT · AI 영실이</div>
+        <BusinessInfo />
       </div></div>
     );
   }
@@ -446,7 +447,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
           </div>
         </div>
       )}
-      <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#94a3b8' }}>© 2026 KRAFT · AI 영실이</div>
+      <BusinessInfo />
     </div></div>
   );
 }
