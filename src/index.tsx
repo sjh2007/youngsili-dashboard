@@ -38,8 +38,28 @@ async function boot() {
       window.location.reload();
       return;
     }
+    // 2026-09-09 보안점검: 오류 메시지를 innerHTML로 이어붙이고 있었다. 지금 당장 악용
+    // 경로가 보이진 않지만, 메시지에 서버 응답 조각이 섞여 들어오면 그대로 스크립트가
+    // 실행되는 패턴이다. 껍데기는 DOM으로 만들고 메시지는 textContent로만 넣는다.
     const el = document.getElementById('root');
-    if (el) el.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:sans-serif;color:#475569;text-align:center;padding:24px"><div><div style="font-size:18px;font-weight:700;margin-bottom:8px">화면을 불러오지 못했습니다</div><div style="font-size:14px">새로고침(Ctrl+Shift+R) 후에도 같으면 다른 브라우저로 시도해 주세요.<br/>오류: ' + ((e && e.message) || e) + '</div></div></div>';
+    if (el) {
+      el.textContent = '';
+      const box = document.createElement('div');
+      box.setAttribute('style', 'min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:sans-serif;color:#475569;text-align:center;padding:24px');
+      const inner = document.createElement('div');
+      const title = document.createElement('div');
+      title.setAttribute('style', 'font-size:18px;font-weight:700;margin-bottom:8px');
+      title.textContent = '화면을 불러오지 못했습니다';
+      const desc = document.createElement('div');
+      desc.setAttribute('style', 'font-size:14px');
+      desc.textContent = '새로고침(Ctrl+Shift+R) 후에도 같으면 다른 브라우저로 시도해 주세요.';
+      const detail = document.createElement('div');
+      detail.setAttribute('style', 'font-size:14px');
+      detail.textContent = '오류: ' + String((e && e.message) || e);
+      inner.append(title, desc, detail);
+      box.append(inner);
+      el.append(box);
+    }
   }
 }
 boot();

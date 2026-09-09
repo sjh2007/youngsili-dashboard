@@ -374,11 +374,13 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
           <input style={input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@example.com" autoComplete="username" />
           <div style={label}>비밀번호</div>
           <PwInput value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} placeholder="비밀번호 입력" autoComplete="current-password" />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', cursor: 'pointer' }}>
+          {/* 2026-09-09: 좁은 화면(375px)에서 "로그인 상태 유지"가 '로그인 상태'/'유지'로 쪼개지고
+              오른쪽 링크와 붙어 답답했다. 줄바꿈을 허용하고 각 덩어리는 통째로 유지한다. */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <input type="checkbox" checked={keep} onChange={e => setKeep(e.target.checked)} /> 로그인 상태 유지
             </label>
-            <span style={{ fontSize: 13 }}>
+            <span style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
               <button style={linkBtn} onClick={() => { setErr(''); setMsg(''); setMode('findId'); }}>아이디 찾기</button>
               <span style={{ color: '#cbd5e1', margin: '0 6px' }}>·</span>
               <button style={linkBtn} onClick={() => { setErr(''); setMsg(''); setFpEmail(email); setMode('findPw'); }}>비밀번호 찾기</button>
