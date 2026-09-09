@@ -4,6 +4,19 @@ import { auth, authEnabled } from '../firebase';
 export const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'https://api.krafte.net';
 
 /**
+ * dev 사이트인지 — 운영에 노출되면 안 되는 기능(실결제 테스트 버튼 등)을 가리는 데 쓴다.
+ *
+ * 빌드 시점 env(REACT_APP_*)로 판별하지 않는 이유: dev/prod가 별도 빌드라 env를 빠뜨린 채
+ * 빌드하면 그대로 운영에 섞여 들어간다. 호스트명은 배포 위치가 바꿀 수 없으므로 더 안전하고,
+ * 아래처럼 "dev로 확인될 때만 true"로 두면 실수했을 때 기능이 켜지는 게 아니라 꺼진다.
+ */
+export function isDevSite(): boolean {
+  if (typeof window === 'undefined') return false;
+  const h = window.location.hostname;
+  return h === 'localhost' || h === '127.0.0.1' || h.startsWith('dev.');
+}
+
+/**
  * Firebase 세션 복원을 기다린다 (앱 수명당 한 번).
  *
  * 401 이 쏟아지던 진짜 원인: 새로고침 직후 화면이 곧바로 데이터를 조회하는데, 그 시점의
