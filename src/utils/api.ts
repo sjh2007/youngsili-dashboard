@@ -17,6 +17,21 @@ export function isDevSite(): boolean {
 }
 
 /**
+ * 결제 파이프라인 점검용 화면을 운영에서도 쓸 수 있게 여는 스위치 — `?testpay=1`.
+ *
+ * 2026-09-10: 이니시스가 결제창 호출 도메인을 운영 주소로만 허용해(dev에서 prepare 400)
+ * dev에서는 실결제 검증이 불가능했다. 그렇다고 1,000원 테스트 버튼을 운영 화면에 상시
+ * 노출하면 기관 담당자가 실수로 눌러 실제 결제가 되는데, 그게 애초에 뺀 이유다.
+ * 주소를 아는 사람만 쓰게 두면 둘 다 만족한다 — 화면에는 안 보이고, 점검할 땐 열린다.
+ * (로그인·기관 소속이 필요하고 최악의 경우도 본인 기관 1,000원 충전이라 위험이 제한적이다)
+ */
+export function isPayTestEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (isDevSite()) return true;
+  return new URLSearchParams(window.location.search).get('testpay') === '1';
+}
+
+/**
  * Firebase 세션 복원을 기다린다 (앱 수명당 한 번).
  *
  * 401 이 쏟아지던 진짜 원인: 새로고침 직후 화면이 곧바로 데이터를 조회하는데, 그 시점의

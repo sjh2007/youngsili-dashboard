@@ -2,7 +2,7 @@
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-08).
 import { X, CheckCircle2 } from 'lucide-react';
 import { CHARGE_TIERS, UPGRADE_PLANS, REFUND_REASON_PRESETS } from '../dashboardConstants';
-import { isDevSite } from '../../utils/api';
+import { isPayTestEnabled } from '../../utils/api';
 
 export default function UpgradeModal(props: any) {
   const {
@@ -65,13 +65,16 @@ export default function UpgradeModal(props: any) {
               테스트 버튼 — 서버가 amount===1000만 예외로 허용한다(일반 충전 최소단위는 그대로
               유지). 처음엔 1원으로 뒀는데 PG사 최소 결제금액 미만이라 결제가 안 돼 1,000원으로 조정.
               2026-09-09: 운영 대시보드에는 노출하지 않는다 — 기관 담당자가 실수로 누르면
-              실제로 1,000원이 결제된다. dev 사이트에서만 보이게 한다. */}
-          {isDevSite() && (
+              실제로 1,000원이 결제된다.
+              2026-09-10: 다만 이니시스가 결제창 호출 도메인을 운영 주소로만 허용해 dev에서는
+              실결제 검증 자체가 불가능했다(prepare 400). 그래서 dev이거나 `?testpay=1`이
+              붙었을 때만 보이게 한다 — 평소 화면에는 그대로 안 보인다. */}
+          {isPayTestEnabled() && (
             <button
               className="btn-secondary"
               style={{marginTop:8,fontSize:12,color:'#94a3b8'}}
               onClick={()=>setPendingTopup({amount:1000})}
-            >1,000원 테스트 결제 (dev 전용)</button>
+            >1,000원 테스트 결제 (점검용)</button>
           )}
           <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정확한 채널 배정·이용 패턴별 견적은 담당 매니저에게 문의해 주세요.</p>
         </>) : upgradeTab==='flat' ? (<>
