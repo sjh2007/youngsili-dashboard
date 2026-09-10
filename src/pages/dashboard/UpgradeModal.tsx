@@ -60,6 +60,18 @@ export default function UpgradeModal(props: any) {
             >1,000원 테스트 결제 (점검용)</button>
           )}
           <p style={{color:'#94a3b8',fontSize:12,margin:'18px 0 0'}}>정확한 채널 배정·이용 패턴별 견적은 담당 매니저에게 문의해 주세요.</p>
+          {/* 2026-09-10: KG이니시스 포인트충전 입점조건 — 충전 페이지에 소진기한과 환불규정을
+              명시해야 심사를 통과한다. 안내만 띄우고 실제 만료 처리가 없으면 고지와 동작이
+              어긋나므로, 서버의 크레딧 만료 처리와 반드시 같이 가야 한다. */}
+          <div style={{marginTop:14,padding:'14px 16px',borderRadius:12,background:'#f8fafc',
+            border:'1px solid #e2e8f0',fontSize:12,color:'#64748b',lineHeight:1.75}}>
+            <b style={{display:'block',color:'#0f172a',fontSize:12.5,marginBottom:6}}>충전 전 확인해 주세요</b>
+            · 충전한 크레딧의 사용 기한은 <b style={{color:'#0f172a'}}>결제일로부터 1년</b>이며,
+            기한 내 사용하지 않은 크레딧은 소멸됩니다.<br />
+            · 환불은 <b style={{color:'#0f172a'}}>결제하신 수단(신용카드)으로만</b> 가능하며,
+            현금으로 환급해 드리지 않습니다.<br />
+            · 결제는 신용·체크카드 일시불만 지원합니다.
+          </div>
         </>) : upgradeTab==='flat' ? (<>
           <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}>
             예산을 매월 고정해야 하는 기관을 위한 인·월 정액 요금제입니다(앱 설치 방식 기준, VAT 별도).

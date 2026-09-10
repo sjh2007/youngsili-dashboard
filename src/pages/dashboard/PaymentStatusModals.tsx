@@ -1,7 +1,7 @@
 // DashboardApplication.tsx의 paymentSuccess·virtualAccountInfo(결제 접수완료/무통장입금 안내) 블록을
 // 그대로 옮긴 것 — 로직 변경 없음, 부모가 갖고 있던 state를 전부 props로 받는다(6000줄 분리 작업, 2026-09-08).
-import { CheckCircle2, Database, X } from 'lucide-react';
-import { BANK_LABELS, REFUND_REASON_PRESETS, PAY_METHOD_OPTIONS } from '../dashboardConstants';
+import { CheckCircle2, CreditCard, Database, X } from 'lucide-react';
+import { BANK_LABELS, REFUND_REASON_PRESETS } from '../dashboardConstants';
 
 export function PaymentSuccessModal(props: any) {
   const { paymentSuccess, setPaymentSuccess } = props;
@@ -105,7 +105,7 @@ export function RefundRequestModal(props: any) {
 }
 
 export function TopupMethodModal(props: any) {
-  const { pendingTopup, setPendingTopup, topupBusy, topupPayMethod, setTopupPayMethod, startTopup } = props;
+  const { pendingTopup, setPendingTopup, topupBusy, startTopup } = props;
   return (
     <div className="modal-overlay" onClick={()=>!topupBusy && setPendingTopup(null)}>
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420,width:'92%'}}>
@@ -116,20 +116,15 @@ export function TopupMethodModal(props: any) {
         <div style={{fontSize:14,color:'#64748b',marginBottom:18}}>
           <b style={{color:'#0f172a',fontSize:20,fontWeight:900}}>{pendingTopup.amount.toLocaleString()}원</b> 충전
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:22}}>
-          {PAY_METHOD_OPTIONS.map(m=>{
-            const Icon = m.icon;
-            const selected = topupPayMethod===m.key;
-            return (
-              <button key={m.key} onClick={()=>setTopupPayMethod(m.key)}
-                style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,padding:'14px',borderRadius:12,cursor:'pointer',textAlign:'left',
-                  border:'2px solid '+(selected?'#246BEB':'#e2e8f0'),background:selected?'#eff6ff':'#fff'}}>
-                <Icon size={22} color={selected?'#246BEB':'#64748b'}/>
-                <div style={{fontSize:14,fontWeight:800,color:selected?'#246BEB':'#0f172a'}}>{m.label}</div>
-                <div style={{fontSize:12,color:'#94a3b8'}}>{m.desc}</div>
-              </button>
-            );
-          })}
+        {/* 2026-09-10: 이니시스 입점조건으로 카드 단건만 남아 선택할 것이 없어졌다.
+            버튼 하나짜리 선택지를 두는 대신 무엇으로 결제되는지 알려준다. */}
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderRadius:12,
+          border:'1px solid #e2e8f0',background:'#f8fafc',marginBottom:18}}>
+          <CreditCard size={20} color="#246BEB"/>
+          <div>
+            <div style={{fontSize:14,fontWeight:800,color:'#0f172a'}}>신용·체크카드</div>
+            <div style={{fontSize:12,color:'#94a3b8'}}>일시불로 결제됩니다</div>
+          </div>
         </div>
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
           <button className="btn-primary" style={{width:'100%'}} disabled={topupBusy} onClick={async ()=>{ const amt = pendingTopup.amount; await startTopup(amt); setPendingTopup(null); }}>

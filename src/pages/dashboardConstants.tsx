@@ -3,7 +3,7 @@
 import {
   LayoutGrid, Activity, Users, ShieldCheck, Phone, CalendarDays, MessageSquare,
   PencilLine, FileText, BarChart3, Database, Building2, BookOpen, RotateCw,
-  CreditCard, Landmark, Banknote, Terminal,
+  CreditCard, Terminal,
 } from 'lucide-react';
 import { PAGES } from '../constants/app';
 
@@ -27,10 +27,10 @@ export const HISTORY_PAGE_SIZE = 25;
 
 // 포트원 Bank 코드 → 한글 은행명(주요 시중은행만, 나머지는 코드 그대로 표시)
 export const REFUND_REASON_PRESETS = ['단순 변심', '중복 결제', '서비스 이용 안 함', '결제 오류(금액·수단 착오)', '요금제 변경으로 인한 환불', '직접 입력'];
+// 2026-09-10: KG이니시스 포인트충전 입점조건 — 계좌이체·가상계좌는 현금성 결제라,
+// 간편결제는 특약 결제수단이라 각각 입점 불가다. 신용카드 단건 결제만 남는다.
 export const PAY_METHOD_OPTIONS = [
-  { key:'CARD', label:'카드', desc:'신용·체크카드', icon: CreditCard },
-  { key:'TRANSFER', label:'실시간 계좌이체', desc:'즉시 출금·완료', icon: Landmark },
-  { key:'VIRTUAL_ACCOUNT', label:'무통장입금', desc:'계좌 발급 후 입금', icon: Banknote },
+  { key:'CARD', label:'신용·체크카드', desc:'일시불 결제', icon: CreditCard },
 ];
 export const BANK_LABELS: Record<string,string> = {
   KOOKMIN:'국민은행', SHINHAN:'신한은행', WOORI:'우리은행', HANA:'하나은행', IBK:'기업은행',

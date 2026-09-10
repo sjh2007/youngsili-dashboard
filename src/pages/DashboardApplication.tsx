@@ -163,7 +163,6 @@ export default function App() {
   const [subscribeBusy, setSubscribeBusy] = useState(null); // 결제 요청 처리 중인 planKey(중복 클릭 방지)
   const [subStatus, setSubStatus] = useState(null); // GET /billing/subscription — {plan, autoRenew, nextChargeAt, lastChargeError, elderCount, monthlyAmount}
   const [subCancelBusy, setSubCancelBusy] = useState(false);
-  const [topupPayMethod, setTopupPayMethod] = useState('CARD'); // 'CARD'(이니시스) | 'TRANSFER'(계좌이체) | 'VIRTUAL_ACCOUNT'(무통장입금) — 카카오페이는 제외(2026-09-01)
   const [pendingTopup, setPendingTopup] = useState(null); // {amount} — "신청" 클릭 시 결제수단 선택 모달을 띄우기 위한 대기 상태
   const [showPlanModal, setShowPlanModal] = useState(false); // 사이드바 크레딧 잔액 클릭 → 현재 플랜·잔액·결제수단 요약 모달
   const [paymentHistory, setPaymentHistory] = useState([]);
@@ -479,7 +478,7 @@ export default function App() {
     if (topupBusy) return;
     setTopupBusy(true);
     try {
-      const r = await authFetch(`${SERVER_URL}/billing/topup`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount, payMethod: topupPayMethod }) });
+      const r = await authFetch(`${SERVER_URL}/billing/topup`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount, payMethod: 'CARD' }) });
       const d = await r.json().catch(()=>({}));
       if (r.status === 501) {
         setShowUpgradeModal(false);
@@ -2800,7 +2799,7 @@ export default function App() {
       {pendingTopup !== null && (
         <TopupMethodModal
           pendingTopup={pendingTopup} setPendingTopup={setPendingTopup} topupBusy={topupBusy}
-          topupPayMethod={topupPayMethod} setTopupPayMethod={setTopupPayMethod} startTopup={startTopup}
+          startTopup={startTopup}
         />
       )}
       {/* 다른 기관 어르신 → 이관 등록 확인 (중앙) */}
