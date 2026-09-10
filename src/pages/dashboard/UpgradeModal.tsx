@@ -7,7 +7,7 @@ import { isPayTestEnabled } from '../../utils/api';
 export default function UpgradeModal(props: any) {
   const {
     setShowUpgradeModal, upgradeTab, setUpgradeTab, fetchPaymentHistory, setPendingTopup,
-    customAmount, setCustomAmount, subStatus, subCancelBusy, cancelSubscription, subscribeBusy,
+    subStatus, subCancelBusy, cancelSubscription, subscribeBusy,
     billing, startTrial, startSubscription, paymentHistoryLoading, paymentHistory, setRefundTarget,
     setRefundReasonPreset, setRefundReasonCustom,
   } = props;
@@ -43,23 +43,6 @@ export default function UpgradeModal(props: any) {
                 >신청</button>
               </div>
             ))}
-          </div>
-          <div style={{display:'flex',gap:8,alignItems:'center',marginTop:16}}>
-            <input
-              className="form-input"
-              style={{marginBottom:0,flex:1}}
-              type="number"
-              min={10000}
-              step={1000}
-              placeholder="직접 입력(원, 10,000원 이상)"
-              value={customAmount}
-              onChange={e=>setCustomAmount(e.target.value)}
-            />
-            <button
-              className="btn-secondary"
-              disabled={!customAmount || Number(customAmount) < 10000}
-              onClick={()=>setPendingTopup({amount:Number(customAmount)})}
-            >직접 충전</button>
           </div>
           {/* 실결제 파이프라인(포트원 연동·웹훅) 자체가 살아있는지 실제 결제해 확인하는
               테스트 버튼 — 서버가 amount===1000만 예외로 허용한다(일반 충전 최소단위는 그대로

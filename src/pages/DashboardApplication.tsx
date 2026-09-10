@@ -163,7 +163,6 @@ export default function App() {
   const [subscribeBusy, setSubscribeBusy] = useState(null); // 결제 요청 처리 중인 planKey(중복 클릭 방지)
   const [subStatus, setSubStatus] = useState(null); // GET /billing/subscription — {plan, autoRenew, nextChargeAt, lastChargeError, elderCount, monthlyAmount}
   const [subCancelBusy, setSubCancelBusy] = useState(false);
-  const [customAmount, setCustomAmount] = useState('');
   const [topupPayMethod, setTopupPayMethod] = useState('CARD'); // 'CARD'(이니시스) | 'TRANSFER'(계좌이체) | 'VIRTUAL_ACCOUNT'(무통장입금) — 카카오페이는 제외(2026-09-01)
   const [pendingTopup, setPendingTopup] = useState(null); // {amount} — "신청" 클릭 시 결제수단 선택 모달을 띄우기 위한 대기 상태
   const [showPlanModal, setShowPlanModal] = useState(false); // 사이드바 크레딧 잔액 클릭 → 현재 플랜·잔액·결제수단 요약 모달
@@ -2779,7 +2778,7 @@ export default function App() {
         <UpgradeModal
           setShowUpgradeModal={setShowUpgradeModal} upgradeTab={upgradeTab} setUpgradeTab={setUpgradeTab}
           fetchPaymentHistory={fetchPaymentHistory} setPendingTopup={setPendingTopup}
-          customAmount={customAmount} setCustomAmount={setCustomAmount} subStatus={subStatus}
+          subStatus={subStatus}
           subCancelBusy={subCancelBusy} cancelSubscription={cancelSubscription} subscribeBusy={subscribeBusy}
           billing={billing} startTrial={startTrial} startSubscription={startSubscription}
           paymentHistoryLoading={paymentHistoryLoading} paymentHistory={paymentHistory}
