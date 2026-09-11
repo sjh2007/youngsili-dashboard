@@ -7,6 +7,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebas
 import {
   Activity, BarChart3, Phone, CreditCard, Receipt, RotateCcw, Building2,
   Users as UsersIcon, HeartHandshake, Megaphone, FileClock, FlaskConical, LogOut, UserCog, BookOpen,
+  CalendarDays, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -32,6 +33,96 @@ function needsPaymentAttention(payment: any): boolean {
   if (payment?.status !== 'failed' || !payment?.createdAt) return false;
   const created = new Date(payment.createdAt).getTime();
   return Number.isFinite(created) && Date.now() - created <= 24 * 60 * 60 * 1000;
+}
+
+function localDateKey(value: string | Date): string | null {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function PaymentCalendar({ month, payments, subscriptions, loading, onMonthChange, onRefresh }: any) {
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const first = new Date(year, monthIndex, 1);
+  const mondayOffset = (first.getDay() + 6) % 7;
+  const gridStart = new Date(year, monthIndex, 1 - mondayOffset);
+  const todayKey = localDateKey(new Date());
+  const orgNames = new Map(subscriptions.map((s:any) => [s.orgId, s.orgName || s.orgId]));
+  const events = new Map<string, any[]>();
+  const addEvent = (key:string|null, event:any) => {
+    if (!key) return;
+    events.set(key, [...(events.get(key) || []), event]);
+  };
+
+  payments.forEach((p:any) => {
+    const eventAt = p.status === 'paid' && p.paidAt ? p.paidAt : p.createdAt;
+    addEvent(localDateKey(eventAt), {
+      id: `payment-${p.id}`,
+      tone: p.status === 'paid' ? 'paid' : needsPaymentAttention(p) || p.status === 'failed' ? 'error' : 'pending',
+      title: `${orgNames.get(p.orgId) || p.orgId || '기관 미확인'} · ${Number(p.amount || 0).toLocaleString()}원`,
+      detail: p.status === 'paid' ? (p.type === 'subscription' ? `정기결제 완료${p.renewal ? ' · 자동갱신' : ''}` : '크레딧 충전 완료') : `결제 ${p.status || '상태 미확인'}`,
+    });
+  });
+  subscriptions.filter((s:any) => s.autoRenew && s.nextChargeAt).forEach((s:any) => {
+    addEvent(localDateKey(s.nextChargeAt), {
+      id: `due-${s.orgId}`,
+      tone: s.lastChargeError ? 'error' : 'due',
+      title: `${s.orgName || s.orgId} · ${s.monthlyAmount != null ? `${Number(s.monthlyAmount).toLocaleString()}원` : '금액 확인 필요'}`,
+      detail: s.lastChargeError ? '정기결제 오류 확인 필요' : '정기결제 예정',
+    });
+  });
+
+  const days = Array.from({length: 42}, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+    return date;
+  });
+  const moveMonth = (delta:number) => onMonthChange(new Date(year, monthIndex + delta, 1));
+
+  return (
+    <section className="section fade-in">
+      <div className="payment-calendar-toolbar">
+        <div>
+          <div className="section-title">결제 일정</div>
+          <div className="payment-calendar-caption">완료된 결제와 자동결제 예정일이 운영 데이터에서 자동으로 표시됩니다.</div>
+        </div>
+        <div className="payment-calendar-actions">
+          <button type="button" className="btn-secondary payment-calendar-icon" aria-label="이전 달" onClick={()=>moveMonth(-1)}><ChevronLeft size={17}/></button>
+          <button type="button" className="btn-secondary" onClick={()=>onMonthChange(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>오늘</button>
+          <button type="button" className="btn-secondary payment-calendar-icon" aria-label="다음 달" onClick={()=>moveMonth(1)}><ChevronRight size={17}/></button>
+          <button type="button" className={`btn-download ${loading?'btn-calling':''}`} onClick={onRefresh} disabled={loading}>{loading?'불러오는 중...':'새로고침'}</button>
+        </div>
+      </div>
+      <div className="payment-calendar-month" aria-live="polite">{year}년 {monthIndex + 1}월</div>
+      <div className="payment-calendar-legend" aria-label="일정 종류">
+        <span><i className="is-paid" aria-hidden="true"/>결제 완료</span><span><i className="is-due" aria-hidden="true"/>정기결제 예정</span><span><i className="is-error" aria-hidden="true"/>확인 필요</span>
+      </div>
+      <div className="payment-calendar-scroll" role="region" aria-label={`${year}년 ${monthIndex + 1}월 결제 달력`} tabIndex={0}>
+        <div className="payment-calendar-grid payment-calendar-weekdays">
+          {['월','화','수','목','금','토','일'].map(day=><div key={day}>{day}</div>)}
+        </div>
+        <div className="payment-calendar-grid payment-calendar-days">
+          {days.map(date => {
+            const key = localDateKey(date)!;
+            const dayEvents = events.get(key) || [];
+            return <div key={key} aria-label={`${date.getFullYear()}년 ${date.getMonth()+1}월 ${date.getDate()}일, 일정 ${dayEvents.length}건`} className={`payment-calendar-day ${date.getMonth()!==monthIndex?'is-outside':''} ${key===todayKey?'is-today':''}`}>
+              <div className="payment-calendar-date">{date.getDate()}</div>
+              <div className="payment-calendar-events">
+                {dayEvents.map(event=><div key={event.id} className={`payment-calendar-event is-${event.tone}`} title={`${event.title} · ${event.detail}`}>
+                  <strong>{event.title}</strong><span>{event.detail}</span>
+                </div>)}
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>
+      {!loading && payments.length === 0 && subscriptions.filter((s:any)=>s.autoRenew).length === 0 && <div className="payment-calendar-empty">표시할 결제 또는 정기결제 예정 일정이 없습니다.</div>}
+    </section>
+  );
 }
 
 async function requireJson(response: Response, fallback: string): Promise<any> {
@@ -93,6 +184,42 @@ function GcpStyle() {
         .gcp-console .gcp-nav-item.is-active svg { color: #1a73e8; }
         .gcp-console .gcp-topbar { background: #fff; border-bottom: 1px solid #dadce0; }
         .gcp-console .toast-viewport .toast { font-family: 'Roboto', sans-serif; }
+        .gcp-console .payment-calendar-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+        .gcp-console .payment-calendar-caption { margin-top:5px; color:#5f6368; font-size:12.5px; }
+        .gcp-console .payment-calendar-actions { display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
+        .gcp-console .payment-calendar-actions .payment-calendar-icon { display:inline-flex; align-items:center; justify-content:center; min-width:40px; min-height:40px; padding:7px 9px; }
+        .gcp-console .payment-calendar-month { margin-top:22px; font-size:20px; font-weight:500; color:#202124; }
+        .gcp-console .payment-calendar-legend { display:flex; gap:18px; flex-wrap:wrap; margin:10px 0 14px; color:#5f6368; font-size:12px; }
+        .gcp-console .payment-calendar-legend span { display:inline-flex; align-items:center; gap:6px; }
+        .gcp-console .payment-calendar-legend i { width:8px; height:8px; border-radius:50%; background:#9aa0a6; }
+        .gcp-console .payment-calendar-legend i.is-paid { background:#1e8e3e; }
+        .gcp-console .payment-calendar-legend i.is-due { background:#1a73e8; }
+        .gcp-console .payment-calendar-legend i.is-error { background:#c5221f; }
+        .gcp-console .payment-calendar-scroll { overflow-x:auto; border:1px solid #dadce0; border-radius:8px; }
+        .gcp-console .payment-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(132px,1fr)); min-width:924px; }
+        .gcp-console .payment-calendar-weekdays { background:#f8f9fa; color:#5f6368; font-size:12px; font-weight:500; text-align:center; border-bottom:1px solid #dadce0; }
+        .gcp-console .payment-calendar-weekdays > div { padding:9px 6px; border-right:1px solid #e8eaed; }
+        .gcp-console .payment-calendar-weekdays > div:last-child { border-right:0; }
+        .gcp-console .payment-calendar-day { min-height:118px; padding:8px; box-sizing:border-box; border-right:1px solid #e8eaed; border-bottom:1px solid #e8eaed; background:#fff; }
+        .gcp-console .payment-calendar-day:nth-child(7n) { border-right:0; }
+        .gcp-console .payment-calendar-day:nth-last-child(-n+7) { border-bottom:0; }
+        .gcp-console .payment-calendar-day.is-outside { background:#fafafa; color:#9aa0a6; }
+        .gcp-console .payment-calendar-date { width:25px; height:25px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:12px; font-weight:500; }
+        .gcp-console .payment-calendar-day.is-today .payment-calendar-date { background:#1a73e8; color:#fff; }
+        .gcp-console .payment-calendar-events { display:grid; gap:5px; margin-top:5px; }
+        .gcp-console .payment-calendar-event { min-width:0; padding:6px 7px; border-radius:5px; border-left:3px solid #9aa0a6; background:#f1f3f4; color:#3c4043; }
+        .gcp-console .payment-calendar-event strong, .gcp-console .payment-calendar-event span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+        .gcp-console .payment-calendar-event strong { font-size:11.5px; font-weight:500; }
+        .gcp-console .payment-calendar-event span { margin-top:2px; font-size:10.5px; color:#5f6368; }
+        .gcp-console .payment-calendar-event.is-paid { border-left-color:#1e8e3e; background:#e6f4ea; }
+        .gcp-console .payment-calendar-event.is-due { border-left-color:#1a73e8; background:#e8f0fe; }
+        .gcp-console .payment-calendar-event.is-error { border-left-color:#c5221f; background:#fce8e6; }
+        .gcp-console .payment-calendar-event.is-pending { border-left-color:#f9ab00; background:#fef7e0; }
+        .gcp-console .payment-calendar-empty { margin-top:12px; color:#5f6368; font-size:13px; }
+        @media (max-width: 760px) {
+          .gcp-console .payment-calendar-toolbar { align-items:stretch; flex-direction:column; }
+          .gcp-console .payment-calendar-actions { justify-content:flex-start; }
+        }
       `}</style>
     </>
   );
@@ -234,6 +361,7 @@ const NAV = [
   { id: 'stats', label: '통계', icon: BarChart3 },
   { id: 'calls', label: '통화 이력', icon: Phone },
   { id: 'subscriptions', label: '정기결제 현황', icon: CreditCard },
+  { id: 'payment-calendar', label: '결제 달력', icon: CalendarDays },
   { id: 'payments', label: '결제 내역', icon: Receipt },
   { id: 'refunds', label: '환불', icon: RotateCcw },
   { id: 'orgs', label: '기관 관리', icon: Building2 },
@@ -284,6 +412,10 @@ export default function ConsoleApp() {
   const [subs, setSubs] = useState<any[]>([]);
   const [subsPage, setSubsPage] = useState(1);
   const [subsLoading, setSubsLoading] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [calendarPayments, setCalendarPayments] = useState<any[]>([]);
+  const [calendarSubs, setCalendarSubs] = useState<any[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
   const [orgsPage, setOrgsPage] = useState(1);
   const [orgs, setOrgs] = useState<any[]>([]);
   const [orgBusy, setOrgBusy] = useState('');
@@ -424,6 +556,23 @@ export default function ConsoleApp() {
       setSubsPage(1);
     } catch (e:any) { notify(e?.message || '정기결제 현황 조회 실패'); }
     finally { setSubsLoading(false); }
+  };
+
+  const fetchPaymentCalendar = async () => {
+    setCalendarLoading(true);
+    try {
+      const [paymentsResponse, subscriptionsResponse] = await Promise.all([
+        authFetch(`${SERVER_URL}/console/payments?limit=500`),
+        authFetch(`${SERVER_URL}/console/subscriptions`),
+      ]);
+      const [paymentData, subscriptionData] = await Promise.all([
+        requireJson(paymentsResponse, '결제 일정 조회 실패'),
+        requireJson(subscriptionsResponse, '정기결제 일정 조회 실패'),
+      ]);
+      setCalendarPayments(Array.isArray(paymentData?.payments) ? paymentData.payments : []);
+      setCalendarSubs(Array.isArray(subscriptionData?.orgs) ? subscriptionData.orgs : []);
+    } catch (e:any) { notify(e?.message || '결제 달력 조회 실패'); }
+    finally { setCalendarLoading(false); }
   };
 
   const fetchOrgs = async () => {
@@ -835,6 +984,7 @@ export default function ConsoleApp() {
     if (page === 'health') fetchHealth();
     if (page === 'calls') fetchHistory();
     if (page === 'subscriptions') fetchSubs();
+    if (page === 'payment-calendar') fetchPaymentCalendar();
     if (page === 'orgs') fetchOrgs();
     if (page === 'test' && orgs.length === 0) fetchOrgs();
     if (page === 'audit') fetchAuditLogs();
@@ -1094,6 +1244,17 @@ export default function ConsoleApp() {
               </div>
             )}
           </section>
+        )}
+
+        {page === 'payment-calendar' && (
+          <PaymentCalendar
+            month={calendarMonth}
+            payments={calendarPayments}
+            subscriptions={calendarSubs}
+            loading={calendarLoading}
+            onMonthChange={setCalendarMonth}
+            onRefresh={fetchPaymentCalendar}
+          />
         )}
 
         {page === 'payments' && (
