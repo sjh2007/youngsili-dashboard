@@ -46,6 +46,10 @@ export function BusinessInfo() {
         <a href="/privacy.html" target="_blank" rel="noreferrer" style={{ color: '#94a3b8' }}>
           개인정보처리방침
         </a>
+        <span style={{ margin: '0 6px', color: '#cbd5e1' }}>·</span>
+        <a href="/refund-policy.html" target="_blank" rel="noreferrer" style={{ color: '#94a3b8' }}>
+          결제·환불규정
+        </a>
       </div>
       {/* 2026-09-10: KG이니시스 포인트충전 입점조건 — 민원책임 고지를 사이트 하단에 명시해야
           심사를 통과한다. 문구는 이니시스가 지정한 표현을 그대로 쓴다(임의로 다듬으면 재심사 사유). */}

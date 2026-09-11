@@ -117,6 +117,7 @@ export function TopupMethodModal(props: any) {
           <b style={{color:'#0f172a',fontSize:20,fontWeight:900}}>{pendingTopup.amount.toLocaleString()}원</b> 충전
         </div>
         <p style={{fontSize:13,color:'#475569'}}>이번 결제는 크레딧 충전 금액입니다. (월 기본요금 {({300000:21000,500000:35000,1000000:70000} as Record<number, number>)[pendingTopup.amount]?.toLocaleString()}원 별도 · 부가세 포함)</p>
+        <p style={{fontSize:12,color:'#64748b',lineHeight:1.6}}>계좌이체·가상계좌·간편결제·할부는 지원하지 않습니다. 환불은 충전할 때 사용한 원 결제 카드로만 처리됩니다.</p>
         {/* 2026-09-10: 이니시스 입점조건으로 카드 단건만 남아 선택할 것이 없어졌다.
             버튼 하나짜리 선택지를 두는 대신 무엇으로 결제되는지 알려준다. */}
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderRadius:12,
