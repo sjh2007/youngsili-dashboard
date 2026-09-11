@@ -543,7 +543,7 @@ export default function ConsoleApp() {
 
       const { requestIssueBillingKey } = await import('@portone/browser-sdk/v2');
       const response = await requestIssueBillingKey({
-        storeId: reg.storeId, channelKey: reg.channelKey, billingKeyMethod: 'CARD',
+        storeId: reg.storeId, channelKey: reg.channelKey, billingKeyMethod: reg.billingKeyMethod,
         issueId: reg.issueId, issueName: reg.issueName,
         customer: { email: authUser.email, fullName: '테스트', phoneNumber: '01000000000' },
       });

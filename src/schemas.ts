@@ -94,6 +94,7 @@ export const SubscribeRegisterResponseSchema = loose({
   issueId: z.string(),
   storeId: z.string(),
   channelKey: z.string(),
+  billingKeyMethod: z.enum(['CARD', 'EASY_PAY']),
   issueName: z.string(),
   amount: z.number(),
 });

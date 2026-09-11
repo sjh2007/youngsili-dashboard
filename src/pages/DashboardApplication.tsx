@@ -593,10 +593,9 @@ export default function App() {
       const response = await requestIssueBillingKey({
         storeId: reg.storeId,
         channelKey: reg.channelKey,
-        // 2026-09-01: 카카오페이(EASY_PAY) 채널은 빌링키 발급 자체를 지원하지 않았다(실측:
-        // PG_PROVIDER_ERROR "onetime order should have amount!") — 이제 이니시스 정기결제
-        // 채널로 바뀌었으므로(백엔드 channelKey도 함께 교체됨) CARD로 발급한다.
-        billingKeyMethod: 'CARD',
+        // 서버가 채널과 함께 허용된 발급 수단을 결정한다. 운영 이니시스는 CARD이고,
+        // 총괄관리자 전용 카카오페이 테스트는 별도 콘솔 경로에서 EASY_PAY를 사용한다.
+        billingKeyMethod: reg.billingKeyMethod,
         issueId: reg.issueId,
         issueName: reg.issueName,
         // 이니시스는 customer.phoneNumber가 필수(REQUIRED) — 없으면 issue-prepare 자체가 400.
