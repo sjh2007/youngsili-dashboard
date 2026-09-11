@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
 import HelpGuide, { LATEST_NOTICE } from '../components/help/HelpGuide';
@@ -1204,7 +1204,10 @@ export default function App() {
   // 어르신별 최종 경보 멘트(모든 변수 치환). 산불도 alertScript에 현재 단계 텍스트가 들어있음.
   // {{대피소}}: 담당자가 입력한 대피소명(한 칸)을 그대로 사용. 비우면 fillAlertVars가 '가까운 대피소'로.
   // 산불이면 {{지역}}=발생 위치(fireLoc, 비우면 어르신 지역).
-  const alertMsgFor = (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterName, activeAlert === 'wildfire' ? fireLoc.trim() : '', me?.orgName);
+  const alertMsgFor = useCallback(
+    (elder) => activeAlert === 'none' ? '' : fillAlertVars(alertScript, elder, shelterName, activeAlert === 'wildfire' ? fireLoc.trim() : '', me?.orgName),
+    [activeAlert, alertScript, shelterName, fireLoc, me?.orgName],
+  );
   const alertStageFor = () => activeAlert === 'wildfire' ? wildfireStage : '';
 
   const fetchWeather = async () => {
@@ -1405,7 +1408,7 @@ export default function App() {
       });
     }, 800);
     return () => { if (alertPrewarmTimerRef.current) clearTimeout(alertPrewarmTimerRef.current); };
-  }, [activeAlert, alertScript, shelterName, fireLoc, checked]);
+  }, [activeAlert, alertScript, shelterName, fireLoc, checked, elders, smartElders, alertMsgFor]);
 
   // ── 일괄 발신 (FCM 앱 푸시) ──
   /**

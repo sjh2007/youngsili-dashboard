@@ -14,8 +14,6 @@ import { SERVER_URL, authFetch, errMsg } from '../utils/api';
 // 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
 // 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
 
-const NAVY = '#1a73e8', BLUE = '#1a73e8';
-
 /** 역할 계층별 배지 색 — 권한 수준이 한눈에 구분되도록(worker < staff < admin < superadmin) */
 const ROLE_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
   worker:     { bg: '#f1f3f4', fg: '#5f6368', label: 'worker' },
