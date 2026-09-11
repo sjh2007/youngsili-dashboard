@@ -478,15 +478,15 @@ export default function ConsoleApp() {
     finally { setRefundLoading(false); }
   };
   const doRefund = async (payment: any) => {
-    const reason = window.prompt(`"${payment.orgId}" 기관의 ${payment.amount.toLocaleString()}원 결제를 환불합니다.\n환불 사유를 입력하세요.`, '');
+    const reason = window.prompt(`"${payment.orgId}" 기관의 결제를 환불합니다. 미사용 유상 크레딧만 원 결제 카드로 취소됩니다.\n환불 사유를 입력하세요.`, '');
     if (reason === null) return;
     if (!reason.trim()) { notify('환불 사유를 입력해야 합니다'); return; }
-    if (!window.confirm(`${payment.amount.toLocaleString()}원을 환불하고 해당 기관의 크레딧을 회수합니다. 계속할까요?`)) return;
+    if (!window.confirm(`결제 원장을 확인해 남은 유상 크레딧만 환불하고 회수합니다. 계속할까요?`)) return;
     setRefundBusy(payment.id);
     try {
       const r = await authFetch(`${SERVER_URL}/console/payments/${payment.id}/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason: reason.trim() }) });
       const d = await r.json().catch(()=>({}));
-      if (r.ok) { notify(`환불 완료: ${payment.amount.toLocaleString()}원`, 'success'); fetchRefundable(); }
+      if (r.ok) { notify(`환불 완료: ${Number(d.amount || 0).toLocaleString()}원`, 'success'); fetchRefundable(); }
       else notify(errMsg(d, '환불 실패'));
     } catch { notify('네트워크 오류 — 환불 실패'); }
     finally { setRefundBusy(''); }
@@ -1092,9 +1092,9 @@ export default function ConsoleApp() {
                       <td style={{padding:'10px',fontWeight:700}}>{p.amount.toLocaleString()}원</td>
                       <td style={{padding:'10px'}}>
                         <span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,
-                          background: p.status==='paid'?'#e6f4ea':p.status==='failed'?'#fce8e6':p.status==='cancelled'?'#f1f3f4':'#fff8e1',
-                          color: p.status==='paid'?'#1e8e3e':p.status==='failed'?'#c5221f':p.status==='cancelled'?'#5f6368':'#754d00'}}>
-                          {p.status==='paid'?'완료':p.status==='failed'?'실패':p.status==='cancelled'?'취소됨':'대기'}
+                          background: p.status==='paid'?'#e6f4ea':p.status==='failed'?'#fce8e6':(p.status==='cancelled'||p.status==='partially_refunded')?'#f1f3f4':'#fff8e1',
+                          color: p.status==='paid'?'#1e8e3e':p.status==='failed'?'#c5221f':(p.status==='cancelled'||p.status==='partially_refunded')?'#5f6368':'#754d00'}}>
+                          {p.status==='paid'?'완료':p.status==='failed'?'실패':p.status==='cancelled'?'전액 환불됨':p.status==='partially_refunded'?'부분 환불됨':'대기'}
                         </span>
                       </td>
                       <td style={{padding:'10px',color:'#5f6368',fontSize:12}}>{p.requestedBy}</td>
@@ -1113,7 +1113,7 @@ export default function ConsoleApp() {
               <div className="section-title" style={{marginBottom:0}}>환불 ({refundable.length}건)</div>
               <button className={`btn-download ${refundLoading?'btn-calling':''}`} onClick={fetchRefundable} disabled={refundLoading}>{refundLoading?'조회 중...':'새로고침'}</button>
             </div>
-            <div style={{fontSize:12,color:'#94a3b8',marginBottom:14}}>완료(paid)된 크레딧 충전 건만 대상 — 정액제 결제는 플랜 상태가 얽혀 있어 여기서 환불할 수 없습니다. 환불하면 포트원 결제취소 + 해당 기관 크레딧 회수가 함께 일어납니다(되돌릴 수 없음). 기관이 직접 요청한 건은 "환불 요청됨"으로 표시됩니다(요청 없이도 직접 환불 가능).</div>
+            <div style={{fontSize:12,color:'#94a3b8',marginBottom:14}}>완료(paid)된 크레딧 충전 건만 대상입니다. 결제 원장에서 사용·만료분을 제외한 남은 유상 크레딧만 원 결제 카드로 취소하며, 원장이 없거나 잔액을 확인할 수 없으면 자동 환불하지 않습니다. 정액제 결제는 이 화면에서 환불할 수 없습니다.</div>
             {refundable.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{refundLoading?'불러오는 중...':'환불 가능한 결제가 없습니다'}</div> : (
               <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>

@@ -86,7 +86,8 @@ export default function UpgradeModal(props: any) {
                     <td style={{padding:'10px'}}>{p.type==='subscription' ? `정액제${p.planKey?`(${p.planKey})`:''}` : '크레딧 충전'}</td>
                     <td style={{padding:'10px',fontWeight:700}}>{p.amount.toLocaleString()}원</td>
                     <td style={{padding:'10px'}}>
-                      {p.status==='cancelled' ? <span style={{color:'#94a3b8'}}>환불됨</span>
+                      {p.status==='cancelled' ? <span style={{color:'#94a3b8'}}>전액 환불됨</span>
+                        : p.status==='partially_refunded' ? <span style={{color:'#64748b'}}>부분 환불됨 ({Number(p.refundedAmount || 0).toLocaleString()}원)</span>
                         : p.refundRequestStatus==='pending' ? <span style={{color:'#754d00'}}>환불 요청됨</span>
                         : p.refundRequestStatus==='rejected' ? <span style={{color:'#c5221f'}}>환불 거절됨</span>
                         : p.status==='paid' ? <span style={{color:'#1e8e3e'}}>완료</span>

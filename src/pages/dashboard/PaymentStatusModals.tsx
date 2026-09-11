@@ -92,7 +92,7 @@ export function RefundRequestModal(props: any) {
           <textarea className="form-input" style={{width:'100%',minHeight:70,marginBottom:14,boxSizing:'border-box'}} placeholder="환불 사유를 입력해 주세요"
             value={refundReasonCustom} onChange={e=>setRefundReasonCustom(e.target.value)} />
         )}
-        <div style={{fontSize:12,color:'#94a3b8',marginBottom:18}}>요청 후 담당자 확인을 거쳐 실제 환불·크레딧 회수가 진행됩니다.</div>
+        <div style={{fontSize:12,color:'#94a3b8',marginBottom:18}}>요청 후 담당자가 미사용 유상 크레딧을 확인해 원 결제 카드로 환불합니다. 승인된 환불은 3영업일 이내 카드 승인 취소를 요청합니다.</div>
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
           <button className="btn-primary" style={{width:'100%'}} disabled={refundRequestBusy} onClick={submitRefundRequest}>
             {refundRequestBusy ? '요청 중...' : '환불 요청 보내기'}
