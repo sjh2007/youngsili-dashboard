@@ -2462,35 +2462,36 @@ export default function App() {
     setFormErrors(errors); return Object.keys(errors).length===0;
   };
   const nextStep = () => { if(validateStep(formStep)) setFormStep(s=>s+1); };
-  const saveElder = () => {
+  const saveElder = async () => {
     let saved;
     // 수정 전 번호 — 서버 문서 ID가 전화번호라, 번호를 바꾸면 옛 문서가 남아 목록에 중복으로 뜨고
     // 그쪽을 고르면 옛 번호로 전화가 간다. 서버가 옛 문서를 지울 수 있게 함께 보낸다.
     const prevPhone = editMode ? (elders.find(e=>e.id===form.id)?.phone ?? '') : '';
-    if (editMode) { saved = {...form, prevPhone}; setElders(prev=>prev.map(e=>e.id===form.id?{...e,...form}:e)); setSelected(prev=>({...prev,...form})); }
-    else { saved = {...form,id:Date.now(),status:'normal',lastCall:'아직 없음',keyword:null,visits:0,age:parseInt(form.age),callActive:true}; setElders(prev=>[...prev,saved]); }
+    if (editMode) saved = {...form, prevPhone};
+    else saved = {...form,id:Date.now(),status:'normal',lastCall:'아직 없음',keyword:null,visits:0,age:parseInt(form.age),callActive:true};
     // 자동연동: 서버 elders에 저장 → 앱이 어르신 전화번호로 조회
-    authFetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(saved) })
-      .then(r=>r.json())
-      .then(d=>{
-        if (d && d.success) {
-          // 번호가 바뀌면 서버에서 문서 ID가 통째로 달라진다(옛 문서는 서버가 정리).
-          // 낙관적 반영본은 옛 번호를 들고 있으므로 반드시 서버 목록으로 덮어써야 한다.
-          if (prevPhone && String(prevPhone).replace(/\D/g,'') !== String(form.phone||'').replace(/\D/g,'')) {
-            setChecked([]);            // 옛 id 로 잡힌 발신 대상 선택을 해제
-            setSelectedElders(new Set());
-          }
-          fetchElders();
-        } else {
-          const m = errMsg(d, '어르신 저장 실패');
-          // 다른 기관에 이미 등록된 번호 → 담당자에게 이관 등록 여부를 중앙 모달로 확인
-          if (/다른 기관/.test(m)) setForceReg({ payload: saved });
-          else notify(m, 'info');
-        }
-      })
-      .catch(()=>{});
-    setSaveSuccess(true);
-    setTimeout(()=>{setSaveSuccess(false);setPage(editMode?'detail':'elders');},1800);
+    try {
+      const r = await authFetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(saved) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d?.success) {
+        const m = errMsg(d, '어르신 저장 실패');
+        // 다른 기관에 이미 등록된 번호 → 담당자에게 이관 등록 여부를 중앙 모달로 확인
+        if (/다른 기관/.test(m)) setForceReg({ payload: saved });
+        else notify(m, 'error');
+        return;
+      }
+      if (editMode) setSelected(prev=>({...prev,...form}));
+      // 번호가 바뀌면 옛 id로 잡힌 발신 대상 선택을 해제한다.
+      if (prevPhone && String(prevPhone).replace(/\D/g,'') !== String(form.phone||'').replace(/\D/g,'')) {
+        setChecked([]);
+        setSelectedElders(new Set());
+      }
+      await fetchElders();
+      setSaveSuccess(true);
+      setTimeout(()=>{setSaveSuccess(false);setPage(editMode?'detail':'elders');},1800);
+    } catch {
+      notify('서버 연결 실패로 저장되지 않았습니다. 다시 시도해 주세요.', 'error');
+    }
   };
   // '다른 기관 어르신' 확인 후 강제(이관) 등록
   const [forceReg, setForceReg] = useState<any>(null);
