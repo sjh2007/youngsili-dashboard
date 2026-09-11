@@ -293,6 +293,7 @@ export default function ConsoleApp() {
   const [paymentsPage, setPaymentsPage] = useState(1);
   const [paymentsOrg, setPaymentsOrg] = useState('');
   const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentReconcileBusy, setPaymentReconcileBusy] = useState('');
   const [refundable, setRefundable] = useState<any[]>([]);
   const [refundPage, setRefundPage] = useState(1);
   const [refundLoading, setRefundLoading] = useState(false);
@@ -491,6 +492,18 @@ export default function ConsoleApp() {
       setRefundPage(1);
     } catch (e:any) { notify(e?.message || '환불 대상 조회 실패'); }
     finally { setRefundLoading(false); }
+  };
+  const reconcilePayment = async (payment: any) => {
+    if (!window.confirm(`결제 ${payment.id}를 PortOne 원본 거래와 대조합니다.\n확인 가능한 누락 처리만 자동 복구하고, 불일치는 수동 검토로 남깁니다. 계속할까요?`)) return;
+    setPaymentReconcileBusy(payment.id);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/payments/${payment.id}/reconcile`, { method:'POST' });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { notify(errMsg(d, '결제 대조 실패')); return; }
+      notify(d.message || '결제 대조를 완료했습니다.', d.action === 'recovered' || d.action === 'already_complete' ? 'success' : 'info');
+      await fetchPayments();
+    } catch { notify('네트워크 오류 — 결제 대조 실패'); }
+    finally { setPaymentReconcileBusy(''); }
   };
   const doRefund = async (payment: any) => {
     const reason = window.prompt(`"${payment.orgId}" 기관의 결제를 환불합니다. 미사용 유상 크레딧만 원 결제 카드로 취소됩니다.\n환불 사유를 입력하세요.`, '');
@@ -1093,13 +1106,13 @@ export default function ConsoleApp() {
               <input className="form-input" style={{width:200,margin:0}} placeholder="기관코드 필터(선택)" value={paymentsOrg} onChange={e=>setPaymentsOrg(e.target.value)} />
             </div>
             {payments.some(needsPaymentAttention) && <div role="alert" style={{padding:'10px 12px',marginBottom:12,borderRadius:8,background:'#fff4e5',color:'#8a4b00',fontSize:13,fontWeight:700}}>확인 필요한 결제 {payments.filter(needsPaymentAttention).length}건 · 최근 24시간 실패와 완료되지 않은 결제·환불 상태를 점검해 주세요.</div>}
-            <div style={{fontSize:12,color:'#94a3b8',marginBottom:10}}>포트원 결제·정액제 청구 기록(조회 전용) — 취소/환불은 아래 "환불" 메뉴 참고</div>
+            <div style={{fontSize:12,color:'#94a3b8',marginBottom:10}}>PortOne 원본 거래와 금액·상태가 일치할 때만 중간 상태를 복구합니다. 수동 검토 상태는 자동 변경하지 않습니다.</div>
             {payments.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{paymentsLoading?'불러오는 중...':'조회된 결제 내역이 없습니다'}</div> : (
               <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
                   <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
                     <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>종류</th>
-                    <th style={{padding:'8px 10px'}}>금액</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}>요청자</th>
+                    <th style={{padding:'8px 10px'}}>금액</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}>요청자</th><th style={{padding:'8px 10px'}}>조치</th>
                   </tr></thead>
                   <tbody>{payments.slice((paymentsPage-1)*PAGE_SIZE, paymentsPage*PAGE_SIZE).map((p:any) => (
                     <tr key={p.id} title={p.error || p.reviewReason || ''} style={{borderBottom:'1px solid #f1f3f4',background:['verification_pending','review_required','refund_processing','refund_credit_pending'].includes(p.status)?'#fffaf0':'transparent'}}>
@@ -1113,8 +1126,18 @@ export default function ConsoleApp() {
                           color: p.status==='paid'?'#1e8e3e':p.status==='failed'?'#c5221f':(p.status==='cancelled'||p.status==='partially_refunded')?'#5f6368':'#754d00'}}>
                           {p.status==='paid'?'완료':p.status==='failed'?'실패':p.status==='verification_pending'?'결과 확인 필요':p.status==='review_required'?'수동 검토 필요':p.status==='refund_processing'?'카드 취소 처리 중':p.status==='refund_credit_pending'?'크레딧 회수 필요':p.status==='cancelled'?'전액 환불됨':p.status==='partially_refunded'?'부분 환불됨':'대기'}
                         </span>
+                        {p.lastPortoneStatus && <div style={{marginTop:5,fontSize:11,color:'#64748b'}}>
+                          PortOne {p.lastPortoneStatus} · {Number(p.lastPortoneAmount || 0).toLocaleString()}원
+                        </div>}
                       </td>
                       <td style={{padding:'10px',color:'#5f6368',fontSize:12}}>{p.requestedBy}</td>
+                      <td style={{padding:'10px'}}>
+                        {consoleRole !== 'cs' && ['verification_pending','review_required','refund_processing','refund_credit_pending'].includes(p.status) ? (
+                          <button className="btn-secondary" style={{fontSize:12,padding:'4px 9px'}} disabled={paymentReconcileBusy===p.id} onClick={()=>reconcilePayment(p)}>
+                            {paymentReconcileBusy===p.id ? '대조 중...' : '대조·복구'}
+                          </button>
+                        ) : <span style={{color:'#94a3b8'}}>—</span>}
+                      </td>
                     </tr>
                   ))}</tbody>
                 </table>
