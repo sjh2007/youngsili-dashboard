@@ -188,29 +188,29 @@ function GcpStyle() {
         .gcp-console .payment-calendar-caption { margin-top:5px; color:#5f6368; font-size:12.5px; }
         .gcp-console .payment-calendar-actions { display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
         .gcp-console .payment-calendar-actions .payment-calendar-icon { display:inline-flex; align-items:center; justify-content:center; min-width:40px; min-height:40px; padding:7px 9px; }
-        .gcp-console .payment-calendar-month { margin-top:22px; font-size:20px; font-weight:500; color:#202124; }
-        .gcp-console .payment-calendar-legend { display:flex; gap:18px; flex-wrap:wrap; margin:10px 0 14px; color:#5f6368; font-size:12px; }
+        .gcp-console .payment-calendar-month { margin-top:14px; font-size:17px; font-weight:500; color:#202124; }
+        .gcp-console .payment-calendar-legend { display:flex; gap:16px; flex-wrap:wrap; margin:7px 0 10px; color:#5f6368; font-size:11.5px; }
         .gcp-console .payment-calendar-legend span { display:inline-flex; align-items:center; gap:6px; }
         .gcp-console .payment-calendar-legend i { width:8px; height:8px; border-radius:50%; background:#9aa0a6; }
         .gcp-console .payment-calendar-legend i.is-paid { background:#1e8e3e; }
         .gcp-console .payment-calendar-legend i.is-due { background:#1a73e8; }
         .gcp-console .payment-calendar-legend i.is-error { background:#c5221f; }
         .gcp-console .payment-calendar-scroll { overflow-x:auto; border:1px solid #dadce0; border-radius:8px; }
-        .gcp-console .payment-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(132px,1fr)); min-width:924px; }
+        .gcp-console .payment-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(110px,1fr)); min-width:770px; }
         .gcp-console .payment-calendar-weekdays { background:#f8f9fa; color:#5f6368; font-size:12px; font-weight:500; text-align:center; border-bottom:1px solid #dadce0; }
-        .gcp-console .payment-calendar-weekdays > div { padding:9px 6px; border-right:1px solid #e8eaed; }
+        .gcp-console .payment-calendar-weekdays > div { padding:6px; border-right:1px solid #e8eaed; }
         .gcp-console .payment-calendar-weekdays > div:last-child { border-right:0; }
-        .gcp-console .payment-calendar-day { min-height:118px; padding:8px; box-sizing:border-box; border-right:1px solid #e8eaed; border-bottom:1px solid #e8eaed; background:#fff; }
+        .gcp-console .payment-calendar-day { min-height:82px; padding:5px 6px; box-sizing:border-box; border-right:1px solid #e8eaed; border-bottom:1px solid #e8eaed; background:#fff; }
         .gcp-console .payment-calendar-day:nth-child(7n) { border-right:0; }
         .gcp-console .payment-calendar-day:nth-last-child(-n+7) { border-bottom:0; }
         .gcp-console .payment-calendar-day.is-outside { background:#fafafa; color:#9aa0a6; }
-        .gcp-console .payment-calendar-date { width:25px; height:25px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:12px; font-weight:500; }
+        .gcp-console .payment-calendar-date { width:21px; height:21px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:11px; font-weight:500; }
         .gcp-console .payment-calendar-day.is-today .payment-calendar-date { background:#1a73e8; color:#fff; }
-        .gcp-console .payment-calendar-events { display:grid; gap:5px; margin-top:5px; }
-        .gcp-console .payment-calendar-event { min-width:0; padding:6px 7px; border-radius:5px; border-left:3px solid #9aa0a6; background:#f1f3f4; color:#3c4043; }
+        .gcp-console .payment-calendar-events { display:grid; gap:3px; margin-top:3px; }
+        .gcp-console .payment-calendar-event { min-width:0; padding:3px 5px; border-radius:4px; border-left:2px solid #9aa0a6; background:#f1f3f4; color:#3c4043; }
         .gcp-console .payment-calendar-event strong, .gcp-console .payment-calendar-event span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-        .gcp-console .payment-calendar-event strong { font-size:11.5px; font-weight:500; }
-        .gcp-console .payment-calendar-event span { margin-top:2px; font-size:10.5px; color:#5f6368; }
+        .gcp-console .payment-calendar-event strong { font-size:10.5px; font-weight:500; }
+        .gcp-console .payment-calendar-event span { margin-top:1px; font-size:9.5px; color:#5f6368; }
         .gcp-console .payment-calendar-event.is-paid { border-left-color:#1e8e3e; background:#e6f4ea; }
         .gcp-console .payment-calendar-event.is-due { border-left-color:#1a73e8; background:#e8f0fe; }
         .gcp-console .payment-calendar-event.is-error { border-left-color:#c5221f; background:#fce8e6; }
