@@ -29,6 +29,13 @@ function RoleBadge({ role }: { role: string }) {
   return <span className="gcp-chip" style={{ background: s.bg, color: s.fg }}>{s.label}</span>;
 }
 
+function needsPaymentAttention(payment: any): boolean {
+  if (['verification_pending', 'refund_processing', 'refund_credit_pending'].includes(payment?.status)) return true;
+  if (payment?.status !== 'failed' || !payment?.createdAt) return false;
+  const created = new Date(payment.createdAt).getTime();
+  return Number.isFinite(created) && Date.now() - created <= 24 * 60 * 60 * 1000;
+}
+
 /** 구글 클라우드 콘솔 참조 — 이 페이지(build-console)에서만 적용되는 스코프 스타일.
  * App.css(기관 대시보드와 공유)는 건드리지 않고, .gcp-console 아래에서만 이긴다. */
 function GcpStyle() {
@@ -1044,6 +1051,7 @@ export default function ConsoleApp() {
               <div className="section-title" style={{marginBottom:0}}>정기결제 현황 ({subs.length}개 기관)</div>
               <button className={`btn-download ${subsLoading?'btn-calling':''}`} onClick={fetchSubs} disabled={subsLoading}>{subsLoading?'조회 중...':'새로고침'}</button>
             </div>
+            {subs.some((s:any)=>s.lastChargeError) && <div role="alert" style={{padding:'10px 12px',marginBottom:12,borderRadius:8,background:'#fce8e6',color:'#b3261e',fontSize:13,fontWeight:700}}>자동결제 오류 {subs.filter((s:any)=>s.lastChargeError).length}개 기관 · 최근 오류 열을 확인해 주세요.</div>}
             {subs.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{subsLoading?'불러오는 중...':'기관 데이터가 없습니다'}</div> : (
               <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
@@ -1076,6 +1084,7 @@ export default function ConsoleApp() {
             <div style={{display:'flex',gap:10,marginBottom:14}}>
               <input className="form-input" style={{width:200,margin:0}} placeholder="기관코드 필터(선택)" value={paymentsOrg} onChange={e=>setPaymentsOrg(e.target.value)} />
             </div>
+            {payments.some(needsPaymentAttention) && <div role="alert" style={{padding:'10px 12px',marginBottom:12,borderRadius:8,background:'#fff4e5',color:'#8a4b00',fontSize:13,fontWeight:700}}>확인 필요한 결제 {payments.filter(needsPaymentAttention).length}건 · 최근 24시간 실패와 완료되지 않은 결제·환불 상태를 점검해 주세요.</div>}
             <div style={{fontSize:12,color:'#94a3b8',marginBottom:10}}>포트원 결제·정액제 청구 기록(조회 전용) — 취소/환불은 아래 "환불" 메뉴 참고</div>
             {payments.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{paymentsLoading?'불러오는 중...':'조회된 결제 내역이 없습니다'}</div> : (
               <div style={{overflowX:'auto'}}>
@@ -1085,7 +1094,7 @@ export default function ConsoleApp() {
                     <th style={{padding:'8px 10px'}}>금액</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}>요청자</th>
                   </tr></thead>
                   <tbody>{payments.slice((paymentsPage-1)*PAGE_SIZE, paymentsPage*PAGE_SIZE).map((p:any) => (
-                    <tr key={p.id} style={{borderBottom:'1px solid #f1f3f4'}}>
+                    <tr key={p.id} title={p.error || ''} style={{borderBottom:'1px solid #f1f3f4',background:['verification_pending','refund_processing','refund_credit_pending'].includes(p.status)?'#fffaf0':'transparent'}}>
                       <td style={{padding:'10px',color:'#5f6368'}}>{p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '-'}</td>
                       <td style={{padding:'10px'}}>{p.orgId}</td>
                       <td style={{padding:'10px'}}>{p.type==='subscription' ? `정액제${p.planKey?`(${p.planKey})`:''}${p.renewal?' · 자동갱신':''}` : '크레딧 충전'}</td>
@@ -1094,7 +1103,7 @@ export default function ConsoleApp() {
                         <span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,
                           background: p.status==='paid'?'#e6f4ea':p.status==='failed'?'#fce8e6':(p.status==='cancelled'||p.status==='partially_refunded')?'#f1f3f4':'#fff8e1',
                           color: p.status==='paid'?'#1e8e3e':p.status==='failed'?'#c5221f':(p.status==='cancelled'||p.status==='partially_refunded')?'#5f6368':'#754d00'}}>
-                          {p.status==='paid'?'완료':p.status==='failed'?'실패':p.status==='cancelled'?'전액 환불됨':p.status==='partially_refunded'?'부분 환불됨':'대기'}
+                          {p.status==='paid'?'완료':p.status==='failed'?'실패':p.status==='verification_pending'?'결과 확인 필요':p.status==='refund_processing'?'카드 취소 처리 중':p.status==='refund_credit_pending'?'크레딧 회수 필요':p.status==='cancelled'?'전액 환불됨':p.status==='partially_refunded'?'부분 환불됨':'대기'}
                         </span>
                       </td>
                       <td style={{padding:'10px',color:'#5f6368',fontSize:12}}>{p.requestedBy}</td>
@@ -1167,7 +1176,9 @@ export default function ConsoleApp() {
                     return (
                     <tr key={o.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
                       <td style={{padding:'10px'}}>{o.name}</td><td style={{padding:'10px',fontFamily:'monospace',color:'#5f6368'}}>{o.code}</td><td style={{padding:'10px'}}>{o.plan || '미설정'}</td>
-                      <td style={{padding:'10px'}}>{o.creditBalance == null ? <span style={{color:'#94a3b8'}}>무제한(구기관)</span> : <span style={{fontWeight:700,color:o.creditBalance<=0?'#c5221f':'#0f172a'}}>{Number(o.creditBalance).toLocaleString()}원</span>}</td>
+                      <td style={{padding:'10px'}}>{o.creditExpiryUnreconciledBalance != null && Number(o.creditExpiryUnreconciledBalance) !== 0
+                        ? <span title="원장과 저장 잔액이 일치하지 않습니다" style={{fontWeight:800,color:'#c5221f'}}>원장 확인 필요 ({Number(o.creditExpiryUnreconciledBalance).toLocaleString()}원)</span>
+                        : o.creditBalance == null ? <span style={{color:'#94a3b8'}}>무제한(구기관)</span> : <span style={{fontWeight:700,color:o.creditBalance<=0?'#c5221f':'#0f172a'}}>{Number(o.creditBalance).toLocaleString()}원</span>}</td>
                       <td style={{padding:'10px'}}>{o.elderCount}명</td>
                       <td style={{padding:'10px'}}><span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:suspended?'#fce8e6':'#e6f4ea',color:suspended?'#c5221f':'#1e8e3e'}}>{suspended?'정지됨':'정상'}</span></td>
                       <td style={{padding:'10px',whiteSpace:'nowrap'}}>
