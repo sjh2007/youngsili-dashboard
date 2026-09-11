@@ -36,6 +36,12 @@ function needsPaymentAttention(payment: any): boolean {
   return Number.isFinite(created) && Date.now() - created <= 24 * 60 * 60 * 1000;
 }
 
+async function requireJson(response: Response, fallback: string): Promise<any> {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(errMsg(data, fallback));
+  return data;
+}
+
 /** 구글 클라우드 콘솔 참조 — 이 페이지(build-console)에서만 적용되는 스코프 스타일.
  * App.css(기관 대시보드와 공유)는 건드리지 않고, .gcp-console 아래에서만 이긴다. */
 function GcpStyle() {
@@ -389,11 +395,11 @@ export default function ConsoleApp() {
         authFetch(`${SERVER_URL}/console/health`),
         authFetch(`${SERVER_URL}/console/calls/active`),
       ]);
-      const hData = await hRes.json();
-      const cData = await cRes.json();
+      const hData = await requireJson(hRes, '시스템 상태 조회 실패');
+      const cData = await requireJson(cRes, '진행 중 통화 조회 실패');
       if (hData && Array.isArray(hData.components)) setHealth(hData);
       if (Array.isArray(cData)) setActiveCalls(cData);
-    } catch { notify('시스템 상태 조회 실패'); }
+    } catch (e:any) { notify(e?.message || '시스템 상태 조회 실패'); }
     finally { setLoadingHealth(false); }
   };
 
@@ -403,10 +409,10 @@ export default function ConsoleApp() {
       const params = new URLSearchParams();
       if (historyOrg) params.set('org', historyOrg);
       const r = await authFetch(`${SERVER_URL}/console/calls/history?${params.toString()}`);
-      const d = await r.json();
+      const d = await requireJson(r, '통화 이력 조회 실패');
       setHistory(Array.isArray(d?.calls) ? d.calls : []);
       setHistoryPage(1);
-    } catch { notify('통화 이력 조회 실패'); }
+    } catch (e:any) { notify(e?.message || '통화 이력 조회 실패'); }
     finally { setHistoryLoading(false); }
   };
 
@@ -414,15 +420,19 @@ export default function ConsoleApp() {
     setSubsLoading(true);
     try {
       const r = await authFetch(`${SERVER_URL}/console/subscriptions`);
-      const d = await r.json();
+      const d = await requireJson(r, '정기결제 현황 조회 실패');
       setSubs(Array.isArray(d?.orgs) ? d.orgs : []);
       setSubsPage(1);
-    } catch { notify('정기결제 현황 조회 실패'); }
+    } catch (e:any) { notify(e?.message || '정기결제 현황 조회 실패'); }
     finally { setSubsLoading(false); }
   };
 
   const fetchOrgs = async () => {
-    try { const r = await authFetch(`${SERVER_URL}/admin/orgs`); const d = await r.json(); setOrgs(Array.isArray(d) ? d : []); setOrgsPage(1); } catch { setOrgs([]); }
+    try {
+      const r = await authFetch(`${SERVER_URL}/admin/orgs`);
+      const d = await requireJson(r, '기관 목록 조회 실패');
+      setOrgs(Array.isArray(d) ? d : []); setOrgsPage(1);
+    } catch (e:any) { notify(e?.message || '기관 목록 조회 실패'); }
   };
   const toggleOrgSuspend = async (org: any, nextSuspended: boolean) => {
     const verb = nextSuspended ? '정지' : '재개';
@@ -454,10 +464,10 @@ export default function ConsoleApp() {
     setAuditLoading(true);
     try {
       const r = await authFetch(`${SERVER_URL}/console/audit-logs`);
-      const d = await r.json();
+      const d = await requireJson(r, '감사 로그 조회 실패');
       setAuditLogs(Array.isArray(d?.logs) ? d.logs : []);
       setAuditPage(1);
-    } catch { notify('감사 로그 조회 실패'); }
+    } catch (e:any) { notify(e?.message || '감사 로그 조회 실패'); }
     finally { setAuditLoading(false); }
   };
 
@@ -467,10 +477,10 @@ export default function ConsoleApp() {
       const params = new URLSearchParams();
       if (paymentsOrg) params.set('org', paymentsOrg);
       const r = await authFetch(`${SERVER_URL}/console/payments?${params.toString()}`);
-      const d = await r.json();
+      const d = await requireJson(r, '결제 내역 조회 실패');
       setPayments(Array.isArray(d?.payments) ? d.payments : []);
       setPaymentsPage(1);
-    } catch { notify('결제 내역 조회 실패'); }
+    } catch (e:any) { notify(e?.message || '결제 내역 조회 실패'); }
     finally { setPaymentsLoading(false); }
   };
 
@@ -478,10 +488,10 @@ export default function ConsoleApp() {
     setRefundLoading(true);
     try {
       const r = await authFetch(`${SERVER_URL}/console/payments?status=paid`);
-      const d = await r.json();
+      const d = await requireJson(r, '환불 대상 조회 실패');
       setRefundable(Array.isArray(d?.payments) ? d.payments.filter((p:any)=>p.type !== 'subscription') : []);
       setRefundPage(1);
-    } catch { notify('환불 대상 조회 실패'); }
+    } catch (e:any) { notify(e?.message || '환불 대상 조회 실패'); }
     finally { setRefundLoading(false); }
   };
   const doRefund = async (payment: any) => {
