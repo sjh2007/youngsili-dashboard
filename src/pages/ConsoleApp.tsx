@@ -45,6 +45,7 @@ function localDateKey(value: string | Date): string | null {
 }
 
 function PaymentCalendar({ month, payments, subscriptions, loading, onMonthChange, onRefresh }: any) {
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(() => new Set());
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
   const first = new Date(year, monthIndex, 1);
@@ -109,12 +110,22 @@ function PaymentCalendar({ month, payments, subscriptions, loading, onMonthChang
           {days.map(date => {
             const key = localDateKey(date)!;
             const dayEvents = events.get(key) || [];
+            const expanded = expandedDays.has(key);
+            const visibleEvents = expanded ? dayEvents : dayEvents.slice(0, 1);
+            const hiddenCount = dayEvents.length - visibleEvents.length;
+            const toggleExpanded = () => setExpandedDays(previous => {
+              const next = new Set(previous);
+              if (next.has(key)) next.delete(key); else next.add(key);
+              return next;
+            });
             return <div key={key} aria-label={`${date.getFullYear()}년 ${date.getMonth()+1}월 ${date.getDate()}일, 일정 ${dayEvents.length}건`} className={`payment-calendar-day ${date.getMonth()!==monthIndex?'is-outside':''} ${key===todayKey?'is-today':''}`}>
               <div className="payment-calendar-date">{date.getDate()}</div>
               <div className="payment-calendar-events">
-                {dayEvents.map(event=><div key={event.id} className={`payment-calendar-event is-${event.tone}`} title={`${event.title} · ${event.detail}`}>
+                {visibleEvents.map(event=><div key={event.id} className={`payment-calendar-event is-${event.tone}`} title={`${event.title} · ${event.detail}`}>
                   <strong>{event.title}</strong><span>{event.detail}</span>
                 </div>)}
+                {hiddenCount > 0 && <button type="button" className="payment-calendar-expand" aria-expanded="false" onClick={toggleExpanded}>외 {hiddenCount}건 펼치기</button>}
+                {expanded && dayEvents.length > 1 && <button type="button" className="payment-calendar-expand" aria-expanded="true" onClick={toggleExpanded}>일정 접기</button>}
               </div>
             </div>;
           })}
@@ -215,6 +226,8 @@ function GcpStyle() {
         .gcp-console .payment-calendar-event.is-due { border-left-color:#1a73e8; background:#e8f0fe; }
         .gcp-console .payment-calendar-event.is-error { border-left-color:#c5221f; background:#fce8e6; }
         .gcp-console .payment-calendar-event.is-pending { border-left-color:#f9ab00; background:#fef7e0; }
+        .gcp-console .payment-calendar-expand { width:100%; padding:2px 3px; border:0; border-radius:3px; background:transparent; color:#1a73e8; font-size:10px; font-weight:500; text-align:left; cursor:pointer; }
+        .gcp-console .payment-calendar-expand:hover, .gcp-console .payment-calendar-expand:focus-visible { background:#e8f0fe; outline:none; }
         .gcp-console .payment-calendar-empty { margin-top:12px; color:#5f6368; font-size:13px; }
         @media (max-width: 760px) {
           .gcp-console .payment-calendar-toolbar { align-items:stretch; flex-direction:column; }
