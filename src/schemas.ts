@@ -261,3 +261,10 @@ export function parseOr<S extends z.ZodTypeAny, F>(schema: S, data: unknown, fal
   if (!ZOD_BLOCKING && data != null && !errText) return data as z.infer<S>;
   return fallback;
 }
+
+// GET /billing/ledger — 동일 시점의 원장과 잔액.
+export const CreditLedgerSchema = loose({
+  orgId: z.string(), balance: z.number().nullable(), openingBalance: z.number(),
+  entries: z.array(loose({ id: z.string(), type: z.string(), amount: z.number(),
+    balanceAfter: z.number(), productName: z.string(), occurredAt: z.string(), expiresAt: z.string().nullable() })),
+});

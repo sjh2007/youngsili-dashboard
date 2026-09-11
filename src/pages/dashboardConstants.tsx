@@ -50,12 +50,51 @@ export const UPGRADE_PLANS = [
   { key:'standard',  name:'스탠다드', price:'13,000원', unit:'인·월',   features:['베이직 전체 포함','리포트 / 통계','공공데이터 연동(산불·폭염·재난)'], recommended:true },
   { key:'premium',   name:'프리미엄', price:'19,000원', unit:'인·월',   features:['스탠다드 전체 포함','방문 필요·현장출동 연계','IoT 연동'] },
 ];
-// 같은 문서 §3 "충전 단위별 도달 통화 수(3분 무선 기준)" — 정량제(선불 충전식, 지금 쓰는 방식) 충전 단위.
-// 정액제와 달리 매월 고정 요금이 아니라 발신한 만큼만 차감되므로 "플랜"이 아니라 "충전 금액"을 고른다.
+export const APP_PHONE_PLANS = [
+  { key:'app100', elderLimit:100, prices:{1:750000,3:1400000,5:2100000} },
+  { key:'app200', elderLimit:200, prices:{1:1050000,3:2350000,5:3650000} },
+  { key:'app300', elderLimit:300, prices:{1:1400000,3:3300000,5:5250000}, recommended:true },
+  { key:'app400', elderLimit:400, prices:{1:1700000,3:4300000,5:6900000} },
+  { key:'app500', elderLimit:500, prices:{1:2050000,3:5250000,5:8500000} },
+];
+export const APP_WEEKLY_FREQUENCIES = [1, 3, 5];
+export const billingPlanName = (key: string | null | undefined) => {
+  if (!key) return '-';
+  const match = /^app(100|200|300|400|500)_w([135])$/.exec(key);
+  const pstn = {pstn_light:'일반전화 라이트',pstn_standard:'일반전화 스탠다드',pstn_premium:'일반전화 프리미엄'}[key];
+  return match ? `앱 ${match[1]}명 · 주 ${match[2]}회` : (pstn || UPGRADE_PLANS.find(p=>p.key===key)?.name || key);
+};
+export const PSTN_SUBSCRIPTION_PLANS = [
+  {key:'pstn_light',name:'라이트',price:21000,chargedAmount:23100,includedCalls:25,minutes:75,channels:3},
+  {key:'pstn_standard',name:'스탠다드',price:35000,chargedAmount:38500,includedCalls:42,minutes:126,channels:5,recommended:true},
+  {key:'pstn_premium',name:'프리미엄',price:70000,chargedAmount:77000,includedCalls:83,minutes:249,channels:10},
+];
+// 070 일반전화 월 이용료. 통화 크레딧은 포함하지 않으며 카드 단건 충전과 분리한다.
+// 안전% 목표는 고객 화면에 노출하지 않는다. 근거와 원가 상한은 proposals/일반전화 방식 원가 계산.md 참조.
+export const PSTN_PLANS = [
+  { key:'pstn100', name:'070–100', elderLimit:100, monthlyFee:700000 },
+  { key:'pstn200', name:'070–200', elderLimit:200, monthlyFee:800000 },
+  { key:'pstn300', name:'070–300', elderLimit:300, monthlyFee:900000, recommended:true },
+  { key:'pstn400', name:'070–400', elderLimit:400, monthlyFee:1000000 },
+  { key:'pstn500', name:'070–500', elderLimit:500, monthlyFee:1100000 },
+];
+
+// 전원 휴대폰 착신, 1회 3분 통화 기준 고객 차감액.
+export const PSTN_CREDITS_PER_CALL = 841;
+export const PSTN_WEEKLY_FREQUENCIES = [1, 3, 5];
+
+export const PSTN_COMMON_FEATURES = [
+  '관리자 대시보드와 예약 발신',
+  '통화 결과·이력과 3단계 위험 감지',
+  '위험 알림과 담당자 확인',
+  '크레딧 충전·차감·잔액 내역',
+];
+
+// 070 일반전화의 카드 단건 크레딧 충전 상품. 실제 서버 결제금액과 일치해야 한다.
 export const CHARGE_TIERS = [
-  { key:'c30',  amount:300000,  calls:'약 350통',   usage:'주 1회 50명 1.6개월 · 특보 발신 300명 1회' },
-  { key:'c50',  amount:500000,  calls:'약 585통',   usage:'주 1회 50명 2.7개월 · 특보 발신 300명 2회', recommended:true },
-  { key:'c100', amount:1000000, calls:'약 1,170통', usage:'주 1회 100명 2.7개월 · 특보 발신 300명 4회' },
+  { key:'c30', amount:300000, calls:'약 356통', usage:'일반전화 3분 통화 기준' },
+  { key:'c50', amount:500000, calls:'약 594통', usage:'일반전화 3분 통화 기준', recommended:true },
+  { key:'c100', amount:1000000, calls:'약 1,189통', usage:'일반전화 3분 통화 기준' },
 ];
 
 // 주민등록번호 앞 6자리 → 생년월일 (7번째 자리로 세기 판정: 1·2=1900년대, 3·4=2000년대)

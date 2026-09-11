@@ -37,7 +37,7 @@ import { AlertCircle, AlertTriangle, CheckCircle2, X, Search, Copy, LogOut, Chev
 import { BusinessInfo } from '../components/BusinessInfo';
 import {
   EMPTY_FORM, normalizeRegion, REFUND_REASON_PRESETS,
-  UPGRADE_PLANS, juminToBirth, CARE_GROUPS,
+  billingPlanName, juminToBirth, CARE_GROUPS,
   DEFAULT_SCRIPT, ALERT_TEMPLATES, WILDFIRE_STAGES, DEFAULT_QUESTIONS, fillAlertVars,
   NavIcon, RefreshIcon, RESTORABLE_PAGES, loadXLSX, whileVisible,
 } from './dashboardConstants';
@@ -482,7 +482,7 @@ export default function App() {
       const d = await r.json().catch(()=>({}));
       if (r.status === 501) {
         setShowUpgradeModal(false);
-        notify(`${amount.toLocaleString()}원 충전 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success');
+        notify('결제 설정이 준비되지 않아 충전 신청이 처리되지 않았습니다. 1877-1979로 문의해 주세요.');
         return;
       }
       if (!r.ok) { notify(errMsg(d, '결제 요청 실패')); return; }
@@ -500,7 +500,9 @@ export default function App() {
         // 2026-09-01: 결제수단 선택 버튼 추가 — 카카오페이(기존 채널)/카드(이니시스 일반결제
         // 채널) 중 사용자가 고른 값을 그대로 전달. 서버가 payMethod에 맞는 channelKey를
         // 이미 골라서 내려주므로 프론트는 값만 그대로 넘기면 된다.
-        payMethod: topup.payMethod,
+        payMethod: 'CARD',
+        card: { installment: { monthOption: { availableMonthList: [0] } } },
+        bypass: { inicis_v2: { acceptmethod: ['noeasypay'], P_RESERVED: ['noeasypay=Y'] } },
         // 일부 PG는 customer.fullName(또는 email)이 없으면 prepare 단계에서 400을 낸다.
         customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || undefined },
         // 무통장입금은 입금 기한이 필수 파라미터(이니시스 실측: accountExpiry 없으면 400).
@@ -567,6 +569,8 @@ export default function App() {
       if (r.ok) setSubStatus(parseOr(SubscriptionStatusSchema, await r.json(), null));
     } catch {}
   };
+  useEffect(() => { if (showUpgradeModal) fetchSubscriptionStatus(); }, [showUpgradeModal]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 정액제 자동결제 등록 — 1단계(빌링키 발급 요청) → PortOne.js `requestIssueBillingKey()`로 결제수단
   // 등록 → 2단계(서버가 빌링키 재검증 후 첫 결제를 그 자리에서 승인, 다음 달부터는 서버 크론이 자동 재청구).
   // 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동 폴백한다.
@@ -574,16 +578,11 @@ export default function App() {
     if (subscribeBusy) return;
     setSubscribeBusy(planKey);
     try {
-      // 다른 플랜으로 자동결제 중이었다면 먼저 해지 — 안 그러면 두 플랜이 동시에 자동 청구된다.
-      if (subStatus?.autoRenew && subStatus.plan !== planKey) {
-        await authFetch(`${SERVER_URL}/billing/subscribe/cancel`, { method: 'POST' }).catch(() => {});
-      }
-
       const r = await authFetch(`${SERVER_URL}/billing/subscribe/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ planKey }) });
       const d = await r.json().catch(()=>({}));
       if (r.status === 501) {
         setShowUpgradeModal(false);
-        notify(`"${planName}" 플랜 신청이 접수됐습니다. 담당자가 확인 후 연락드립니다.`, 'success');
+        notify('정기결제 설정이 준비되지 않아 등록되지 않았습니다. 1877-1979로 문의해 주세요.');
         return;
       }
       if (!r.ok) { notify(errMsg(d, '결제 요청 실패')); return; }
@@ -2715,7 +2714,7 @@ export default function App() {
               </div>
               <div style={{marginTop:18,fontSize:20,fontWeight:800,color:'#fff'}}>
                 {subStatus?.autoRenew
-                  ? (UPGRADE_PLANS.find(p=>p.key===subStatus.plan)?.name || subStatus.plan)
+                  ? (billingPlanName(subStatus.plan))
                   : trialActive ? '시범사업(30일 체험)'
                   : '정량제(선불 충전)'}
               </div>
