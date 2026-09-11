@@ -2437,14 +2437,22 @@ export default function App() {
     } finally { setCalling(null); }
   };
 
-  const toggleCallActive = id => {
+  const toggleCallActive = async id => {
     const tgt = elders.find(e=>e.id===id);
     if (!tgt) return;
     const next = !tgt.callActive;
     setElders(prev=>prev.map(e=>e.id===id?{...e,callActive:next}:e));
     if (selected?.id===id) setSelected(prev=>({...prev,callActive:next}));
     // 서버에 영구 저장(누락 시 새로고침마다 재개로 되돌아가던 버그). phone 키로 callActive만 merge, 승인상태 보존.
-    if (tgt.phone) authFetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ phone: tgt.phone, callActive: next, approved: tgt.approved }) }).catch(()=>{});
+    if (!tgt.phone) return;
+    try {
+      const r = await authFetch(`${SERVER_URL}/elders/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ phone: tgt.phone, callActive: next, approved: tgt.approved }) });
+      if (!r.ok) throw new Error(errMsg(await r.json().catch(() => ({})), '안전확인 설정 저장 실패'));
+    } catch (e) {
+      setElders(prev=>prev.map(elder=>elder.id===id?{...elder,callActive:!next}:elder));
+      if (selected?.id===id) setSelected(prev=>({...prev,callActive:!next}));
+      notify(e instanceof Error ? e.message : '안전확인 설정 저장 실패', 'error');
+    }
   };
 
   const validateStep = step => {
@@ -2497,7 +2505,19 @@ export default function App() {
     } catch { notify('네트워크 오류 — 잠시 후 다시 시도해 주세요.'); }
     fetchElders();
   };
-  const deleteElder = id => { if(window.confirm('정말 삭제하시겠습니까?')){const tgt=elders.find(e=>e.id===id);setElders(prev=>prev.filter(e=>e.id!==id));if(tgt?.phone)authFetch(`${SERVER_URL}/elders/${tgt.phone.replace(/[^0-9]/g,'')}`,{method:'DELETE'}).catch(()=>{});setPage('elders');setSelected(null);} };
+  const deleteElder = async id => {
+    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+    const tgt=elders.find(e=>e.id===id);
+    if (!tgt?.phone) { notify('전화번호가 없어 삭제할 수 없습니다.', 'error'); return; }
+    try {
+      const r = await authFetch(`${SERVER_URL}/elders/${tgt.phone.replace(/[^0-9]/g,'')}`,{method:'DELETE'});
+      if (!r.ok) throw new Error(errMsg(await r.json().catch(() => ({})), '어르신 삭제 실패'));
+      setElders(prev=>prev.filter(e=>e.id!==id));
+      setPage('elders'); setSelected(null);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : '어르신 삭제 실패', 'error');
+    }
+  };
   // 어르신 선택/일괄 삭제
   const toggleElderSel = id => setSelectedElders(prev=>{const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s;});
   const toggleAllElders = (list) => setSelectedElders(prev=>{const s=new Set(prev); const all=list.length>0&&list.every(e=>s.has(e.id)); list.forEach(e=> all?s.delete(e.id):s.add(e.id)); return s;});
@@ -2507,7 +2527,11 @@ export default function App() {
     if(!window.confirm(`선택한 ${targets.length}명을 어르신 명단에서 삭제할까요?`)) return;
     setElders(prev=>prev.filter(e=>!selectedElders.has(e.id)));   // 낙관적
     setSelectedElders(new Set());
-    try { await Promise.all(targets.map(t=> t.phone ? authFetch(`${SERVER_URL}/elders/${String(t.phone).replace(/[^0-9]/g,'')}`,{method:'DELETE'}) : Promise.resolve())); } catch {}
+    try {
+      const responses = await Promise.all(targets.map(t=> t.phone ? authFetch(`${SERVER_URL}/elders/${String(t.phone).replace(/[^0-9]/g,'')}`,{method:'DELETE'}) : Promise.resolve(null)));
+      const failed = responses.filter(r => r && !r.ok).length;
+      if (failed) notify(`${failed}명의 삭제가 서버에 반영되지 않았습니다. 명단을 다시 불러왔습니다.`, 'error');
+    } catch { notify('일괄 삭제 중 서버 연결에 실패했습니다. 명단을 다시 불러왔습니다.', 'error'); }
     fetchElders();
   };
 
