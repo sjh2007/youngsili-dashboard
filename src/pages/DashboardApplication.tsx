@@ -29,7 +29,7 @@ import AuthScreen from '../components/auth/AuthScreen';
 import { ElderListSchema, MeSchema, BillingBalanceSchema, TopupResponseSchema, PaymentStatusSchema, SubscribeRegisterResponseSchema, SubscriptionStatusSchema, AlertListSchema, CallListSchema, ForestFireMapSchema, SpecialWarningMapSchema, DisasterMsgResponseSchema, parseOr } from '../schemas';
 import { PageErrorBoundary } from '../components/common';
 import { EmptyState } from '../components/ui';
-import { SERVER_URL, authFetch, errMsg } from '../utils/api';
+import { SERVER_URL, authFetch, errMsg, isPayTestEnabled } from '../utils/api';
 import { CAREGIVERS, RISK_CONFIG } from '../constants/app';
 import { useCountdown } from '../hooks/useCountdown';
 import { AlertCircle, AlertTriangle, CheckCircle2, X, Search, Copy, LogOut, ChevronDown,
@@ -578,7 +578,10 @@ export default function App() {
     if (subscribeBusy) return;
     setSubscribeBusy(planKey);
     try {
-      const r = await authFetch(`${SERVER_URL}/billing/subscribe/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ planKey }) });
+      const r = await authFetch(`${SERVER_URL}/billing/subscribe/register`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ planKey, testMode: isPayTestEnabled() }),
+      });
       const d = await r.json().catch(()=>({}));
       if (r.status === 501) {
         setShowUpgradeModal(false);
