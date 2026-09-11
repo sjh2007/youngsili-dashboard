@@ -30,7 +30,7 @@ function RoleBadge({ role }: { role: string }) {
 }
 
 function needsPaymentAttention(payment: any): boolean {
-  if (['verification_pending', 'refund_processing', 'refund_credit_pending'].includes(payment?.status)) return true;
+  if (['verification_pending', 'review_required', 'refund_processing', 'refund_credit_pending'].includes(payment?.status)) return true;
   if (payment?.status !== 'failed' || !payment?.createdAt) return false;
   const created = new Date(payment.createdAt).getTime();
   return Number.isFinite(created) && Date.now() - created <= 24 * 60 * 60 * 1000;
@@ -1104,7 +1104,7 @@ export default function ConsoleApp() {
                     <th style={{padding:'8px 10px'}}>금액</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}>요청자</th>
                   </tr></thead>
                   <tbody>{payments.slice((paymentsPage-1)*PAGE_SIZE, paymentsPage*PAGE_SIZE).map((p:any) => (
-                    <tr key={p.id} title={p.error || ''} style={{borderBottom:'1px solid #f1f3f4',background:['verification_pending','refund_processing','refund_credit_pending'].includes(p.status)?'#fffaf0':'transparent'}}>
+                    <tr key={p.id} title={p.error || p.reviewReason || ''} style={{borderBottom:'1px solid #f1f3f4',background:['verification_pending','review_required','refund_processing','refund_credit_pending'].includes(p.status)?'#fffaf0':'transparent'}}>
                       <td style={{padding:'10px',color:'#5f6368'}}>{p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '-'}</td>
                       <td style={{padding:'10px'}}>{p.orgId}</td>
                       <td style={{padding:'10px'}}>{p.type==='subscription' ? `정액제${p.planKey?`(${p.planKey})`:''}${p.renewal?' · 자동갱신':''}` : '크레딧 충전'}</td>
@@ -1113,7 +1113,7 @@ export default function ConsoleApp() {
                         <span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,
                           background: p.status==='paid'?'#e6f4ea':p.status==='failed'?'#fce8e6':(p.status==='cancelled'||p.status==='partially_refunded')?'#f1f3f4':'#fff8e1',
                           color: p.status==='paid'?'#1e8e3e':p.status==='failed'?'#c5221f':(p.status==='cancelled'||p.status==='partially_refunded')?'#5f6368':'#754d00'}}>
-                          {p.status==='paid'?'완료':p.status==='failed'?'실패':p.status==='verification_pending'?'결과 확인 필요':p.status==='refund_processing'?'카드 취소 처리 중':p.status==='refund_credit_pending'?'크레딧 회수 필요':p.status==='cancelled'?'전액 환불됨':p.status==='partially_refunded'?'부분 환불됨':'대기'}
+                          {p.status==='paid'?'완료':p.status==='failed'?'실패':p.status==='verification_pending'?'결과 확인 필요':p.status==='review_required'?'수동 검토 필요':p.status==='refund_processing'?'카드 취소 처리 중':p.status==='refund_credit_pending'?'크레딧 회수 필요':p.status==='cancelled'?'전액 환불됨':p.status==='partially_refunded'?'부분 환불됨':'대기'}
                         </span>
                       </td>
                       <td style={{padding:'10px',color:'#5f6368',fontSize:12}}>{p.requestedBy}</td>
