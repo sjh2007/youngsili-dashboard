@@ -476,7 +476,10 @@ export default function App() {
     if (subscribeBusy) return;
     setSubscribeBusy('pstn_trial');
     try {
-      const r = await authFetch(`${SERVER_URL}/billing/trial`, { method:'POST' });
+      const r = await authFetch(`${SERVER_URL}/billing/trial`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ testMode: isPayTestEnabled() }),
+      });
       const d = await r.json().catch(()=>({}));
       if (r.status === 501) { notify('결제 설정이 준비되지 않아 체험을 시작할 수 없습니다. 1877-1979로 문의해 주세요.'); return; }
       if (!r.ok) { notify(errMsg(d, '체험 기본요금 결제 요청 실패')); return; }
@@ -503,7 +506,7 @@ export default function App() {
         if (!statusResponse.ok) continue;
         const status = parseOr(PaymentStatusSchema, await statusResponse.json(), null);
         if (status?.status === 'paid') {
-          setPaymentSuccess({ amount: trial.amount, desc: '070 번호 기본요금 결제가 완료되어 30일 무료체험이 시작됐습니다.' });
+          setPaymentSuccess({ amount: trial.amount, desc: `${isPayTestEnabled()?'테스트 결제':'070 번호 기본요금 결제'}가 완료되어 30일 무료체험이 시작됐습니다.` });
           fetchBillingBalance();
           return;
         }
