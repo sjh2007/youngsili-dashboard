@@ -472,6 +472,7 @@ export default function ConsoleApp() {
   const [testAmount, setTestAmount] = useState('300000');
   const [testPayMethod, setTestPayMethod] = useState('CARD');
   const [testPlanKey, setTestPlanKey] = useState('basic');
+  const [testSubscriptionMethod, setTestSubscriptionMethod] = useState('CARD');
   const [testRefundPaymentId, setTestRefundPaymentId] = useState('');
   const [testRefundReason, setTestRefundReason] = useState('테스트 환불 요청');
   const [testBusy, setTestBusy] = useState('');
@@ -713,7 +714,7 @@ export default function ConsoleApp() {
     try {
       const r = await authFetch(`${SERVER_URL}/console/payments?status=paid`);
       const d = await requireJson(r, '환불 대상 조회 실패');
-      setRefundable(Array.isArray(d?.payments) ? d.payments.filter((p:any)=>p.type !== 'subscription') : []);
+      setRefundable(Array.isArray(d?.payments) ? d.payments.filter((p:any)=>p.type === 'topup' || p.type === 'subscription') : []);
       setRefundPage(1);
     } catch (e:any) { notify(e?.message || '환불 대상 조회 실패'); }
     finally { setRefundLoading(false); }
@@ -731,10 +732,16 @@ export default function ConsoleApp() {
     finally { setPaymentReconcileBusy(''); }
   };
   const doRefund = async (payment: any) => {
-    const reason = window.prompt(`"${payment.orgId}" 기관의 결제를 환불합니다. 미사용 유상 크레딧만 원 결제 카드로 취소됩니다.\n환불 사유를 입력하세요.`, '');
+    const subscription = payment.type === 'subscription';
+    const impact = subscription
+      ? '결제 전액을 원 결제수단으로 취소하고 현재 구독과 다음 자동결제를 즉시 종료합니다.'
+      : '미사용 유상 크레딧만 원 결제 카드로 취소됩니다.';
+    const reason = window.prompt(`"${payment.orgId}" 기관의 결제를 환불합니다. ${impact}\n환불 사유를 입력하세요.`, '');
     if (reason === null) return;
     if (!reason.trim()) { notify('환불 사유를 입력해야 합니다'); return; }
-    if (!window.confirm(`결제 원장을 확인해 남은 유상 크레딧만 환불하고 회수합니다. 계속할까요?`)) return;
+    if (!window.confirm(subscription
+      ? `정기결제 ${Number(payment.amount || 0).toLocaleString()}원을 전액 환불하고 구독·자동갱신을 종료합니다. 계속할까요?`
+      : `결제 원장을 확인해 남은 유상 크레딧만 환불하고 회수합니다. 계속할까요?`)) return;
     setRefundBusy(payment.id);
     try {
       const r = await authFetch(`${SERVER_URL}/console/payments/${payment.id}/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason: reason.trim() }) });
@@ -789,7 +796,7 @@ export default function ConsoleApp() {
     setTestBusy('subscribe');
     logTest(`정액제 테스트 시작 — ${testOrgId}, ${testPlanKey}`);
     try {
-      const regRes = await authFetch(`${SERVER_URL}/console/test/subscribe/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orgId: testOrgId, planKey: testPlanKey }) });
+      const regRes = await authFetch(`${SERVER_URL}/console/test/subscribe/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orgId: testOrgId, planKey: testPlanKey, billingKeyMethod: testSubscriptionMethod }) });
       const reg = await regRes.json().catch(()=>({}));
       if (!regRes.ok) { logTest(`❌ 빌링키 발급 요청 실패: ${errMsg(reg,'실패')}`); return; }
       logTest(`✅ 빌링키 발급 요청 생성됨(issueId=${reg.issueId}, ${reg.amount.toLocaleString()}원) — 카드 등록창 호출...`);
@@ -1451,12 +1458,12 @@ export default function ConsoleApp() {
               <div className="section-title" style={{marginBottom:0}}>환불 ({refundable.length}건)</div>
               <button className={`btn-download ${refundLoading?'btn-calling':''}`} onClick={fetchRefundable} disabled={refundLoading}>{refundLoading?'조회 중...':'새로고침'}</button>
             </div>
-            <div style={{fontSize:12,color:'#94a3b8',marginBottom:14}}>완료(paid)된 크레딧 충전 건만 대상입니다. 결제 원장에서 사용·만료분을 제외한 남은 유상 크레딧만 원 결제 카드로 취소하며, 원장이 없거나 잔액을 확인할 수 없으면 자동 환불하지 않습니다. 정액제 결제는 이 화면에서 환불할 수 없습니다.</div>
+            <div style={{fontSize:12,color:'#94a3b8',marginBottom:14}}>완료된 크레딧 충전과 현재 활성 정기결제가 대상입니다. 충전은 사용·만료분을 제외한 미사용액만 취소합니다. 정기결제는 전액 취소하며 현재 구독과 다음 자동결제가 즉시 종료됩니다. 최신 활성 결제임을 확인할 수 없으면 자동 환불하지 않습니다.</div>
             {refundable.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{refundLoading?'불러오는 중...':'환불 가능한 결제가 없습니다'}</div> : (
               <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
                   <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
-                    <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>금액</th>
+                    <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>종류</th><th style={{padding:'8px 10px'}}>금액</th>
                     <th style={{padding:'8px 10px'}}>요청 상태</th><th style={{padding:'8px 10px'}}>사유</th><th style={{padding:'8px 10px'}}></th>
                   </tr></thead>
                   <tbody>{[...refundable].sort((a:any,b:any)=>(b.refundRequestStatus==='pending'?1:0)-(a.refundRequestStatus==='pending'?1:0))
@@ -1464,6 +1471,7 @@ export default function ConsoleApp() {
                     <tr key={p.id} style={{borderBottom:'1px solid #f1f3f4'}}>
                       <td style={{padding:'10px',color:'#5f6368'}}>{p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '-'}</td>
                       <td style={{padding:'10px'}}>{p.orgId}</td>
+                      <td style={{padding:'10px'}}>{p.type==='subscription' ? `정기결제${p.planKey?` (${p.planKey})`:''}` : '크레딧 충전'}</td>
                       <td style={{padding:'10px',fontWeight:700}}>{p.amount.toLocaleString()}원</td>
                       <td style={{padding:'10px'}}>
                         {p.refundRequestStatus==='pending' ? <span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:'#fff8e1',color:'#754d00'}}>환불 요청됨</span>
@@ -1773,6 +1781,10 @@ export default function ConsoleApp() {
                   <option value="basic">베이직</option>
                   <option value="standard">스탠다드</option>
                   <option value="premium">프리미엄</option>
+                </select>
+                <select className="form-input" style={{width:200,margin:0}} value={testSubscriptionMethod} onChange={e=>setTestSubscriptionMethod(e.target.value)}>
+                  <option value="CARD">신용·체크카드</option>
+                  <option value="TRANSFER">계좌 자동이체</option>
                 </select>
                 <button className="btn-primary" disabled={testBusy==='subscribe'} onClick={testSubscribeFlow}>{testBusy==='subscribe'?'진행 중...':'테스트 등록'}</button>
               </div>

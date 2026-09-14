@@ -161,6 +161,7 @@ export default function App() {
   const [topupBusy, setTopupBusy] = useState(false); // 포트원 결제 요청 처리 중(버튼 중복 클릭 방지)
   const [paymentSuccess, setPaymentSuccess] = useState(null); // 결제 접수 완료 모달 {amount, desc}(null이면 모달 숨김)
   const [subscribeBusy, setSubscribeBusy] = useState(null); // 결제 요청 처리 중인 planKey(중복 클릭 방지)
+  const [subscriptionPaymentMethod, setSubscriptionPaymentMethod] = useState('CARD');
   const [subStatus, setSubStatus] = useState(null); // GET /billing/subscription — {plan, autoRenew, nextChargeAt, lastChargeError, elderCount, monthlyAmount}
   const [subCancelBusy, setSubCancelBusy] = useState(false);
   const [pendingTopup, setPendingTopup] = useState(null); // {amount} — "신청" 클릭 시 결제수단 선택 모달을 띄우기 위한 대기 상태
@@ -629,7 +630,11 @@ export default function App() {
     try {
       const r = await authFetch(`${SERVER_URL}/billing/subscribe/register`, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ planKey, testMode: isPayTestEnabled() }),
+        body: JSON.stringify({
+          planKey,
+          testMode: isPayTestEnabled(),
+          ...(isPayTestEnabled() ? { billingKeyMethod: subscriptionPaymentMethod } : {}),
+        }),
       });
       const d = await r.json().catch(()=>({}));
       if (r.status === 501) {
@@ -2863,6 +2868,8 @@ export default function App() {
           fetchPaymentHistory={fetchPaymentHistory} setPendingTopup={setPendingTopup}
           subStatus={subStatus}
           subCancelBusy={subCancelBusy} cancelSubscription={cancelSubscription} subscribeBusy={subscribeBusy}
+          payTestEnabled={isPayTestEnabled()} subscriptionPaymentMethod={subscriptionPaymentMethod}
+          setSubscriptionPaymentMethod={setSubscriptionPaymentMethod}
           billing={billing} startTrial={startTrial} startPaidPstnTrial={startPaidPstnTrial} startSubscription={startSubscription}
           paymentHistoryLoading={paymentHistoryLoading} paymentHistory={paymentHistory}
           setRefundTarget={setRefundTarget} setRefundReasonPreset={setRefundReasonPreset}
