@@ -1112,6 +1112,7 @@ export default function ConsoleApp() {
               {!opsMetrics ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>지표를 불러오지 못했습니다</div> : (
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
                   {[
+                    {label:'오늘 예약 누락',value:opsMetrics.incidents?.missingScheduledToday||0,danger:true},
                     {label:'발신 준비 고착',value:opsMetrics.incidents?.stuckDispatching||0,danger:true},
                     {label:'링 상태 고착',value:opsMetrics.stuckRinging||0,danger:true},
                     {label:'미확인 알림',value:opsMetrics.incidents?.unacknowledged||0,danger:false},
@@ -1126,6 +1127,20 @@ export default function ConsoleApp() {
                     </div>;
                   })}
                 </div>
+              )}
+              {!!opsMetrics?.incidents?.missingScheduledTargets?.length && (
+                <details style={{marginTop:12,border:'1px solid #f6aea9',borderRadius:8,background:'#fff'}}>
+                  <summary style={{cursor:'pointer',padding:'12px 14px',fontWeight:600,color:'#c5221f'}}>
+                    오늘 예약 누락 대상 {opsMetrics.incidents.missingScheduledTargets.length}명 보기
+                  </summary>
+                  <div style={{borderTop:'1px solid #f1d3d1',padding:'4px 14px 10px'}}>
+                    {opsMetrics.incidents.missingScheduledTargets.map((target:any, index:number) => (
+                      <div key={`${target.orgId}-${target.phoneMasked}-${index}`} style={{display:'grid',gridTemplateColumns:'minmax(120px,1fr) minmax(90px,1fr) 110px 70px',gap:10,padding:'9px 0',borderBottom:'1px solid #f1f3f4',fontSize:13}}>
+                        <span>{target.orgId}</span><strong>{target.name}</strong><span>{target.phoneMasked}</span><span>{target.callTime}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               )}
             </section>
             <section className="section" style={{marginTop:20}}>
