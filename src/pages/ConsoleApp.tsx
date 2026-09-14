@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Chart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
+import 'apexcharts/dist/apexcharts.css';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
   Activity, BarChart3, Phone, CreditCard, Receipt, RotateCcw, Building2,
