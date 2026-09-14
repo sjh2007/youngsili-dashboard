@@ -3,6 +3,8 @@
 // (src/index.tsx가 REACT_APP_TARGET=console일 때 App 대신 이 컴포넌트를 렌더).
 // 권한 판정은 별도 API 없이 GET /console/health 호출 결과(403이면 비superadmin)로 대신한다.
 import { useCallback, useEffect, useState } from 'react';
+import Chart from 'react-apexcharts';
+import type { ApexOptions } from 'apexcharts';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
   Activity, BarChart3, Phone, CreditCard, Receipt, RotateCcw, Building2,
@@ -230,6 +232,13 @@ function GcpStyle() {
         .gcp-console .payment-calendar-expand { width:100%; padding:2px 3px; border:0; border-radius:3px; background:transparent; color:#1a73e8; font-size:10px; font-weight:500; text-align:left; cursor:pointer; }
         .gcp-console .payment-calendar-expand:hover, .gcp-console .payment-calendar-expand:focus-visible { background:#e8f0fe; outline:none; }
         .gcp-console .payment-calendar-empty { margin-top:12px; color:#5f6368; font-size:13px; }
+        .gcp-console .ops-chart { width:100%; min-width:0; }
+        .gcp-console .ops-chart .apexcharts-tooltip { border:1px solid #dadce0 !important; box-shadow:0 4px 14px rgba(60,64,67,.16) !important; }
+        .gcp-console .ops-chart-zero { min-height:150px; display:flex; align-items:center; justify-content:center; gap:16px; border:1px dashed #ceead6; border-radius:8px; background:#f6fbf7; color:#137333; }
+        .gcp-console .ops-chart-zero > span { width:54px; height:54px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:#e6f4ea; font-size:25px; font-weight:700; }
+        .gcp-console .ops-chart-zero strong, .gcp-console .ops-chart-zero small { display:block; }
+        .gcp-console .ops-chart-zero strong { font-size:14px; font-weight:500; }
+        .gcp-console .ops-chart-zero small { margin-top:4px; color:#5f6368; font-size:11.5px; }
         @media (max-width: 760px) {
           .gcp-console .payment-calendar-toolbar { align-items:stretch; flex-direction:column; }
           .gcp-console .payment-calendar-actions { justify-content:flex-start; }
@@ -310,64 +319,68 @@ function Pager({ page, setPage, total }: { page: number; setPage: (fn: (p: numbe
 
 type MonthlyRow = { month: string; total: number; completed: number; missed: number; failed: number; riskCritical: number; riskUrgent: number; riskWarning: number };
 
-/** 월별 통화 스택바(연결/미연결/실패) + 위험알림 추이 라인 — SVG로 직접 그린 경량 차트 */
+const CHART_FONT = "Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const CHART_ANIMATIONS_ENABLED = typeof window === 'undefined' || !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** 월별 통화 스택바(연결/미연결/실패) + 위험알림 추이 라인 */
 function MonthlyChart({ data }: { data: MonthlyRow[] }) {
   if (!data.length) return null;
-  const W = 720, H = 200, padL = 34, padB = 24, padT = 10, padR = 10;
-  const plotW = W - padL - padR, plotH = H - padT - padB;
-  const n = data.length;
-  const slot = plotW / n;
-  const barW = Math.min(38, slot * 0.55);
-  const maxTotal = Math.max(1, ...data.map(d => d.total));
-  const maxRisk = Math.max(1, ...data.map(d => d.riskCritical + d.riskUrgent + d.riskWarning));
-  const yFor = (v: number) => padT + plotH - (v / maxTotal) * plotH;
-  const riskYFor = (v: number) => padT + plotH - (v / maxRisk) * plotH * 0.85; // 살짝 여유(라인이 막대 위에 안 붙게)
+  const options: ApexOptions = {
+    chart: { type:'line', stacked:true, toolbar:{show:false}, fontFamily:CHART_FONT, animations:{enabled:CHART_ANIMATIONS_ENABLED,speed:350} },
+    colors:['#34a853','#f9ab00','#d93025','#7b1fa2'],
+    dataLabels:{enabled:false}, stroke:{width:[0,0,0,3],curve:'smooth'},
+    plotOptions:{bar:{columnWidth:'48%',borderRadius:3}},
+    grid:{borderColor:'#e8eaed',strokeDashArray:3,padding:{left:4,right:4}},
+    xaxis:{categories:data.map(d=>d.month.slice(2).replace('-','.')),axisBorder:{color:'#dadce0'},axisTicks:{show:false},labels:{style:{colors:'#5f6368',fontSize:'11px'}}},
+    yaxis:[
+      {title:{text:'통화 건수',style:{color:'#5f6368',fontSize:'11px',fontWeight:500}},labels:{formatter:v=>Math.round(v).toLocaleString(),style:{colors:'#5f6368'}}},
+      {opposite:true,seriesName:'위험알림',title:{text:'위험알림',style:{color:'#7b1fa2',fontSize:'11px',fontWeight:500}},labels:{formatter:v=>Math.round(v).toLocaleString(),style:{colors:'#7b1fa2'}}},
+    ],
+    legend:{position:'top',horizontalAlign:'left',fontSize:'12px',labels:{colors:'#5f6368'},markers:{size:6}},
+    tooltip:{shared:true,intersect:false,y:{formatter:v=>`${Math.round(v).toLocaleString()}건`}},
+  };
+  const series:any = [
+    {name:'연결',type:'column',data:data.map(d=>d.completed)},
+    {name:'미연결',type:'column',data:data.map(d=>d.missed)},
+    {name:'실패',type:'column',data:data.map(d=>d.failed)},
+    {name:'위험알림',type:'line',data:data.map(d=>d.riskCritical+d.riskUrgent+d.riskWarning)},
+  ];
+  return <div className="ops-chart" role="img" aria-label="월별 연결, 미연결, 실패 통화와 위험알림 추이 차트"><Chart options={options} series={series} type="line" height={330}/></div>;
+}
 
-  const gridLines = [0, 0.25, 0.5, 0.75, 1];
-  const riskPoints = data.map((d, i) => {
-    const x = padL + slot * i + slot / 2;
-    const y = riskYFor(d.riskCritical + d.riskUrgent + d.riskWarning);
-    return { x, y };
-  });
-  const linePath = riskPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+function SafetyIncidentChart({ metrics }: { metrics: any }) {
+  const incidents = metrics?.incidents;
+  if (!incidents) return null;
+  const rows = [
+    ['예약 누락', incidents.missingScheduledToday || 0], ['알림 전달 보류', incidents.alertPersistenceFailures || 0],
+    ['발신 준비 고착', incidents.stuckDispatching || 0], ['링 상태 고착', metrics.stuckRinging || 0],
+    ['미확인', incidents.unacknowledged || 0], ['확인 지연', incidents.overdueUnacknowledged || 0],
+    ['조치중', incidents.inProgress || 0], ['조치 지연', incidents.overdueInProgress || 0],
+  ] as [string, number][];
+  const total = rows.reduce((sum,row)=>sum+row[1],0);
+  if (total === 0) return <div className="ops-chart-zero"><span>0</span><div><strong>현재 미해결 안전 운영 사건 없음</strong><small>최근 조회 시점 기준입니다.</small></div></div>;
+  const options:ApexOptions = {
+    chart:{type:'bar',toolbar:{show:false},fontFamily:CHART_FONT,animations:{enabled:CHART_ANIMATIONS_ENABLED,speed:350}}, colors:['#c5221f'], dataLabels:{enabled:false},
+    plotOptions:{bar:{horizontal:true,borderRadius:3,barHeight:'56%',distributed:true}},
+    xaxis:{categories:rows.map(r=>r[0]),labels:{formatter:v=>Math.round(Number(v)).toString(),style:{colors:'#5f6368'}}},
+    yaxis:{labels:{style:{colors:'#3c4043',fontSize:'11px'}}}, grid:{borderColor:'#e8eaed',strokeDashArray:3},
+    legend:{show:false}, tooltip:{y:{formatter:v=>`${Math.round(v)}건`}},
+  };
+  return <div className="ops-chart" role="img" aria-label={`안전 운영 사건 유형별 현황, 총 ${total}건`}><Chart options={options} series={[{name:'사건',data:rows.map(r=>r[1])}]} type="bar" height={270}/></div>;
+}
 
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block'}}>
-      {/* 옅은 그리드 */}
-      {gridLines.map((g,i) => {
-        const y = padT + plotH * (1-g);
-        return <line key={i} x1={padL} x2={W-padR} y1={y} y2={y} stroke="#e8eaed" strokeWidth={1} />;
-      })}
-      {/* Y축 라벨(전체 발신 기준) */}
-      {gridLines.map((g,i) => (
-        <text key={i} x={padL-6} y={padT + plotH*(1-g)+4} fontSize={9.5} fill="#9aa0a6" textAnchor="end" fontFamily="Roboto Mono, monospace">
-          {Math.round(maxTotal*g)}
-        </text>
-      ))}
-      {/* 스택 바: 연결(초록) / 미연결(호박) / 실패(빨강) */}
-      {data.map((d, i) => {
-        const x = padL + slot*i + (slot-barW)/2;
-        const yCompleted = yFor(d.completed);
-        const yMissedTop = yFor(d.completed + d.missed);
-        const yFailedTop = yFor(d.completed + d.missed + d.failed);
-        const base = padT + plotH;
-        return (
-          <g key={d.month}>
-            <rect x={x} y={yCompleted} width={barW} height={Math.max(0, base-yCompleted)} fill="#34a853" rx={2} />
-            <rect x={x} y={yMissedTop} width={barW} height={Math.max(0, yCompleted-yMissedTop)} fill="#f9ab00" />
-            <rect x={x} y={yFailedTop} width={barW} height={Math.max(0, yMissedTop-yFailedTop)} fill="#d93025" rx={0} />
-            <text x={x+barW/2} y={H-6} fontSize={10.5} fill="#5f6368" textAnchor="middle">{d.month.slice(2).replace('-', '.')}</text>
-          </g>
-        );
-      })}
-      {/* 위험알림 추이 라인 */}
-      <path d={linePath} fill="none" stroke="#7b1fa2" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-      {riskPoints.map((p,i) => {
-        const isLast = i === riskPoints.length-1;
-        return <circle key={i} cx={p.x} cy={p.y} r={isLast?4:2.5} fill="#7b1fa2" stroke="#fff" strokeWidth={isLast?1.5:0} />;
-      })}
-    </svg>
-  );
+function OrganizationUsageChart({ data, orgName }: { data:any[]; orgName:(orgId:string)=>string }) {
+  if (!data.length) return null;
+  const top = data.slice().sort((a,b)=>Number(b.total||0)-Number(a.total||0)).slice(0,10);
+  const options:ApexOptions = {
+    chart:{type:'bar',toolbar:{show:false},fontFamily:CHART_FONT,animations:{enabled:CHART_ANIMATIONS_ENABLED,speed:350}}, colors:['#1a73e8','#34a853'], dataLabels:{enabled:false},
+    plotOptions:{bar:{horizontal:true,borderRadius:3,barHeight:'62%'}},
+    xaxis:{categories:top.map(o=>orgName(o.orgId)),labels:{formatter:v=>Math.round(Number(v)).toLocaleString(),style:{colors:'#5f6368'}}},
+    yaxis:{labels:{maxWidth:190,style:{colors:'#3c4043',fontSize:'11px'}}},
+    grid:{borderColor:'#e8eaed',strokeDashArray:3}, legend:{position:'top',horizontalAlign:'left',fontSize:'12px'},
+    tooltip:{shared:true,intersect:false,y:{formatter:v=>`${Math.round(v).toLocaleString()}건`}},
+  };
+  return <div className="ops-chart" role="img" aria-label="기관별 전체 발신과 연결 통화 상위 10개 기관 비교 차트"><Chart options={options} series={[{name:'전체 발신',data:top.map(o=>o.total||0)},{name:'연결',data:top.map(o=>o.completed||0)}]} type="bar" height={Math.max(300,top.length*42)}/></div>;
 }
 
 const NAV = [
@@ -1170,24 +1183,27 @@ export default function ConsoleApp() {
               <div className="section-title" style={{marginBottom:4}}>안전 운영 사건</div>
               <div style={{fontSize:12,color:'#5f6368',marginBottom:12}}>전체 미완료 사건 · 미확인 15분, 조치중 60분 초과 시 지연으로 표시</div>
               {!opsMetrics ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>지표를 불러오지 못했습니다</div> : (
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
-                  {[
-                    {label:'오늘 예약 누락',value:opsMetrics.incidents?.missingScheduledToday||0,danger:true},
-                    {label:'알림 전달 보류',value:opsMetrics.incidents?.alertPersistenceFailures||0,danger:true},
-                    {label:'발신 준비 고착',value:opsMetrics.incidents?.stuckDispatching||0,danger:true},
-                    {label:'링 상태 고착',value:opsMetrics.stuckRinging||0,danger:true},
-                    {label:'미확인 알림',value:opsMetrics.incidents?.unacknowledged||0,danger:false},
-                    {label:'확인 지연',value:opsMetrics.incidents?.overdueUnacknowledged||0,danger:true},
-                    {label:'조치중',value:opsMetrics.incidents?.inProgress||0,danger:false},
-                    {label:'조치 지연',value:opsMetrics.incidents?.overdueInProgress||0,danger:true},
-                  ].map((item:any) => {
-                    const warning = item.danger && item.value > 0;
-                    return <div key={item.label} style={{border:`1px solid ${warning?'#f6aea9':'#dadce0'}`,borderRadius:8,padding:'12px 14px',background:warning?'#fce8e6':'#fff'}}>
-                      <div style={{fontSize:12,color:'#5f6368'}}>{item.label}</div>
-                      <div style={{fontSize:24,fontWeight:700,color:warning?'#c5221f':'#202124',marginTop:3}}>{item.value}<span style={{fontSize:12,fontWeight:500,marginLeft:3}}>건</span></div>
-                    </div>;
-                  })}
-                </div>
+                <>
+                  <SafetyIncidentChart metrics={opsMetrics}/>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginTop:12}}>
+                    {[
+                      {label:'오늘 예약 누락',value:opsMetrics.incidents?.missingScheduledToday||0,danger:true},
+                      {label:'알림 전달 보류',value:opsMetrics.incidents?.alertPersistenceFailures||0,danger:true},
+                      {label:'발신 준비 고착',value:opsMetrics.incidents?.stuckDispatching||0,danger:true},
+                      {label:'링 상태 고착',value:opsMetrics.stuckRinging||0,danger:true},
+                      {label:'미확인 알림',value:opsMetrics.incidents?.unacknowledged||0,danger:false},
+                      {label:'확인 지연',value:opsMetrics.incidents?.overdueUnacknowledged||0,danger:true},
+                      {label:'조치중',value:opsMetrics.incidents?.inProgress||0,danger:false},
+                      {label:'조치 지연',value:opsMetrics.incidents?.overdueInProgress||0,danger:true},
+                    ].map((item:any) => {
+                      const warning = item.danger && item.value > 0;
+                      return <div key={item.label} style={{border:`1px solid ${warning?'#f6aea9':'#dadce0'}`,borderRadius:8,padding:'12px 14px',background:warning?'#fce8e6':'#fff'}}>
+                        <div style={{fontSize:12,color:'#5f6368'}}>{item.label}</div>
+                        <div style={{fontSize:24,fontWeight:700,color:warning?'#c5221f':'#202124',marginTop:3}}>{item.value}<span style={{fontSize:12,fontWeight:500,marginLeft:3}}>건</span></div>
+                      </div>;
+                    })}
+                  </div>
+                </>
               )}
               {!!opsMetrics?.incidents?.missingScheduledTargets?.length && (
                 <details style={{marginTop:12,border:'1px solid #f6aea9',borderRadius:8,background:'#fff'}}>
@@ -1246,12 +1262,6 @@ export default function ConsoleApp() {
               </div>
               {!statsData ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{statsLoading?'불러오는 중...':'데이터 없음 — 조회 버튼을 눌러주세요'}</div> : (
                 <>
-                  <div style={{display:'flex',gap:18,flexWrap:'wrap',alignItems:'center',fontSize:12,color:'#5f6368',marginBottom:4}}>
-                    <span><span style={{display:'inline-block',width:9,height:9,borderRadius:2,background:'#34a853',marginRight:5}}/>연결</span>
-                    <span><span style={{display:'inline-block',width:9,height:9,borderRadius:2,background:'#f9ab00',marginRight:5}}/>미연결</span>
-                    <span><span style={{display:'inline-block',width:9,height:9,borderRadius:2,background:'#d93025',marginRight:5}}/>실패</span>
-                    <span><span style={{display:'inline-block',width:9,height:9,borderRadius:'50%',background:'#7b1fa2',marginRight:5}}/>위험알림 추이(우측 축)</span>
-                  </div>
                   <MonthlyChart data={statsData.monthly || []} />
                   <div style={{overflowX:'auto',marginTop:18}}>
                     <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
@@ -1279,6 +1289,7 @@ export default function ConsoleApp() {
             {statsData && statsData.byOrg?.length > 0 && (
               <section className="section">
                 <div className="section-title" style={{marginBottom:10}}>기관별 이용 순위 (선택 기간 합계)</div>
+                <OrganizationUsageChart data={statsData.byOrg} orgName={orgName}/>
                 <div style={{overflowX:'auto'}}>
                   <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
                     <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
