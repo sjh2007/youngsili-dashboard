@@ -279,6 +279,7 @@ export const OpsMetricsSchema = loose({
     missingScheduledTargets: z.array(loose({
       orgId: z.string(), name: z.string(), phoneMasked: z.string(), callTime: z.string(),
     })),
+    alertPersistenceFailures: z.number(),
     stuckDispatching: z.number(),
     unacknowledged: z.number(),
     inProgress: z.number(),

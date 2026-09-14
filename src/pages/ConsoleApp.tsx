@@ -1113,6 +1113,7 @@ export default function ConsoleApp() {
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
                   {[
                     {label:'오늘 예약 누락',value:opsMetrics.incidents?.missingScheduledToday||0,danger:true},
+                    {label:'알림 전달 보류',value:opsMetrics.incidents?.alertPersistenceFailures||0,danger:true},
                     {label:'발신 준비 고착',value:opsMetrics.incidents?.stuckDispatching||0,danger:true},
                     {label:'링 상태 고착',value:opsMetrics.stuckRinging||0,danger:true},
                     {label:'미확인 알림',value:opsMetrics.incidents?.unacknowledged||0,danger:false},
