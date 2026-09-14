@@ -473,6 +473,7 @@ export default function ConsoleApp() {
   const [testPayMethod, setTestPayMethod] = useState('CARD');
   const [testPlanKey, setTestPlanKey] = useState('basic');
   const [testSubscriptionMethod, setTestSubscriptionMethod] = useState('CARD');
+  const [testCardBin, setTestCardBin] = useState('');
   const [testRefundPaymentId, setTestRefundPaymentId] = useState('');
   const [testRefundReason, setTestRefundReason] = useState('테스트 환불 요청');
   const [testBusy, setTestBusy] = useState('');
@@ -815,6 +816,25 @@ export default function ConsoleApp() {
       if (!confirmRes.ok) { logTest(`❌ 첫 결제 승인 실패: ${errMsg(confirm,'실패')}`); return; }
       logTest(`✅ 첫 결제 승인 완료(${confirm.amount?.toLocaleString()}원) — 자동결제 등록됨`);
       notify('정액제 테스트 완료', 'success');
+    } catch (e:any) { logTest(`❌ 오류: ${e?.message || e}`); }
+    finally { setTestBusy(''); }
+  };
+
+  const testSubscribeDirectFlow = async () => {
+    if (!testOrgId) { notify('먼저 대상 기관을 선택하세요'); return; }
+    if (!/^\d{6}$/.test(testCardBin)) { notify('카드 BIN 앞 6자리를 입력하세요'); return; }
+    setTestBusy('subscribe-direct');
+    logTest(`샌드박스 API 정액제 테스트 시작 — ${testOrgId}, ${testPlanKey}`);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/test/subscribe/direct`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ orgId: testOrgId, planKey: testPlanKey, cardBin: testCardBin }),
+      });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { logTest(`❌ 샌드박스 자동결제 실패: ${errMsg(d,'실패')}`); return; }
+      logTest(`✅ 빌링키 발급 및 첫 결제 승인 완료(${d.amount?.toLocaleString()}원) — 자동결제 등록됨`);
+      notify('샌드박스 정액제 테스트 완료', 'success');
+      setTestCardBin('');
     } catch (e:any) { logTest(`❌ 오류: ${e?.message || e}`); }
     finally { setTestBusy(''); }
   };
@@ -1789,6 +1809,25 @@ export default function ConsoleApp() {
                 <button className="btn-primary" disabled={testBusy==='subscribe'} onClick={testSubscribeFlow}>{testBusy==='subscribe'?'진행 중...':'테스트 등록'}</button>
               </div>
               <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>선택한 기관에 등록된 어르신 수가 있어야 금액 계산이 됩니다.</div>
+              <div style={{marginTop:16,paddingTop:16,borderTop:'1px solid #e2e8f0'}}>
+                <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>토스 샌드박스 API 테스트</div>
+                <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                  <input
+                    className="form-input"
+                    style={{width:220,margin:0}}
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoComplete="off"
+                    value={testCardBin}
+                    onChange={e=>setTestCardBin(e.target.value.replace(/\D/g,'').slice(0,6))}
+                    placeholder="카드 BIN 앞 6자리"
+                  />
+                  <button className="btn-secondary" disabled={!!testBusy} onClick={testSubscribeDirectFlow}>
+                    {testBusy==='subscribe-direct'?'검증 중...':'API로 빌링·1,000원 테스트'}
+                  </button>
+                </div>
+                <div style={{fontSize:12,color:'#64748b',marginTop:8}}>전체 카드번호·생년월일·비밀번호는 입력받지 않습니다. BIN은 요청 처리 중에만 사용하며 저장하거나 로그에 남기지 않습니다.</div>
+              </div>
             </section>
 
             <section className="section" style={{marginBottom:16}}>
