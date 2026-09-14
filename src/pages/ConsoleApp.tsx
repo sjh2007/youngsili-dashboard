@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
-import { OpsMetricsSchema, parseOr } from '../schemas';
+import { CallEngineProviderSchema, OpsMetricsSchema, parseOr } from '../schemas';
 // App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적) —
 // 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
 // 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
@@ -419,6 +419,10 @@ export default function ConsoleApp() {
   const [health, setHealth] = useState<any>(null);
   const [activeCalls, setActiveCalls] = useState<any[]>([]);
   const [opsMetrics, setOpsMetrics] = useState<any>(null);
+  const [callEngineProvider, setCallEngineProvider] = useState<any>(null);
+  const [nextCallEngineProvider, setNextCallEngineProvider] = useState<'gemini'|'openai'>('gemini');
+  const [callEngineReason, setCallEngineReason] = useState('');
+  const [callEngineBusy, setCallEngineBusy] = useState(false);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
@@ -537,10 +541,11 @@ export default function ConsoleApp() {
   const fetchHealth = async () => {
     setLoadingHealth(true);
     try {
-      const [hRes, cRes, mRes] = await Promise.all([
+      const [hRes, cRes, mRes, providerRes] = await Promise.all([
         authFetch(`${SERVER_URL}/console/health`),
         authFetch(`${SERVER_URL}/console/calls/active`),
         authFetch(`${SERVER_URL}/admin/metrics?hours=24`),
+        authFetch(`${SERVER_URL}/admin/call-engine/provider`),
       ]);
       const hData = await requireJson(hRes, '시스템 상태 조회 실패');
       const cData = await requireJson(cRes, '진행 중 통화 조회 실패');
@@ -553,8 +558,38 @@ export default function ConsoleApp() {
         setOpsMetrics(null);
         notify(metricsError?.message || '안전 운영 지표 조회 실패');
       }
+      try {
+        const providerData = parseOr(CallEngineProviderSchema, await requireJson(providerRes, 'AI 엔진 설정 조회 실패'), null);
+        setCallEngineProvider(providerData);
+        if (providerData?.provider) setNextCallEngineProvider(providerData.provider);
+      } catch (providerError: any) {
+        setCallEngineProvider(null);
+        notify(providerError?.message || 'AI 엔진 설정 조회 실패');
+      }
     } catch (e:any) { notify(e?.message || '시스템 상태 조회 실패'); }
     finally { setLoadingHealth(false); }
+  };
+
+  const updateCallEngineProvider = async () => {
+    const reason = callEngineReason.trim();
+    if (reason.length < 3) { notify('전환 사유를 3자 이상 입력해 주세요.'); return; }
+    if (nextCallEngineProvider === 'openai' && callEngineProvider?.runtime?.openaiReady !== true) {
+      notify('OpenAI Realtime이 통화 가능한 상태가 아니어서 전환할 수 없습니다.'); return;
+    }
+    setCallEngineBusy(true);
+    try {
+      const response = await authFetch(`${SERVER_URL}/admin/call-engine/provider`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ provider: nextCallEngineProvider, reason }),
+      });
+      const data = parseOr(CallEngineProviderSchema, await requireJson(response, 'AI 엔진 전환 실패'), null);
+      if (!data) throw new Error('AI 엔진 응답 형식이 올바르지 않습니다.');
+      setCallEngineProvider(data);
+      setNextCallEngineProvider(data.provider);
+      setCallEngineReason('');
+      notify(`신규 일반전화 엔진을 ${data.provider === 'openai' ? 'OpenAI Realtime' : 'Gemini Live'}로 변경했습니다.`, 'success');
+    } catch (error:any) { notify(error?.message || 'AI 엔진 전환 실패'); }
+    finally { setCallEngineBusy(false); }
   };
 
   const fetchHistory = async () => {
@@ -1088,6 +1123,31 @@ export default function ConsoleApp() {
 
         {page === 'health' && (
           <div className="fade-in">
+            <section className="section" style={{marginBottom:20}}>
+              <div className="section-title" style={{marginBottom:4}}>일반전화 AI 엔진</div>
+              <div style={{fontSize:12,color:'#5f6368',marginBottom:14}}>변경 사항은 진행 중인 통화에 영향을 주지 않고, 저장 이후 시작하는 신규 070 통화부터 적용됩니다.</div>
+              {!callEngineProvider ? <div style={{color:'#c5221f',fontSize:14}}>엔진 설정을 불러오지 못했습니다. 새로고침 후 다시 확인해 주세요.</div> : <>
+                <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:14}}>
+                  {(['gemini','openai'] as const).map(provider => {
+                    const selected = nextCallEngineProvider === provider;
+                    const unavailable = provider === 'openai' && callEngineProvider.runtime?.openaiReady !== true;
+                    return <button key={provider} type="button" disabled={callEngineBusy || unavailable} onClick={()=>setNextCallEngineProvider(provider)} style={{textAlign:'left',minWidth:230,flex:'1 1 230px',padding:'14px 16px',borderRadius:10,border:`2px solid ${selected?'#246beb':'#e2e8f0'}`,background:selected?'#f4f7ff':'#fff',cursor:unavailable?'not-allowed':'pointer',opacity:unavailable ? .55 : 1}}>
+                      <div style={{fontSize:15,fontWeight:800,color:'#0f172a'}}>{provider === 'gemini' ? 'Gemini Live' : 'OpenAI Realtime'}</div>
+                      <div style={{fontSize:12,color:'#64748b',marginTop:4}}>{provider === callEngineProvider.provider ? '현재 신규 통화에 적용 중' : unavailable ? '사용 준비 필요' : '선택 가능'}</div>
+                    </button>;
+                  })}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'minmax(220px,1fr) auto',gap:10,alignItems:'center'}}>
+                  <input className="form-input" value={callEngineReason} onChange={e=>setCallEngineReason(e.target.value)} maxLength={300} placeholder="전환 사유를 입력하세요 (필수)" aria-label="AI 엔진 전환 사유"/>
+                  <button className={`btn-download ${callEngineBusy?'btn-calling':''}`} disabled={callEngineBusy || nextCallEngineProvider===callEngineProvider.provider} onClick={updateCallEngineProvider}>{callEngineBusy?'변경 중...':'선택한 엔진 적용'}</button>
+                </div>
+                <div style={{fontSize:12,color:callEngineProvider.runtime?.reachable?'#188038':'#c5221f',marginTop:10}}>
+                  콜엔진 {callEngineProvider.runtime?.reachable?'연결됨':'상태 확인 실패'} · OpenAI Realtime {callEngineProvider.runtime?.openaiReady===true?'통화 가능':callEngineProvider.runtime?.openaiConfigured===true?'사용 불가':'키 미설정 또는 확인 불가'}
+                  {callEngineProvider.changedAt && ` · 마지막 변경 ${new Date(callEngineProvider.changedAt).toLocaleString()} ${callEngineProvider.changedByEmail || ''}`}
+                </div>
+                {callEngineProvider.runtime?.openaiConfigured===true && callEngineProvider.runtime?.openaiReady!==true && <div style={{fontSize:12,color:'#b45309',marginTop:6}}>OpenAI 계정의 API 크레딧과 Realtime 사용 권한을 확인해 주세요.</div>}
+              </>}
+            </section>
             <section className="section">
               <div className="script-editor-header" style={{marginBottom:10}}>
                 <div className="section-title" style={{marginBottom:0}}>시스템 상태</div>

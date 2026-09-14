@@ -287,3 +287,17 @@ export const OpsMetricsSchema = loose({
     overdueInProgress: z.number(),
   }),
 });
+
+export const CallEngineProviderSchema = loose({
+  provider: z.enum(['gemini', 'openai']),
+  reason: z.string().default(''),
+  changedAt: z.string().nullable().default(null),
+  changedByEmail: z.string().default(''),
+  runtime: loose({
+    reachable: z.boolean(),
+    openaiConfigured: z.boolean().nullable(),
+    openaiReady: z.boolean().optional(),
+    openaiDetail: z.string().optional(),
+    detail: z.string().optional(),
+  }),
+});
