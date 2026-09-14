@@ -333,10 +333,14 @@ function MonthlyChart({ data }: { data: MonthlyRow[] }) {
     plotOptions:{bar:{columnWidth:'48%',borderRadius:3}},
     grid:{borderColor:'#e8eaed',strokeDashArray:3,padding:{left:4,right:4}},
     xaxis:{categories:data.map(d=>d.month.slice(2).replace('-','.')),axisBorder:{color:'#dadce0'},axisTicks:{show:false},labels:{style:{colors:'#5f6368',fontSize:'11px'}}},
-    yaxis:[
-      {title:{text:'통화 건수',style:{color:'#5f6368',fontSize:'11px',fontWeight:500}},labels:{formatter:v=>Math.round(v).toLocaleString(),style:{colors:'#5f6368'}}},
-      {opposite:true,seriesName:'위험알림',title:{text:'위험알림',style:{color:'#7b1fa2',fontSize:'11px',fontWeight:500}},labels:{formatter:v=>Math.round(v).toLocaleString(),style:{colors:'#7b1fa2'}}},
-    ],
+    // 모든 시리즈가 건수 단위이므로 하나의 축을 공유한다. ApexCharts 7은 혼합
+    // 시리즈 수와 yaxis 배열 수가 다르면 setSeriesYAxisMappings에서 예외가 난다.
+    yaxis:{
+      min:0,
+      forceNiceScale:true,
+      title:{text:'건수',style:{color:'#5f6368',fontSize:'11px',fontWeight:500}},
+      labels:{formatter:v=>Math.round(v).toLocaleString(),style:{colors:'#5f6368'}},
+    },
     legend:{position:'top',horizontalAlign:'left',fontSize:'12px',labels:{colors:'#5f6368'},markers:{size:6}},
     tooltip:{shared:true,intersect:false,y:{formatter:v=>`${Math.round(v).toLocaleString()}건`}},
   };
