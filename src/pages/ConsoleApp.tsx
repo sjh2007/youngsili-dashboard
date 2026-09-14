@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
+import { OpsMetricsSchema, parseOr } from '../schemas';
 // App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적) —
 // 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
 // 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
@@ -417,6 +418,7 @@ export default function ConsoleApp() {
 
   const [health, setHealth] = useState<any>(null);
   const [activeCalls, setActiveCalls] = useState<any[]>([]);
+  const [opsMetrics, setOpsMetrics] = useState<any>(null);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
@@ -535,14 +537,22 @@ export default function ConsoleApp() {
   const fetchHealth = async () => {
     setLoadingHealth(true);
     try {
-      const [hRes, cRes] = await Promise.all([
+      const [hRes, cRes, mRes] = await Promise.all([
         authFetch(`${SERVER_URL}/console/health`),
         authFetch(`${SERVER_URL}/console/calls/active`),
+        authFetch(`${SERVER_URL}/admin/metrics?hours=24`),
       ]);
       const hData = await requireJson(hRes, '시스템 상태 조회 실패');
       const cData = await requireJson(cRes, '진행 중 통화 조회 실패');
       if (hData && Array.isArray(hData.components)) setHealth(hData);
       if (Array.isArray(cData)) setActiveCalls(cData);
+      try {
+        const mData = await requireJson(mRes, '안전 운영 지표 조회 실패');
+        setOpsMetrics(parseOr(OpsMetricsSchema, mData, null));
+      } catch (metricsError: any) {
+        setOpsMetrics(null);
+        notify(metricsError?.message || '안전 운영 지표 조회 실패');
+      }
     } catch (e:any) { notify(e?.message || '시스템 상태 조회 실패'); }
     finally { setLoadingHealth(false); }
   };
@@ -1093,6 +1103,28 @@ export default function ConsoleApp() {
                       {c.detail && <div style={{fontSize:12,color:'#c5221f'}}>{c.detail}</div>}
                     </div>
                   ))}
+                </div>
+              )}
+            </section>
+            <section className="section" style={{marginTop:20}}>
+              <div className="section-title" style={{marginBottom:4}}>안전 운영 사건</div>
+              <div style={{fontSize:12,color:'#5f6368',marginBottom:12}}>전체 미완료 사건 · 미확인 15분, 조치중 60분 초과 시 지연으로 표시</div>
+              {!opsMetrics ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>지표를 불러오지 못했습니다</div> : (
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
+                  {[
+                    {label:'발신 준비 고착',value:opsMetrics.incidents?.stuckDispatching||0,danger:true},
+                    {label:'링 상태 고착',value:opsMetrics.stuckRinging||0,danger:true},
+                    {label:'미확인 알림',value:opsMetrics.incidents?.unacknowledged||0,danger:false},
+                    {label:'확인 지연',value:opsMetrics.incidents?.overdueUnacknowledged||0,danger:true},
+                    {label:'조치중',value:opsMetrics.incidents?.inProgress||0,danger:false},
+                    {label:'조치 지연',value:opsMetrics.incidents?.overdueInProgress||0,danger:true},
+                  ].map((item:any) => {
+                    const warning = item.danger && item.value > 0;
+                    return <div key={item.label} style={{border:`1px solid ${warning?'#f6aea9':'#dadce0'}`,borderRadius:8,padding:'12px 14px',background:warning?'#fce8e6':'#fff'}}>
+                      <div style={{fontSize:12,color:'#5f6368'}}>{item.label}</div>
+                      <div style={{fontSize:24,fontWeight:700,color:warning?'#c5221f':'#202124',marginTop:3}}>{item.value}<span style={{fontSize:12,fontWeight:500,marginLeft:3}}>건</span></div>
+                    </div>;
+                  })}
                 </div>
               )}
             </section>

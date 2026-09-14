@@ -269,3 +269,16 @@ export const CreditLedgerSchema = loose({
   entries: z.array(loose({ id: z.string(), type: z.string(), amount: z.number(),
     balanceAfter: z.number(), productName: z.string(), occurredAt: z.string(), expiresAt: z.string().nullable() })),
 });
+
+// GET /admin/metrics — 운영자가 안부전화 누락·미처리 사건을 조기에 발견하는 롤링 지표.
+export const OpsMetricsSchema = loose({
+  windowHours: z.number(),
+  stuckRinging: z.number(),
+  incidents: loose({
+    stuckDispatching: z.number(),
+    unacknowledged: z.number(),
+    inProgress: z.number(),
+    overdueUnacknowledged: z.number(),
+    overdueInProgress: z.number(),
+  }),
+});
