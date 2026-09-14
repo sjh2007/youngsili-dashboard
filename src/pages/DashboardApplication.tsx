@@ -650,8 +650,14 @@ export default function App() {
         billingKeyMethod: reg.billingKeyMethod,
         issueId: reg.issueId,
         issueName: reg.issueName,
-        // 이니시스는 customer.phoneNumber가 필수(REQUIRED) — 없으면 issue-prepare 자체가 400.
-        customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || undefined },
+        // 토스페이먼츠는 customerId, 이니시스는 phoneNumber가 필수이므로 서버가 정한
+        // 기관 식별자와 현재 사용자 연락처를 함께 보낸다.
+        customer: {
+          customerId: reg.customerId,
+          email: me?.email || undefined,
+          fullName: me?.name || me?.orgName || '고객',
+          phoneNumber: me?.phone || undefined,
+        },
       });
       if (response?.code !== undefined) { notify(`자동결제 등록 실패: ${response.message || response.code}`); return; }
 

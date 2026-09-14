@@ -798,7 +798,7 @@ export default function ConsoleApp() {
       const response = await requestIssueBillingKey({
         storeId: reg.storeId, channelKey: reg.channelKey, billingKeyMethod: reg.billingKeyMethod,
         issueId: reg.issueId, issueName: reg.issueName,
-        customer: { email: authUser.email, fullName: '테스트', phoneNumber: '01000000000' },
+        customer: { customerId: reg.customerId, email: authUser.email, fullName: '테스트', phoneNumber: '01000000000' },
       });
       if (response?.code !== undefined) { logTest(`❌ 카드 등록 실패: ${response.message || response.code}`); return; }
       logTest(`✅ 카드 등록 완료(billingKey=${response.billingKey.slice(0,12)}...) — 첫 결제 승인 요청...`);

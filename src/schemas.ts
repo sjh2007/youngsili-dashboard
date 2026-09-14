@@ -96,6 +96,7 @@ export const SubscribeRegisterResponseSchema = loose({
   channelKey: z.string(),
   billingKeyMethod: z.enum(['CARD', 'EASY_PAY']),
   issueName: z.string(),
+  customerId: z.string(),
   amount: z.number(),
 });
 export type SubscribeRegisterResponse = z.infer<typeof SubscribeRegisterResponseSchema>;
