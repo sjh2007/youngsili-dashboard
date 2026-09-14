@@ -61,7 +61,7 @@ export const APP_WEEKLY_FREQUENCIES = [1, 3, 5];
 export const billingPlanName = (key: string | null | undefined) => {
   if (!key) return '-';
   const match = /^app(100|200|300|400|500)_w([135])$/.exec(key);
-  const pstn = {pstn_light:'일반전화 라이트',pstn_standard:'일반전화 스탠다드',pstn_premium:'일반전화 프리미엄'}[key];
+  const pstn = {pstn_trial:'일반전화 30일 무료체험',pstn_light:'일반전화 라이트',pstn_standard:'일반전화 스탠다드',pstn_premium:'일반전화 프리미엄'}[key];
   return match ? `앱 ${match[1]}명 · 주 ${match[2]}회` : (pstn || UPGRADE_PLANS.find(p=>p.key===key)?.name || key);
 };
 export const PSTN_SUBSCRIPTION_PLANS = [
@@ -69,6 +69,11 @@ export const PSTN_SUBSCRIPTION_PLANS = [
   {key:'pstn_standard',name:'스탠다드',price:35000,chargedAmount:38500,includedCalls:42,minutes:126,channels:5,recommended:true},
   {key:'pstn_premium',name:'프리미엄',price:70000,chargedAmount:77000,includedCalls:83,minutes:249,channels:10},
 ];
+
+export const PSTN_TRIAL_PLAN = {
+  key:'pstn_trial', name:'30일 무료체험', price:7000, chargedAmount:7000,
+  includedCalls:30, minutes:90, channels:1,
+};
 // 070 일반전화 월 이용료. 통화 크레딧은 포함하지 않으며 카드 단건 충전과 분리한다.
 // 안전% 목표는 고객 화면에 노출하지 않는다. 근거와 원가 상한은 proposals/일반전화 방식 원가 계산.md 참조.
 export const PSTN_PLANS = [

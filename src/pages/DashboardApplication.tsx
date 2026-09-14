@@ -470,6 +470,52 @@ export default function App() {
       setSubscribeBusy(null);
     }
   };
+  // 일반전화 무료체험은 통화료 대신 070 번호 기본요금 7,000원을 카드로 먼저 결제한다.
+  // 체험 권한은 클라이언트 결제창 결과가 아니라 서버가 PortOne 웹훅을 재검증한 뒤에만 열린다.
+  const startPaidPstnTrial = async () => {
+    if (subscribeBusy) return;
+    setSubscribeBusy('pstn_trial');
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/trial`, { method:'POST' });
+      const d = await r.json().catch(()=>({}));
+      if (r.status === 501) { notify('결제 설정이 준비되지 않아 체험을 시작할 수 없습니다. 1877-1979로 문의해 주세요.'); return; }
+      if (!r.ok) { notify(errMsg(d, '체험 기본요금 결제 요청 실패')); return; }
+      const trial = parseOr(TopupResponseSchema, d, null);
+      if (!trial) { notify('결제 요청 응답을 처리할 수 없습니다'); return; }
+      const { requestPayment } = await import('@portone/browser-sdk/v2');
+      const response = await requestPayment({
+        storeId: trial.storeId,
+        channelKey: trial.channelKey,
+        paymentId: trial.paymentId,
+        orderName: trial.orderName,
+        totalAmount: trial.amount,
+        currency: 'KRW',
+        payMethod: 'CARD',
+        card: { installment: { monthOption: { availableMonthList: [0] } } },
+        bypass: { inicis_v2: { acceptmethod: ['noeasypay'], P_RESERVED: ['noeasypay=Y'] } },
+        customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || undefined },
+      });
+      if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
+      setShowUpgradeModal(false);
+      for (const delayMs of [1200, 2500, 4500, 7000]) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        const statusResponse = await authFetch(`${SERVER_URL}/billing/payment/${trial.paymentId}`);
+        if (!statusResponse.ok) continue;
+        const status = parseOr(PaymentStatusSchema, await statusResponse.json(), null);
+        if (status?.status === 'paid') {
+          setPaymentSuccess({ amount: trial.amount, desc: '070 번호 기본요금 결제가 완료되어 30일 무료체험이 시작됐습니다.' });
+          fetchBillingBalance();
+          return;
+        }
+        if (['failed','cancelled','review_required'].includes(status?.status || '')) {
+          notify('결제 상태를 확인할 수 없습니다. 다시 결제하지 말고 담당자에게 문의해 주세요.');
+          return;
+        }
+      }
+      notify('결제 확인이 지연되고 있습니다. 다시 결제하지 말고 결제 내역에서 상태를 확인해 주세요.', 'info');
+    } catch { notify('네트워크 오류 — 체험 기본요금 결제 실패'); }
+    finally { setSubscribeBusy(null); }
+  };
   // 크레딧 충전(2단계, 포트원) — 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동
   // 폴백한다(운영에 아직 포트원 키가 안 들어간 동안도 화면이 안 깨지게). 설정돼 있으면
   // PortOne.js 결제창을 띄우고, 실제 크레딧 반영은 서버 웹훅이 비동기로 처리하므로 결제
@@ -2808,7 +2854,7 @@ export default function App() {
           fetchPaymentHistory={fetchPaymentHistory} setPendingTopup={setPendingTopup}
           subStatus={subStatus}
           subCancelBusy={subCancelBusy} cancelSubscription={cancelSubscription} subscribeBusy={subscribeBusy}
-          billing={billing} startTrial={startTrial} startSubscription={startSubscription}
+          billing={billing} startTrial={startTrial} startPaidPstnTrial={startPaidPstnTrial} startSubscription={startSubscription}
           paymentHistoryLoading={paymentHistoryLoading} paymentHistory={paymentHistory}
           setRefundTarget={setRefundTarget} setRefundReasonPreset={setRefundReasonPreset}
           setRefundReasonCustom={setRefundReasonCustom}

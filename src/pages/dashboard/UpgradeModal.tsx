@@ -5,6 +5,7 @@ import { X, CheckCircle2 } from 'lucide-react';
 import {
   APP_PHONE_PLANS, APP_WEEKLY_FREQUENCIES, CHARGE_TIERS, PSTN_COMMON_FEATURES,
   PSTN_SUBSCRIPTION_PLANS,
+  PSTN_TRIAL_PLAN,
   REFUND_REASON_PRESETS, billingPlanName,
 } from '../dashboardConstants';
 import CreditLedgerPanel from './CreditLedgerPanel';
@@ -13,7 +14,7 @@ export default function UpgradeModal(props: any) {
   const {
     setShowUpgradeModal, upgradeTab, setUpgradeTab, fetchPaymentHistory, setPendingTopup,
     subStatus, subCancelBusy, cancelSubscription, subscribeBusy,
-    billing, startTrial, startSubscription, paymentHistoryLoading, paymentHistory, setRefundTarget,
+    billing, startTrial, startPaidPstnTrial, startSubscription, paymentHistoryLoading, paymentHistory, setRefundTarget,
     setRefundReasonPreset, setRefundReasonCustom,
   } = props;
   const [selectedWeeks, setSelectedWeeks] = useState(4);
@@ -41,7 +42,15 @@ export default function UpgradeModal(props: any) {
           <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}><b style={{color:'#0f172a'}}>070 일반전화 정량제 구독</b>입니다. 표시 금액은 VAT 별도이며 포함 통화 소진 후 크레딧으로 이어서 이용합니다.</p>
           {subStatus?.autoRenew && <div style={{display:'flex',justifyContent:'space-between',gap:12,background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:12,padding:'12px 16px',marginBottom:16,flexWrap:'wrap'}}><div style={{fontSize:14,color:'#1e3a6e'}}><b>{billingPlanName(subStatus.plan)}</b> 자동결제 중{subStatus.monthlyAmount!=null&&<> · 실제 청구 {subStatus.monthlyAmount.toLocaleString()}원/월</>}</div><button className="btn-secondary" disabled={subCancelBusy} onClick={cancelSubscription}>{subCancelBusy?'처리 중...':'자동결제 해지'}</button></div>}
 
-          <div style={{border:'1px solid #d8e3f5',borderLeft:'5px solid #246BEB',borderRadius:14,padding:'20px 22px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,flexWrap:'wrap',background:'#fff'}}><div><div style={{fontSize:13,color:'#64748b',fontWeight:700}}>시범사업</div><b style={{display:'block',fontSize:22,marginTop:4}}>30일 무료체험</b><span style={{fontSize:13,color:'#475569'}}>일반전화 30통(약 90분) · 동시통화 1채널 · 관리자 대시보드</span></div><button className="btn-secondary" disabled={!!billing?.trialEndsAt} onClick={startTrial}>{billing?.trialEndsAt?'이미 체험함':'무료체험 시작'}</button></div>
+          <div style={{border:'1px solid #d8e3f5',borderLeft:'5px solid #246BEB',borderRadius:14,padding:'20px 22px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,flexWrap:'wrap',background:'#fff'}}>
+            <div>
+              <div style={{fontSize:13,color:'#246BEB',fontWeight:800}}>처음 도입하는 기관을 위한 30일 체험</div>
+              <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap',marginTop:4}}><b style={{fontSize:22}}>{PSTN_TRIAL_PLAN.name}</b><b style={{fontSize:24,color:'#0f172a'}}>{PSTN_TRIAL_PLAN.price.toLocaleString()}원 <span style={{fontSize:13,color:'#64748b'}}>/ 첫 30일</span></b></div>
+              <div style={{fontSize:12,color:'#64748b',marginTop:4}}>통화 이용료 무료 · 070 번호 기본요금 · 부가세 포함 · 1회 결제</div>
+              <span style={{display:'block',fontSize:13,color:'#475569',marginTop:7}}>체험 통화 {PSTN_TRIAL_PLAN.includedCalls}통(약 {PSTN_TRIAL_PLAN.minutes}분) · 동시통화 {PSTN_TRIAL_PLAN.channels}채널 · 관리자 대시보드</span>
+            </div>
+            <button className="btn-primary" disabled={!!billing?.trialEndsAt||subscribeBusy===PSTN_TRIAL_PLAN.key} onClick={startPaidPstnTrial}>{billing?.trialEndsAt?'이미 체험함':subscribeBusy===PSTN_TRIAL_PLAN.key?'처리 중...':'7,000원 결제하고 시작'}</button>
+          </div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14}}>{PSTN_SUBSCRIPTION_PLANS.map(plan=>{const current=subStatus?.autoRenew&&subStatus.plan===plan.key;return <div key={plan.key} style={{border:current?'2px solid #15803d':plan.recommended?'2px solid #246BEB':'1px solid #e2e8f0',borderRadius:14,padding:'20px 16px',display:'flex',flexDirection:'column',gap:10}}><div style={{fontWeight:850,fontSize:18}}>{plan.name}</div><div><b style={{fontSize:27}}>{plan.price.toLocaleString()}원</b><span style={{fontSize:13,color:'#94a3b8'}}> / 월</span></div><div style={{fontSize:12,color:'#64748b'}}>{'VAT 별도 · 실제 청구 '+plan.chargedAmount.toLocaleString()+'원'}</div><div style={{fontSize:14,fontWeight:750,color:'#246BEB'}}>포함 통화 {plan.includedCalls}통 · 약 {plan.minutes}분</div><div style={{fontSize:13,color:'#475569'}}>동시통화 {plan.channels}채널</div><ul style={{listStyle:'none',padding:0,margin:'4px 0',display:'grid',gap:6,flex:1}}>{PSTN_COMMON_FEATURES.map(feature=><li key={feature} style={{fontSize:13,color:'#475569',display:'flex',gap:6}}><CheckCircle2 size={14} color="#246BEB"/>{feature}</li>)}</ul><button className="btn-primary" disabled={current||subscribeBusy===plan.key} onClick={()=>startSubscription(plan.key,`일반전화 ${plan.name}`)}>{current?'자동결제 중':subscribeBusy===plan.key?'처리 중...':'구독하기'}</button></div>})}</div>
           <div style={{marginTop:18,padding:'20px',border:'1px solid #e2e8f0',borderRadius:14,background:'#fff'}}><b style={{display:'block',fontSize:16,color:'#0f172a'}}>모든 플랜에서 제공하는 기능</b><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:'8px 16px',marginTop:14}}>{['070 일반전화 AI 안부전화','예약·자동 발신','관리자 대시보드','어르신·담당자 관리','통화 결과와 통화 이력','건강 상태 추적','3단계 위험 감지','위험 알림과 담당자 확인','전화멘트 관리','크레딧 충전·차감·잔액·만료 내역','포함 통화량 월별 집계','동시통화 채널 제어','미응답·통화중·거절·취소·실패 구분'].map(feature=><div key={feature} style={{display:'flex',gap:7,fontSize:13,color:'#475467'}}><CheckCircle2 size={15} color="#246BEB" style={{flexShrink:0}}/>{feature}</div>)}</div><div style={{marginTop:14,paddingTop:12,borderTop:'1px solid #eef2f6',fontSize:12,color:'#64748b'}}><b>스탠다드·프리미엄 추가:</b> 리포트·통계 제공 · 재난특보 등 공공데이터 연동</div></div>
           <h3 style={{fontSize:17,margin:'24px 0 6px'}}>포함 통화가 부족하면 크레딧 충전</h3><p style={{fontSize:12,color:'#64748b',margin:'0 0 10px'}}>3분 완전통화 1건은 841크레딧입니다.</p>
@@ -79,11 +88,11 @@ export default function UpgradeModal(props: any) {
                   <th style={{padding:'8px 10px',fontWeight:600}}>금액</th><th style={{padding:'8px 10px',fontWeight:600}}>상태</th><th style={{padding:'8px 10px',fontWeight:600}}></th>
                 </tr></thead>
                 <tbody>{paymentHistory.map((p:any)=>{
-                  const canRequest = p.status==='paid' && p.type!=='subscription' && !p.refundRequestStatus;
+                  const canRequest = p.status==='paid' && p.type==='topup' && !p.refundRequestStatus;
                   return (
                   <tr key={p.id} style={{borderBottom:'1px solid #f1f5f9'}}>
                     <td style={{padding:'10px',color:'#94a3b8'}}>{p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '-'}</td>
-                    <td style={{padding:'10px'}}>{p.type==='subscription' ? `정액제${p.planKey?`(${p.planKey})`:''}` : '크레딧 충전'}</td>
+                    <td style={{padding:'10px'}}>{p.type==='subscription' ? `정액제${p.planKey?`(${p.planKey})`:''}` : p.type==='trial' ? '30일 무료체험 기본요금' : '크레딧 충전'}</td>
                     <td style={{padding:'10px',fontWeight:700}}>{p.amount.toLocaleString()}원</td>
                     <td style={{padding:'10px'}}>
                       {p.status==='cancelled' ? <span style={{color:'#94a3b8'}}>전액 환불됨</span>
