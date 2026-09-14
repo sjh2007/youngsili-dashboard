@@ -13,7 +13,24 @@ export default function HealthPage(props: any) {
     callsHistory, kwFromTranscript, healthHistory, setCallModal, openDetail, healthRange,
     setHealthRange, healthHistFrom, setHealthHistFrom, healthHistTo, setHealthHistTo,
     formatDateHeader, healthNormalShown,
+    notify,
   } = props;
+
+  const updateAlertStatus = async (alertId: string, body: Record<string, unknown>) => {
+    try {
+      const response = await authFetch(`${SERVER_URL}/alerts/${alertId}/status`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        notify?.(data?.error?.message || '알림 상태를 저장하지 못했습니다');
+        return;
+      }
+      await fetchHealth();
+    } catch {
+      notify?.('네트워크 오류로 알림 상태를 저장하지 못했습니다');
+    }
+  };
 
   return (
     <div className="fade-in health-page">
@@ -61,14 +78,14 @@ export default function HealthPage(props: any) {
               {alert.status === 'ack' && <span style={{fontSize:15,fontWeight:800,color:'#b45309',background:'#fef3c7',padding:'3px 10px',borderRadius:20}}>조치중{alert.actionBy?` · ${alert.actionBy.split('@')[0]}`:''}</span>}
               <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} disabled={!!draftingAlertId} title="통화 내용을 찾아 초안까지 채워서 엽니다" onClick={()=>openNoteFromAlert(alert)}>{draftingAlertId===alert.id?'초안 생성 중…':'일지 작성'}</button>
               {(!alert.status || alert.status === 'new') && (
-                <button className="banner-btn" style={{border:'1.5px solid '+m.c,color:m.c}} onClick={async()=>{await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'ack'})}).catch(()=>{});fetchHealth();}}>조치 시작</button>
+                <button className="banner-btn" style={{border:'1.5px solid '+m.c,color:m.c}} onClick={()=>updateAlertStatus(alert.id,{status:'ack'})}>조치 시작</button>
               )}
               {alert.status === 'ack' && (
                 <button className="btn-small" style={{background:'#16a34a',color:'#fff',borderColor:'#16a34a'}} onClick={async()=>{
                   const note = window.prompt('조치 내용을 입력하세요 (예: 유선 확인 — 이상 없음, 보호자 연락, 방문 예정)');
                   if (note === null) return;
-                  await authFetch(`${SERVER_URL}/alerts/${alert.id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'done',note})}).catch(()=>{});
-                  fetchHealth();
+                  if (!note.trim()) { notify?.('조치 내용을 입력해 주세요'); return; }
+                  await updateAlertStatus(alert.id,{status:'done',note});
                 }}>조치 완료</button>
               )}
             </div>
