@@ -637,6 +637,11 @@ export default function App() {
       virtualAccount: { accountExpiry: { validHours: 24 } },
       customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || '01000000000' },
     });
+    if (!response) {
+      console.error('[subscription-invoice] PortOne window closed without a completion response');
+      notify('가상계좌가 발급되지 않았습니다. 결제창이 완료 응답 없이 닫혔습니다. 입력 내용을 확인한 뒤 다시 시도해 주세요.');
+      return;
+    }
     if (response?.code !== undefined) { notify(`계좌 발급 실패: ${response.message || response.code}`); return; }
     setShowUpgradeModal(false);
     for (const delayMs of [1500, 3000, 5000, 8000, 12000]) {
