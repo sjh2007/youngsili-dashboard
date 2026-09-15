@@ -643,17 +643,17 @@ export default function App() {
       return;
     }
     if (response?.code !== undefined) { notify(`계좌 발급 실패: ${response.message || response.code}`); return; }
-    setShowUpgradeModal(false);
     for (const delayMs of [1500, 3000, 5000, 8000, 12000]) {
       await new Promise(resolve => setTimeout(resolve, delayMs));
       const sr = await authFetch(`${SERVER_URL}/billing/payment/${invoice.paymentId}`);
       if (!sr.ok) continue;
       const status = parseOr(PaymentStatusSchema, await sr.json(), null);
       if (status?.virtualAccount?.accountNumber) {
+        setShowUpgradeModal(false);
         setVirtualAccountInfo({ amount: invoice.amount, description: `${planName} 월 구독료`, ...status.virtualAccount });
         return;
       }
-      if (status?.status === 'paid') { setPaymentSuccess({ amount: invoice.amount, desc: `${planName} 구독료 입금이 확인됐습니다.` }); return; }
+      if (status?.status === 'paid') { setShowUpgradeModal(false); setPaymentSuccess({ amount: invoice.amount, desc: `${planName} 구독료 입금이 확인됐습니다.` }); return; }
     }
     notify('계좌 발급 확인이 지연되고 있습니다. 결제 내역에서 다시 확인해 주세요.', 'info');
   };
