@@ -163,6 +163,7 @@ export default function App() {
   const [subscribeBusy, setSubscribeBusy] = useState(null); // 결제 요청 처리 중인 planKey(중복 클릭 방지)
   const [subscriptionPaymentMethod, setSubscriptionPaymentMethod] = useState('CARD');
   const [subStatus, setSubStatus] = useState(null); // GET /billing/subscription — {plan, autoRenew, nextChargeAt, lastChargeError, elderCount, monthlyAmount}
+  const [subscriptionActionBusy, setSubscriptionActionBusy] = useState<string|null>(null);
   const [subCancelBusy, setSubCancelBusy] = useState(false);
   const [pendingTopup, setPendingTopup] = useState(null); // {amount} — "신청" 클릭 시 결제수단 선택 모달을 띄우기 위한 대기 상태
   const [showPlanModal, setShowPlanModal] = useState(false); // 사이드바 크레딧 잔액 클릭 → 현재 플랜·잔액·결제수단 요약 모달
@@ -624,7 +625,7 @@ export default function App() {
   // 정액제 자동결제 등록 — 1단계(빌링키 발급 요청) → PortOne.js `requestIssueBillingKey()`로 결제수단
   // 등록 → 2단계(서버가 빌링키 재검증 후 첫 결제를 그 자리에서 승인, 다음 달부터는 서버 크론이 자동 재청구).
   // 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동 폴백한다.
-  const startSubscription = async (planKey, planName) => {
+  const startSubscription = async (planKey, planName, options: { replacePaymentMethod?: boolean } = {}) => {
     if (subscribeBusy) return;
     setSubscribeBusy(planKey);
     try {
@@ -634,6 +635,7 @@ export default function App() {
           planKey,
           testMode: isPayTestEnabled(),
           ...(isPayTestEnabled() ? { billingKeyMethod: subscriptionPaymentMethod } : {}),
+          ...(options.replacePaymentMethod ? { replacePaymentMethod: true } : {}),
         }),
       });
       const d = await r.json().catch(()=>({}));
@@ -688,7 +690,9 @@ export default function App() {
       if (!confirmRes.ok) { notify(errMsg(confirmData, '결제 승인 실패')); return; }
 
       setShowUpgradeModal(false);
-      setPaymentSuccess({ amount: confirmData.amount, desc: `"${planName}" 플랜 자동결제가 등록되고 첫 결제가 완료됐습니다. 다음 달부터 자동으로 청구됩니다.` });
+      setPaymentSuccess(options.replacePaymentMethod
+        ? { amount: 0, desc: '정기결제 수단이 변경됐습니다. 다음 결제일부터 새 수단으로 청구됩니다.' }
+        : { amount: confirmData.amount, desc: `"${planName}" 플랜 자동결제가 등록되고 첫 결제가 완료됐습니다. 다음 달부터 자동으로 청구됩니다.` });
       fetchMe();
       fetchSubscriptionStatus();
     } catch (error) {
@@ -705,6 +709,35 @@ export default function App() {
     } finally {
       setSubscribeBusy(null);
     }
+  };
+  const scheduleSubscriptionPlanChange = async (planKey, planName) => {
+    if (subscriptionActionBusy) return;
+    if (!window.confirm(`${planName} 요금제로 변경할까요? 다음 결제일부터 적용됩니다.`)) return;
+    setSubscriptionActionBusy('plan');
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/subscription/change-plan`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ planKey }),
+      });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { notify(errMsg(d, '요금제 변경 예약 실패')); return; }
+      notify(`${planName} 요금제 변경을 예약했습니다.`, 'success');
+      await fetchSubscriptionStatus();
+    } catch { notify('네트워크 오류 — 요금제 변경 예약 실패'); }
+    finally { setSubscriptionActionBusy(null); }
+  };
+  const testSubscriptionRenewal = async () => {
+    if (subscriptionActionBusy) return;
+    if (!window.confirm('저장된 결제수단으로 다음 달 1,000원 테스트 재결제를 지금 실행할까요?')) return;
+    setSubscriptionActionBusy('renew');
+    try {
+      const r = await authFetch(`${SERVER_URL}/billing/subscription/test-renew`, { method:'POST' });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { notify(errMsg(d, '재결제 테스트 실패')); return; }
+      notify('1,000원 자동 재결제 테스트가 완료됐습니다.', 'success');
+      await fetchSubscriptionStatus();
+      fetchPaymentHistory();
+    } catch { notify('네트워크 오류 — 재결제 테스트 실패'); }
+    finally { setSubscriptionActionBusy(null); }
   };
   // 정액제 자동결제 해지 — 다음 달부터 청구되지 않는다(이미 낸 이번 달 요금은 환불되지 않음)
   const cancelSubscription = async () => {
@@ -2894,6 +2927,9 @@ export default function App() {
           payTestEnabled={isPayTestEnabled()} subscriptionPaymentMethod={subscriptionPaymentMethod}
           setSubscriptionPaymentMethod={setSubscriptionPaymentMethod}
           billing={billing} startTrial={startTrial} startPaidPstnTrial={startPaidPstnTrial} startSubscription={startSubscription}
+          subscriptionActionBusy={subscriptionActionBusy}
+          scheduleSubscriptionPlanChange={scheduleSubscriptionPlanChange}
+          testSubscriptionRenewal={testSubscriptionRenewal}
           paymentHistoryLoading={paymentHistoryLoading} paymentHistory={paymentHistory}
           setRefundTarget={setRefundTarget} setRefundReasonPreset={setRefundReasonPreset}
           setRefundReasonCustom={setRefundReasonCustom}

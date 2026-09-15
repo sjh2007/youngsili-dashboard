@@ -17,7 +17,9 @@ export default function UpgradeModal(props: any) {
     payTestEnabled, subscriptionPaymentMethod, setSubscriptionPaymentMethod,
     billing, startTrial, startPaidPstnTrial, startSubscription, paymentHistoryLoading, paymentHistory, setRefundTarget,
     setRefundReasonPreset, setRefundReasonCustom,
+    subscriptionActionBusy, scheduleSubscriptionPlanChange, testSubscriptionRenewal,
   } = props;
+  const [manageAction, setManageAction] = useState<'plan'|'payment'|null>(null);
   const [selectedWeeks, setSelectedWeeks] = useState(4);
   const [selectedAppKey, setSelectedAppKey] = useState('app300');
   const [selectedAppFrequency, setSelectedAppFrequency] = useState(1);
@@ -30,7 +32,7 @@ export default function UpgradeModal(props: any) {
     <div className="modal-overlay" onClick={()=>setShowUpgradeModal(false)}>
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:920,width:'96%',textAlign:'left',maxHeight:'90vh',overflowY:'auto'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
-          <div className="modal-title" style={{textAlign:'left',marginBottom:0}}>요금제 선택</div>
+          <div className="modal-title" style={{textAlign:'left',marginBottom:0}}>{subStatus?.autoRenew?'내 구독 관리':'요금제 선택'}</div>
           <button onClick={()=>setShowUpgradeModal(false)} style={{background:'none',border:0,cursor:'pointer',color:'#94a3b8',padding:4}}><X size={20}/></button>
         </div>
         <div style={{display:'flex',gap:6,marginBottom:18}}>
@@ -39,7 +41,35 @@ export default function UpgradeModal(props: any) {
           ))}
         </div>
 
-        {upgradeTab==='metered' ? (<>
+        {subStatus?.autoRenew && upgradeTab!=='history' ? (<>
+          <div style={{border:'1px solid #dbe4f0',borderRadius:16,padding:22,background:'linear-gradient(145deg,#f8fbff 0%,#fff 70%)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',gap:16,alignItems:'flex-start',flexWrap:'wrap'}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:850,color:'#246BEB',letterSpacing:.3}}>현재 이용 중</div>
+                <div style={{fontSize:24,fontWeight:900,color:'#0f172a',marginTop:5}}>{billingPlanName(subStatus.plan)}</div>
+                <div style={{fontSize:14,color:'#475569',marginTop:7}}>{subStatus.monthlyAmount?.toLocaleString()}원/월 · 어르신 {subStatus.elderCount}명</div>
+              </div>
+              <div style={{padding:'7px 11px',borderRadius:999,background:'#dcfce7',color:'#15803d',fontSize:12,fontWeight:850}}>자동결제 정상</div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:10,marginTop:20}}>
+              <div style={{padding:14,borderRadius:12,background:'#fff',border:'1px solid #e2e8f0'}}><div style={{fontSize:12,color:'#94a3b8',fontWeight:700}}>결제수단</div><div style={{fontSize:15,fontWeight:800,marginTop:5}}>{subStatus.paymentMethod?.label||'등록된 결제수단'}</div>{subStatus.paymentMethod?.masked&&<div style={{fontSize:12,color:'#64748b',marginTop:3}}>{subStatus.paymentMethod.masked}</div>}</div>
+              <div style={{padding:14,borderRadius:12,background:'#fff',border:'1px solid #e2e8f0'}}><div style={{fontSize:12,color:'#94a3b8',fontWeight:700}}>다음 결제일</div><div style={{fontSize:15,fontWeight:800,marginTop:5}}>{subStatus.nextChargeAt?new Date(subStatus.nextChargeAt).toLocaleDateString('ko-KR'):'확인 필요'}</div></div>
+              <div style={{padding:14,borderRadius:12,background:'#fff',border:'1px solid #e2e8f0'}}><div style={{fontSize:12,color:'#94a3b8',fontWeight:700}}>결제 상태</div><div style={{fontSize:15,fontWeight:800,marginTop:5,color:subStatus.lastChargeError?'#c5221f':'#15803d'}}>{subStatus.lastChargeError?'최근 결제 실패':'정상'}</div></div>
+            </div>
+            {subStatus.pendingPlan&&<div style={{marginTop:14,padding:'11px 13px',borderRadius:10,background:'#fff7ed',color:'#9a3412',fontSize:13}}>다음 결제일부터 <b>{billingPlanName(subStatus.pendingPlan)}</b> 요금제로 변경 예정입니다.</div>}
+            {subStatus.lastChargeError&&<div style={{marginTop:10,padding:'11px 13px',borderRadius:10,background:'#fef2f2',color:'#b91c1c',fontSize:13}}>최근 청구 실패: {subStatus.lastChargeError}</div>}
+            <div style={{display:'flex',gap:8,marginTop:18,flexWrap:'wrap'}}>
+              <button className="btn-primary" onClick={()=>setManageAction(manageAction==='plan'?null:'plan')}>{manageAction==='plan'?'변경 닫기':'요금제 변경'}</button>
+              <button className="btn-secondary" onClick={()=>setManageAction(manageAction==='payment'?null:'payment')}>{manageAction==='payment'?'변경 닫기':'결제수단 변경'}</button>
+              {payTestEnabled&&subStatus.testMode&&<button className="btn-secondary" disabled={subscriptionActionBusy==='renew'} onClick={testSubscriptionRenewal}>{subscriptionActionBusy==='renew'?'재결제 중...':'다음 달 재결제 테스트'}</button>}
+              <button className="btn-secondary" disabled={subCancelBusy} onClick={cancelSubscription}>{subCancelBusy?'처리 중...':'자동결제 해지'}</button>
+            </div>
+          </div>
+
+          {manageAction==='payment'&&<div style={{marginTop:14,padding:18,border:'1px solid #dbe4f0',borderRadius:14}}><b style={{fontSize:16}}>새 결제수단 등록</b><p style={{fontSize:13,color:'#64748b',lineHeight:1.6}}>새 수단의 빌링키가 정상 확인된 뒤 기존 수단을 교체합니다. 지금 추가 결제되지는 않습니다.</p><div style={{display:'flex',gap:8,margin:'12px 0'}}>{(payTestEnabled?[['CARD','신용·체크카드'],['TRANSFER','계좌 자동이체']]:[['CARD','신용·체크카드']]).map(([value,label])=><button key={value} type="button" aria-pressed={subscriptionPaymentMethod===value} onClick={()=>setSubscriptionPaymentMethod(value)} style={{padding:'9px 14px',borderRadius:9,border:subscriptionPaymentMethod===value?'2px solid #246BEB':'1px solid #dbe4f0',background:subscriptionPaymentMethod===value?'#eaf2ff':'#fff',fontWeight:750}}>{label}</button>)}</div><button className="btn-primary" disabled={!!subscribeBusy} onClick={()=>startSubscription(subStatus.plan,billingPlanName(subStatus.plan),{replacePaymentMethod:true})}>{subscribeBusy?'등록 중...':'이 결제수단으로 변경'}</button></div>}
+
+          {manageAction==='plan'&&<div style={{marginTop:14,padding:18,border:'1px solid #dbe4f0',borderRadius:14}}><b style={{fontSize:16}}>다음 결제일부터 적용할 요금제</b><p style={{fontSize:13,color:'#64748b'}}>현재 이용기간과 포함 통화량은 유지되며 다음 자동결제일부터 변경됩니다.</p>{upgradeTab==='metered'?<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:10,marginTop:12}}>{PSTN_SUBSCRIPTION_PLANS.map(plan=><div key={plan.key} style={{padding:15,border:'1px solid #e2e8f0',borderRadius:12}}><b>{plan.name}</b><div style={{fontSize:18,fontWeight:900,margin:'7px 0'}}>{plan.chargedAmount.toLocaleString()}원/월</div><div style={{fontSize:12,color:'#64748b'}}>포함 {plan.includedCalls}통 · {plan.channels}채널</div><button className="btn-primary" style={{width:'100%',marginTop:12}} disabled={subscriptionActionBusy==='plan'||(subStatus.plan===plan.key&&!subStatus.pendingPlan)} onClick={()=>scheduleSubscriptionPlanChange(plan.key,`일반전화 ${plan.name}`)}>{subStatus.pendingPlan===plan.key?'변경 예약됨':subStatus.plan===plan.key?'현재 요금제':'이 요금제로 변경'}</button></div>)}</div>:<div style={{marginTop:12}}><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(86px,1fr))',gap:8}}>{APP_PHONE_PLANS.map(plan=><button key={plan.key} onClick={()=>setSelectedAppKey(plan.key)} style={{padding:10,borderRadius:9,border:selectedAppKey===plan.key?'2px solid #246BEB':'1px solid #dbe4f0',background:selectedAppKey===plan.key?'#eff6ff':'#fff'}}>{plan.elderLimit}명</button>)}</div><div style={{display:'flex',gap:8,marginTop:10}}>{APP_WEEKLY_FREQUENCIES.map(f=><button key={f} onClick={()=>setSelectedAppFrequency(f)} style={{flex:1,padding:10,borderRadius:9,border:selectedAppFrequency===f?'2px solid #246BEB':'1px solid #dbe4f0',background:selectedAppFrequency===f?'#eff6ff':'#fff'}}>주 {f}회</button>)}</div><div style={{marginTop:12,fontWeight:850}}>월 {selectedAppPrice.toLocaleString()}원</div><button className="btn-primary" style={{width:'100%',marginTop:12}} disabled={subscriptionActionBusy==='plan'} onClick={()=>scheduleSubscriptionPlanChange(selectedAppPlanKey,`앱 ${selectedAppPlan.elderLimit}명·주 ${selectedAppFrequency}회`)}>이 요금제로 변경</button></div>}</div>}
+        </>) : upgradeTab==='metered' ? (<>
           <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}><b style={{color:'#0f172a'}}>070 일반전화 정량제 구독</b>입니다. 표시 금액은 VAT 별도이며 포함 통화 소진 후 크레딧으로 이어서 이용합니다.</p>
           {payTestEnabled && <div style={{padding:'14px 16px',marginBottom:16,border:'1px solid #dbe4f0',borderRadius:12,background:'#f8fafc'}}><div style={{fontSize:13,fontWeight:800,color:'#0f172a',marginBottom:9}}>정기결제 수단</div><div style={{display:'flex',gap:8}}>{[['CARD','신용·체크카드'],['TRANSFER','계좌 자동이체']].map(([value,label])=><button key={value} type="button" aria-pressed={subscriptionPaymentMethod===value} onClick={()=>setSubscriptionPaymentMethod(value)} style={{padding:'9px 14px',borderRadius:9,border:subscriptionPaymentMethod===value?'2px solid #246BEB':'1px solid #dbe4f0',background:subscriptionPaymentMethod===value?'#eaf2ff':'#fff',color:subscriptionPaymentMethod===value?'#1d4ed8':'#475569',fontWeight:750,cursor:'pointer'}}>{label}</button>)}</div><div style={{fontSize:12,color:'#64748b',marginTop:8}}>테스트 채널에 해당 수단 계약이 활성화되어 있어야 등록할 수 있습니다.</div></div>}
           {subStatus?.autoRenew && <div style={{display:'flex',justifyContent:'space-between',gap:12,background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:12,padding:'12px 16px',marginBottom:16,flexWrap:'wrap'}}><div style={{fontSize:14,color:'#1e3a6e'}}><b>{billingPlanName(subStatus.plan)}</b> 자동결제 중{subStatus.monthlyAmount!=null&&<> · 실제 청구 {subStatus.monthlyAmount.toLocaleString()}원/월</>}</div><button className="btn-secondary" disabled={subCancelBusy} onClick={cancelSubscription}>{subCancelBusy?'처리 중...':'자동결제 해지'}</button></div>}

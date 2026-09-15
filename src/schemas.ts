@@ -111,6 +111,13 @@ export const SubscriptionStatusSchema = loose({
   autoRenew: z.boolean(),
   nextChargeAt: z.string().nullable(),
   lastChargeError: z.string().nullable(),
+  pendingPlan: z.string().nullable().optional(),
+  paymentMethod: loose({
+    type: z.enum(['CARD', 'TRANSFER', 'EASY_PAY', 'UNKNOWN']),
+    label: z.string(),
+    masked: z.string().optional(),
+  }).nullable().optional(),
+  testMode: z.boolean().optional(),
 });
 export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>;
 
