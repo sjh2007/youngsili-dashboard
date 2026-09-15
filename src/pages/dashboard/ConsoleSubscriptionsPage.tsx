@@ -8,7 +8,7 @@ export default function ConsoleSubscriptionsPage(props: any) {
       <section className="section">
         <div className="script-editor-header" style={{marginBottom:10}}>
           <div className="section-title" style={{marginBottom:0}}>
-            정기결제 현황 ({consoleSubs.length}개 기관)
+            정기결제 현황 ({consoleSubs.length}개 구독)
             <span style={{marginLeft:10, fontSize:12, fontWeight:500, color:'#94a3b8'}}>정액제 자동결제(포트원 빌링키) 등록 여부·다음 청구일 — 조회 전용</span>
           </div>
           <button className={`btn-download ${consoleSubsLoading?'btn-calling':''}`} onClick={fetchConsoleSubscriptions} disabled={consoleSubsLoading}>
@@ -25,6 +25,7 @@ export default function ConsoleSubscriptionsPage(props: any) {
               <thead>
                 <tr style={{textAlign:'left', color:'#5f6368', borderBottom:'1px solid #dadce0'}}>
                   <th style={{padding:'8px 10px', fontWeight:500}}>기관명</th>
+                  <th style={{padding:'8px 10px', fontWeight:500}}>통화 방식</th>
                   <th style={{padding:'8px 10px', fontWeight:500}}>요금제</th>
                   <th style={{padding:'8px 10px', fontWeight:500}}>대상자</th>
                   <th style={{padding:'8px 10px', fontWeight:500}}>월 청구액</th>
@@ -35,8 +36,9 @@ export default function ConsoleSubscriptionsPage(props: any) {
               </thead>
               <tbody>
                 {consoleSubs.map(s => (
-                  <tr key={s.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
+                  <tr key={`${s.orgId}-${s.track || 'legacy'}`} style={{borderBottom:'1px solid #f1f3f4'}}>
                     <td style={{padding:'10px'}}>{s.orgName || s.orgId}</td>
+                    <td style={{padding:'10px'}}>{s.track==='app'?'앱 전화':s.track==='pstn'?'일반 전화':'기존 구독'}</td>
                     <td style={{padding:'10px'}}>{s.plan || '미설정'}</td>
                     <td style={{padding:'10px'}}>{s.elderCount}명</td>
                     <td style={{padding:'10px'}}>{s.monthlyAmount != null ? `${s.monthlyAmount.toLocaleString()}원` : '-'}</td>

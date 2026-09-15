@@ -74,10 +74,10 @@ function PaymentCalendar({ month, payments, subscriptions, loading, onMonthChang
   });
   subscriptions.filter((s:any) => s.autoRenew && s.nextChargeAt).forEach((s:any) => {
     addEvent(localDateKey(s.nextChargeAt), {
-      id: `due-${s.orgId}`,
+      id: `due-${s.orgId}-${s.track || 'legacy'}`,
       tone: s.lastChargeError ? 'error' : 'due',
       title: `${s.orgName || s.orgId} · ${s.monthlyAmount != null ? `${Number(s.monthlyAmount).toLocaleString()}원` : '금액 확인 필요'}`,
-      detail: s.lastChargeError ? '정기결제 오류 확인 필요' : '정기결제 예정',
+      detail: `${s.track === 'app' ? '앱 전화' : s.track === 'pstn' ? '일반 전화' : '기존'} · ${s.lastChargeError ? '정기결제 오류 확인 필요' : '정기결제 예정'}`,
     });
   });
 
@@ -1432,7 +1432,7 @@ export default function ConsoleApp() {
         {page === 'subscriptions' && (
           <section className="section fade-in">
             <div className="script-editor-header" style={{marginBottom:10}}>
-              <div className="section-title" style={{marginBottom:0}}>정기결제 현황 ({subs.length}개 기관)</div>
+              <div className="section-title" style={{marginBottom:0}}>정기결제 현황 ({subs.length}개 구독)</div>
               <button className={`btn-download ${subsLoading?'btn-calling':''}`} onClick={fetchSubs} disabled={subsLoading}>{subsLoading?'조회 중...':'새로고침'}</button>
             </div>
             {subs.some((s:any)=>s.lastChargeError) && <div role="alert" style={{padding:'10px 12px',marginBottom:12,borderRadius:8,background:'#fce8e6',color:'#b3261e',fontSize:13,fontWeight:700}}>자동결제 오류 {subs.filter((s:any)=>s.lastChargeError).length}개 기관 · 최근 오류 열을 확인해 주세요.</div>}
@@ -1440,12 +1440,12 @@ export default function ConsoleApp() {
               <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
                   <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
-                    <th style={{padding:'8px 10px'}}>기관명</th><th style={{padding:'8px 10px'}}>요금제</th><th style={{padding:'8px 10px'}}>대상자</th>
+                    <th style={{padding:'8px 10px'}}>기관명</th><th style={{padding:'8px 10px'}}>통화 방식</th><th style={{padding:'8px 10px'}}>요금제</th><th style={{padding:'8px 10px'}}>대상자</th>
                     <th style={{padding:'8px 10px'}}>월 청구액</th><th style={{padding:'8px 10px'}}>자동결제</th><th style={{padding:'8px 10px'}}>다음 청구일</th><th style={{padding:'8px 10px'}}>최근 오류</th>
                   </tr></thead>
                   <tbody>{subs.slice((subsPage-1)*PAGE_SIZE, subsPage*PAGE_SIZE).map((s:any) => (
-                    <tr key={s.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
-                      <td style={{padding:'10px'}}>{s.orgName || s.orgId}</td><td style={{padding:'10px'}}>{s.plan || '미설정'}</td><td style={{padding:'10px'}}>{s.elderCount}명</td>
+                    <tr key={`${s.orgId}-${s.track || 'legacy'}`} style={{borderBottom:'1px solid #f1f3f4'}}>
+                      <td style={{padding:'10px'}}>{s.orgName || s.orgId}</td><td style={{padding:'10px'}}>{s.track==='app'?'앱 전화':s.track==='pstn'?'일반 전화':'기존 구독'}</td><td style={{padding:'10px'}}>{s.plan || '미설정'}</td><td style={{padding:'10px'}}>{s.elderCount}명</td>
                       <td style={{padding:'10px'}}>{s.monthlyAmount != null ? `${s.monthlyAmount.toLocaleString()}원` : '-'}</td>
                       <td style={{padding:'10px'}}><span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:s.autoRenew?'#e6f4ea':'#f1f3f4',color:s.autoRenew?'#1e8e3e':'#5f6368'}}>{s.autoRenew?'등록됨':'미등록'}</span></td>
                       <td style={{padding:'10px',color:'#5f6368'}}>{s.nextChargeAt ? new Date(s.nextChargeAt).toLocaleDateString('ko-KR') : '-'}</td>

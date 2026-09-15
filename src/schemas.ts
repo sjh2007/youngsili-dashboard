@@ -102,6 +102,21 @@ export const SubscribeRegisterResponseSchema = loose({
 export type SubscribeRegisterResponse = z.infer<typeof SubscribeRegisterResponseSchema>;
 
 // GET /billing/subscription, GET /console/subscriptions의 orgs[] 원소 — 정액제/자동결제 현재 상태
+const SubscriptionItemStatusSchema = loose({
+  track: z.enum(['app', 'pstn']),
+  plan: z.string().nullable(),
+  monthlyAmount: z.number().nullable(),
+  autoRenew: z.boolean(),
+  nextChargeAt: z.string().nullable(),
+  lastChargeError: z.string().nullable(),
+  pendingPlan: z.string().nullable().optional(),
+  paymentMethod: loose({
+    type: z.enum(['CARD', 'TRANSFER', 'EASY_PAY', 'UNKNOWN']),
+    label: z.string(),
+    masked: z.string().optional(),
+  }).nullable().optional(),
+  testMode: z.boolean().optional(),
+});
 export const SubscriptionStatusSchema = loose({
   orgId: z.string(),
   orgName: z.string().optional(),
@@ -118,6 +133,11 @@ export const SubscriptionStatusSchema = loose({
     masked: z.string().optional(),
   }).nullable().optional(),
   testMode: z.boolean().optional(),
+  track: z.enum(['app', 'pstn']).optional(),
+  subscriptions: z.object({
+    app: SubscriptionItemStatusSchema.optional(),
+    pstn: SubscriptionItemStatusSchema.optional(),
+  }).partial().optional(),
 });
 export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>;
 

@@ -725,12 +725,14 @@ export default function App() {
     } catch { notify('네트워크 오류 — 요금제 변경 예약 실패'); }
     finally { setSubscriptionActionBusy(null); }
   };
-  const testSubscriptionRenewal = async () => {
+  const testSubscriptionRenewal = async (track: 'app'|'pstn') => {
     if (subscriptionActionBusy) return;
     if (!window.confirm('저장된 결제수단으로 다음 달 1,000원 테스트 재결제를 지금 실행할까요?')) return;
     setSubscriptionActionBusy('renew');
     try {
-      const r = await authFetch(`${SERVER_URL}/billing/subscription/test-renew`, { method:'POST' });
+      const r = await authFetch(`${SERVER_URL}/billing/subscription/test-renew`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ track }),
+      });
       const d = await r.json().catch(()=>({}));
       if (!r.ok) { notify(errMsg(d, '재결제 테스트 실패')); return; }
       notify('1,000원 자동 재결제 테스트가 완료됐습니다.', 'success');
@@ -740,12 +742,14 @@ export default function App() {
     finally { setSubscriptionActionBusy(null); }
   };
   // 정액제 자동결제 해지 — 다음 달부터 청구되지 않는다(이미 낸 이번 달 요금은 환불되지 않음)
-  const cancelSubscription = async () => {
+  const cancelSubscription = async (track: 'app'|'pstn') => {
     if (subCancelBusy) return;
     if (!window.confirm('자동결제를 해지할까요? 다음 달부터 청구되지 않습니다.')) return;
     setSubCancelBusy(true);
     try {
-      const r = await authFetch(`${SERVER_URL}/billing/subscribe/cancel`, { method: 'POST' });
+      const r = await authFetch(`${SERVER_URL}/billing/subscribe/cancel`, {
+        method: 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ track }),
+      });
       const d = await r.json().catch(()=>({}));
       if (!r.ok) { notify(errMsg(d, '해지 실패')); return; }
       notify('자동결제가 해지됐습니다.', 'success');
@@ -2801,6 +2805,9 @@ export default function App() {
   // 막으므로, 화면도 "왜 막혔는지"를 바로 보여주고 다른 메뉴 진입을 막는다. superadmin(orgId='*')과
   // 잔액 미조회(billing===null, 로딩 중이거나 구기관=무제한)는 차단하지 않는다.
   const trialActive = !!billing?.trialEndsAt && new Date(billing.trialEndsAt).getTime() > Date.now();
+  const activeSubscriptions = subStatus?.subscriptions
+    ? Object.values(subStatus.subscriptions).filter((item:any) => item?.autoRenew)
+    : subStatus?.autoRenew ? [subStatus] : [];
   if (me && me.role !== 'superadmin' && billing && typeof billing.creditBalance === 'number' && billing.creditBalance <= 0 && !trialActive && !showUpgradeModal) {
     return (
       <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8fafc',padding:20}}>
@@ -2859,12 +2866,12 @@ export default function App() {
                 <button onClick={()=>setShowPlanModal(false)} style={{background:'rgba(255,255,255,0.1)',border:0,borderRadius:8,cursor:'pointer',color:'#cbd5e1',padding:5,display:'flex'}}><X size={16}/></button>
               </div>
               <div style={{marginTop:18,fontSize:20,fontWeight:800,color:'#fff'}}>
-                {subStatus?.autoRenew
-                  ? (billingPlanName(subStatus.plan))
+                {activeSubscriptions.length
+                  ? activeSubscriptions.map((item:any)=>billingPlanName(item.plan)).join(' · ')
                   : trialActive ? '시범사업(30일 체험)'
                   : '정량제(선불 충전)'}
               </div>
-              {trialActive && !subStatus?.autoRenew && (
+              {trialActive && activeSubscriptions.length===0 && (
                 <div style={{fontSize:12.5,color:'#94a3b8',marginTop:4}}>
                   체험 종료 {new Date(billing.trialEndsAt).toLocaleDateString('ko-KR')}까지
                 </div>
@@ -2894,12 +2901,14 @@ export default function App() {
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,color:'#94a3b8',fontWeight:600}}>결제수단(정기결제)</div>
-                  {subStatus?.autoRenew ? (
+                  {activeSubscriptions.length ? (
                     <>
-                      <div style={{fontSize:14.5,fontWeight:700,color:'#15803d',marginTop:2}}>등록됨 · 자동결제 중</div>
-                      {subStatus.nextChargeAt && <div style={{fontSize:12.5,color:'#64748b',marginTop:3}}>다음 청구일 {new Date(subStatus.nextChargeAt).toLocaleDateString('ko-KR')}</div>}
-                      {subStatus.monthlyAmount != null && <div style={{fontSize:12.5,color:'#64748b'}}>{subStatus.monthlyAmount.toLocaleString()}원/월</div>}
-                      {subStatus.lastChargeError && <div style={{fontSize:12.5,color:'#c5221f',marginTop:3}}>최근 청구 실패: {subStatus.lastChargeError}</div>}
+                      {activeSubscriptions.map((item:any)=><div key={item.track||item.plan} style={{marginTop:6}}>
+                        <div style={{fontSize:14,fontWeight:700,color:'#15803d'}}>{item.track==='app'?'앱 전화':'일반 전화'} · {billingPlanName(item.plan)}</div>
+                        {item.nextChargeAt && <div style={{fontSize:12.5,color:'#64748b'}}>다음 청구일 {new Date(item.nextChargeAt).toLocaleDateString('ko-KR')}</div>}
+                        {item.monthlyAmount != null && <div style={{fontSize:12.5,color:'#64748b'}}>{item.monthlyAmount.toLocaleString()}원/월</div>}
+                        {item.lastChargeError && <div style={{fontSize:12.5,color:'#c5221f'}}>최근 청구 실패: {item.lastChargeError}</div>}
+                      </div>)}
                     </>
                   ) : (
                     <div style={{fontSize:14,color:'#64748b',marginTop:2}}>등록 안 됨 · 정량제 충전으로만 이용 중</div>
