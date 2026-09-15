@@ -3352,7 +3352,7 @@ export default function App() {
               healthRange={healthRange} setHealthRange={setHealthRange} healthHistFrom={healthHistFrom}
               setHealthHistFrom={setHealthHistFrom} healthHistTo={healthHistTo} setHealthHistTo={setHealthHistTo}
               formatDateHeader={formatDateHeader} healthNormalShown={healthNormalShown}
-              notify={notify}
+              notify={notify} me={me}
             />
           )}
 
@@ -3446,6 +3446,7 @@ export default function App() {
               createOrg={createOrg} orgs={orgs} ORG_TYPE_KO={ORG_TYPE_KO} newAcct={newAcct}
               setNewAcct={setNewAcct} createAccount={createAccount} accounts={accounts} isAdmin={isAdmin}
               deleteAccount={deleteAccount}
+              notify={notify}
             />
           )}
 

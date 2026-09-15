@@ -2,10 +2,11 @@
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-08).
 import { Plus, Copy } from 'lucide-react';
 import { StatusBadge } from '../../components/ui';
+import SafetyEscalationSettings from './SafetyEscalationSettings';
 
 export default function AdminPage(props: any) {
   const {
-    isStaffUp, adminMsg, isSuper, me, saveOrgAddress, alertSettingSaving, updateAlertSetting,
+    isStaffUp, adminMsg, isSuper, me, saveOrgAddress, alertSettingSaving, updateAlertSetting, notify,
     inviteRole, setInviteRole, grantableRoles, ROLE_KO, createInvite, invites, inviteLink, copyInvite,
     copiedInvite, deleteInvite, newOrgName, setNewOrgName, newOrgType, setNewOrgType, createOrg, orgs,
     ORG_TYPE_KO, newAcct, setNewAcct, createAccount, accounts, isAdmin, deleteAccount,
@@ -65,6 +66,8 @@ export default function AdminPage(props: any) {
             ))}
           </div>
         )}
+
+        {!isSuper && <SafetyEscalationSettings me={me} notify={notify} />}
 
         {/* 구성원 초대 링크 — 센터장: 센터장·전담직원·지원사 / 전담직원: 지원사만 */}
         <div className="section admin-invite-section">

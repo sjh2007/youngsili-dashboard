@@ -13,7 +13,7 @@ export default function HealthPage(props: any) {
     callsHistory, kwFromTranscript, healthHistory, setCallModal, openDetail, healthRange,
     setHealthRange, healthHistFrom, setHealthHistFrom, healthHistTo, setHealthHistTo,
     formatDateHeader, healthNormalShown,
-    notify,
+    notify, me,
   } = props;
 
   const updateAlertStatus = async (alertId: string, body: Record<string, unknown>) => {
@@ -30,6 +30,23 @@ export default function HealthPage(props: any) {
     } catch {
       notify?.('네트워크 오류로 알림 상태를 저장하지 못했습니다');
     }
+  };
+
+  const escalateAlert = async (alertId: string, target: 'secondary' | 'afterHours') => {
+    const label = target === 'secondary' ? '2차 담당자' : '야간·휴일 담당자';
+    const note = window.prompt(`${label}에게 실제 연락한 내용을 입력하세요`);
+    if (note === null) return;
+    if (!note.trim()) { notify?.('이관 내용을 입력해 주세요'); return; }
+    try {
+      const response = await authFetch(`${SERVER_URL}/alerts/${alertId}/escalate`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ target, note, requestId: crypto.randomUUID() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) { notify?.(data?.error?.message || '이관 기록을 저장하지 못했습니다'); return; }
+      notify?.(`${label} 이관 기록을 저장했습니다.`, 'success');
+      await fetchHealth();
+    } catch { notify?.('네트워크 오류로 이관 기록을 저장하지 못했습니다'); }
   };
 
   return (
@@ -76,17 +93,23 @@ export default function HealthPage(props: any) {
             <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:m.bg,borderLeft:'4px solid '+m.c,border:'1px solid '+m.bd,borderRadius:10,padding:'12px 16px',marginBottom:8,flexWrap:'wrap'}}>
               <div style={{flex:1,minWidth:180}}><div style={{fontSize:17,fontWeight:700,color:m.c,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:14,fontWeight:800,background:m.c,color:'#fff',padding:'2px 8px',borderRadius:20}}>{m.label}</span>{nameByPhone(alert.phone, alert.name)} · {alertEnCode(alert) ? alertKw(alert) : `"${alertKw(alert)}"`}</div><div style={{fontSize:15,color:m.c,marginTop:2,opacity:0.85}}>{new Date(alert.timestamp).toLocaleString('ko-KR')}</div></div>
               {alert.status === 'ack' && <span style={{fontSize:15,fontWeight:800,color:'#b45309',background:'#fef3c7',padding:'3px 10px',borderRadius:20}}>조치중{alert.actionBy?` · ${alert.actionBy.split('@')[0]}`:''}</span>}
+              {alert.escalatedAt && <span style={{fontSize:14,fontWeight:800,color:'#7c3aed',background:'#f5f3ff',padding:'3px 10px',borderRadius:20}}>이관됨 · {alert.escalationTargetName}</span>}
               <button className="btn-small" style={{background:'#1e3a6e',color:'#fff',borderColor:'#1e3a6e'}} disabled={!!draftingAlertId} title="통화 내용을 찾아 초안까지 채워서 엽니다" onClick={()=>openNoteFromAlert(alert)}>{draftingAlertId===alert.id?'초안 생성 중…':'일지 작성'}</button>
               {(!alert.status || alert.status === 'new') && (
                 <button className="banner-btn" style={{border:'1.5px solid '+m.c,color:m.c}} onClick={()=>updateAlertStatus(alert.id,{status:'ack'})}>조치 시작</button>
               )}
               {alert.status === 'ack' && (
+                <>
+                {me?.safetyEscalation?.secondary?.phone && <a className="btn-small" href={`tel:${me.safetyEscalation.secondary.phone}`} style={{textDecoration:'none'}}>2차 담당자 전화</a>}
+                {me?.safetyEscalation?.secondary?.phone && <button className="btn-small" onClick={()=>escalateAlert(alert.id,'secondary')}>2차 이관 기록</button>}
+                {me?.safetyEscalation?.afterHours?.phone && <button className="btn-small" onClick={()=>escalateAlert(alert.id,'afterHours')}>야간 이관 기록</button>}
                 <button className="btn-small" style={{background:'#16a34a',color:'#fff',borderColor:'#16a34a'}} onClick={async()=>{
                   const note = window.prompt('조치 내용을 입력하세요 (예: 유선 확인 — 이상 없음, 보호자 연락, 방문 예정)');
                   if (note === null) return;
                   if (!note.trim()) { notify?.('조치 내용을 입력해 주세요'); return; }
                   await updateAlertStatus(alert.id,{status:'done',note});
                 }}>조치 완료</button>
+                </>
               )}
             </div>
             );
