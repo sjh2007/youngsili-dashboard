@@ -107,6 +107,7 @@ const SubscriptionItemStatusSchema = loose({
   plan: z.string().nullable(),
   monthlyAmount: z.number().nullable(),
   autoRenew: z.boolean(),
+  paidThrough: z.string().nullable().optional(),
   nextChargeAt: z.string().nullable(),
   lastChargeError: z.string().nullable(),
   pendingPlan: z.string().nullable().optional(),

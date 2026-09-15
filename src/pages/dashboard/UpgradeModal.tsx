@@ -24,7 +24,8 @@ export default function UpgradeModal(props: any) {
   const activeTrack = upgradeTab === 'flat' ? 'app' : 'pstn';
   const currentSub = subStatus?.subscriptions?.[activeTrack]
     ?? (subStatus?.track === activeTrack ? subStatus : null);
-  const hasAnySubscription = !!(subStatus?.subscriptions?.app?.autoRenew || subStatus?.subscriptions?.pstn?.autoRenew || subStatus?.autoRenew);
+  const isCurrentActive = (item:any) => !!item && (item.autoRenew || (item.paidThrough && new Date(item.paidThrough).getTime() > Date.now()));
+  const hasAnySubscription = !!(isCurrentActive(subStatus?.subscriptions?.app) || isCurrentActive(subStatus?.subscriptions?.pstn) || isCurrentActive(subStatus));
 
   return (
     <div className="modal-overlay" onClick={()=>setShowUpgradeModal(false)}>
@@ -39,7 +40,7 @@ export default function UpgradeModal(props: any) {
           ))}
         </div>
 
-        {currentSub?.autoRenew && upgradeTab!=='history' ? (<>
+        {isCurrentActive(currentSub) && upgradeTab!=='history' ? (<>
           <section className="subscription-overview" aria-labelledby="current-subscription-title">
             <div className="subscription-overview__header" style={{display:'flex',justifyContent:'space-between',gap:16,alignItems:'flex-start',flexWrap:'wrap'}}>
               <div>
@@ -47,11 +48,11 @@ export default function UpgradeModal(props: any) {
                 <div id="current-subscription-title" style={{fontSize:24,fontWeight:900,color:'#0f172a',marginTop:5}}>{billingPlanName(currentSub.plan)}</div>
                 <div style={{fontSize:14,color:'#475569',marginTop:7}}>{currentSub.monthlyAmount?.toLocaleString()}원/월 · 어르신 {subStatus.elderCount}명</div>
               </div>
-              <div className="subscription-status">자동결제 정상</div>
+              <div className="subscription-status">{currentSub.autoRenew?'자동결제 정상':'입금 완료'}</div>
             </div>
             <div className="subscription-facts">
               <div className="subscription-fact"><div className="subscription-fact__label">결제수단</div><div className="subscription-fact__value">{currentSub.paymentMethod?.label||'등록된 결제수단'}</div>{currentSub.paymentMethod?.masked&&<div className="subscription-fact__meta">{currentSub.paymentMethod.masked}</div>}</div>
-              <div className="subscription-fact"><div className="subscription-fact__label">다음 결제일</div><div className="subscription-fact__value">{currentSub.nextChargeAt?new Date(currentSub.nextChargeAt).toLocaleDateString('ko-KR'):'확인 필요'}</div></div>
+              <div className="subscription-fact"><div className="subscription-fact__label">{currentSub.autoRenew?'다음 결제일':'이용 종료일'}</div><div className="subscription-fact__value">{(currentSub.nextChargeAt||currentSub.paidThrough)?new Date(currentSub.nextChargeAt||currentSub.paidThrough).toLocaleDateString('ko-KR'):'확인 필요'}</div></div>
               <div className="subscription-fact"><div className="subscription-fact__label">결제 상태</div><div className={`subscription-fact__value ${currentSub.lastChargeError?'is-error':'is-ok'}`}>{currentSub.lastChargeError?'최근 결제 실패':'정상'}</div></div>
             </div>
             {currentSub.pendingPlan&&<div style={{marginTop:14,padding:'11px 13px',borderRadius:10,background:'#fff7ed',color:'#9a3412',fontSize:13}}>다음 결제일부터 <b>{billingPlanName(currentSub.pendingPlan)}</b> 요금제로 변경 예정입니다.</div>}
@@ -59,9 +60,10 @@ export default function UpgradeModal(props: any) {
             <div className="subscription-actions">
               <button className="btn-primary" onClick={()=>setManageAction(manageAction==='credit'?null:'credit')}>{manageAction==='credit'?'충전 닫기':'크레딧 충전'}</button>
               <button className="btn-secondary" onClick={()=>setManageAction(manageAction==='plan'?null:'plan')}>{manageAction==='plan'?'변경 닫기':'요금제 변경'}</button>
-              <button className="btn-secondary" onClick={()=>setManageAction(manageAction==='payment'?null:'payment')}>{manageAction==='payment'?'변경 닫기':'결제수단 변경'}</button>
+              {currentSub.autoRenew&&<button className="btn-secondary" onClick={()=>setManageAction(manageAction==='payment'?null:'payment')}>{manageAction==='payment'?'변경 닫기':'결제수단 변경'}</button>}
+              {!currentSub.autoRenew&&<button className="btn-secondary" disabled={!!subscribeBusy} onClick={()=>startSubscription(currentSub.plan,billingPlanName(currentSub.plan))}>다음 달 무통장 청구서</button>}
               {payTestEnabled&&currentSub.testMode&&<button className="btn-secondary" disabled={subscriptionActionBusy==='renew'} onClick={()=>testSubscriptionRenewal(activeTrack)}>{subscriptionActionBusy==='renew'?'재결제 중...':'다음 달 재결제 테스트'}</button>}
-              <button className="subscription-cancel" disabled={subCancelBusy} onClick={()=>cancelSubscription(activeTrack)}>{subCancelBusy?'처리 중...':'자동결제 해지'}</button>
+              {currentSub.autoRenew&&<button className="subscription-cancel" disabled={subCancelBusy} onClick={()=>cancelSubscription(activeTrack)}>{subCancelBusy?'처리 중...':'자동결제 해지'}</button>}
             </div>
           </section>
 
@@ -80,7 +82,7 @@ export default function UpgradeModal(props: any) {
           </div>}
         </>) : upgradeTab==='metered' ? (<>
           <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}><b style={{color:'#0f172a'}}>070 일반전화 정량제 구독</b>입니다. 표시 금액은 VAT 별도이며 포함 통화 소진 후 크레딧으로 이어서 이용합니다.</p>
-          {payTestEnabled && <div style={{padding:'14px 16px',marginBottom:16,border:'1px solid #dbe4f0',borderRadius:12,background:'#f8fafc'}}><div style={{fontSize:13,fontWeight:800,color:'#0f172a',marginBottom:9}}>정기결제 수단</div><div style={{display:'flex',gap:8}}>{[['CARD','신용·체크카드'],['TRANSFER','계좌 자동이체']].map(([value,label])=><button key={value} type="button" aria-pressed={subscriptionPaymentMethod===value} onClick={()=>setSubscriptionPaymentMethod(value)} style={{padding:'9px 14px',borderRadius:9,border:subscriptionPaymentMethod===value?'2px solid #246BEB':'1px solid #dbe4f0',background:subscriptionPaymentMethod===value?'#eaf2ff':'#fff',color:subscriptionPaymentMethod===value?'#1d4ed8':'#475569',fontWeight:750,cursor:'pointer'}}>{label}</button>)}</div><div style={{fontSize:12,color:'#64748b',marginTop:8}}>테스트 채널에 해당 수단 계약이 활성화되어 있어야 등록할 수 있습니다.</div></div>}
+          {payTestEnabled && <div style={{padding:'14px 16px',marginBottom:16,border:'1px solid #dbe4f0',borderRadius:12,background:'#f8fafc'}}><div style={{fontSize:13,fontWeight:800,color:'#0f172a',marginBottom:9}}>정기결제 수단</div><div style={{display:'flex',gap:8}}>{[['CARD','신용·체크카드'],['TRANSFER','계좌 자동이체'],['VIRTUAL_ACCOUNT','무통장입금']].map(([value,label])=><button key={value} type="button" aria-pressed={subscriptionPaymentMethod===value} onClick={()=>setSubscriptionPaymentMethod(value)} style={{padding:'9px 14px',borderRadius:9,border:subscriptionPaymentMethod===value?'2px solid #246BEB':'1px solid #dbe4f0',background:subscriptionPaymentMethod===value?'#eaf2ff':'#fff',color:subscriptionPaymentMethod===value?'#1d4ed8':'#475569',fontWeight:750,cursor:'pointer'}}>{label}</button>)}</div><div style={{fontSize:12,color:'#64748b',marginTop:8}}>테스트 채널에 해당 수단 계약이 활성화되어 있어야 등록할 수 있습니다.</div></div>}
 
           <div style={{border:'1px solid #d8e3f5',borderLeft:'5px solid #246BEB',borderRadius:14,padding:'20px 22px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,flexWrap:'wrap',background:'#fff'}}>
             <div>
@@ -98,7 +100,7 @@ export default function UpgradeModal(props: any) {
           <div style={{marginTop:16,padding:'14px 16px',borderRadius:12,background:'#f8fafc',border:'1px solid #e2e8f0',fontSize:12,color:'#64748b',lineHeight:1.7}}>포함 통화는 매월 초기화됩니다. 미응답과 통화시간에 따른 실제 차감은 서버의 일반전화 과금 규칙을 따르며, 충전 크레딧은 결제일로부터 1년 후 소멸합니다. 크레딧은 신용·체크카드 일시불로만 충전할 수 있으며, 환불은 충전할 때 사용한 원 결제 카드로만 처리됩니다.</div>
         </>) : upgradeTab==='flat' ? (<>
           <p style={{color:'#64748b',fontSize:15,margin:'0 0 20px',lineHeight:1.6}}><b style={{color:'#0f172a'}}>앱 설치형 AI 안부전화</b>입니다. 등록 어르신 수에 선택한 1인당 월 단가를 곱해 청구하며 표시 금액은 부가세 포함입니다.</p>
-          {payTestEnabled && <div style={{padding:'14px 16px',marginBottom:16,border:'1px solid #dbe4f0',borderRadius:12,background:'#f8fafc'}}><div style={{fontSize:13,fontWeight:800,color:'#0f172a',marginBottom:9}}>정기결제 수단</div><div style={{display:'flex',gap:8}}>{[['CARD','신용·체크카드'],['TRANSFER','계좌 자동이체']].map(([value,label])=><button key={value} type="button" aria-pressed={subscriptionPaymentMethod===value} onClick={()=>setSubscriptionPaymentMethod(value)} style={{padding:'9px 14px',borderRadius:9,border:subscriptionPaymentMethod===value?'2px solid #246BEB':'1px solid #dbe4f0',background:subscriptionPaymentMethod===value?'#eaf2ff':'#fff',color:subscriptionPaymentMethod===value?'#1d4ed8':'#475569',fontWeight:750,cursor:'pointer'}}>{label}</button>)}</div></div>}
+          {payTestEnabled && <div style={{padding:'14px 16px',marginBottom:16,border:'1px solid #dbe4f0',borderRadius:12,background:'#f8fafc'}}><div style={{fontSize:13,fontWeight:800,color:'#0f172a',marginBottom:9}}>정기결제 수단</div><div style={{display:'flex',gap:8}}>{[['CARD','신용·체크카드'],['TRANSFER','계좌 자동이체'],['VIRTUAL_ACCOUNT','무통장입금']].map(([value,label])=><button key={value} type="button" aria-pressed={subscriptionPaymentMethod===value} onClick={()=>setSubscriptionPaymentMethod(value)} style={{padding:'9px 14px',borderRadius:9,border:subscriptionPaymentMethod===value?'2px solid #246BEB':'1px solid #dbe4f0',background:subscriptionPaymentMethod===value?'#eaf2ff':'#fff',color:subscriptionPaymentMethod===value?'#1d4ed8':'#475569',fontWeight:750,cursor:'pointer'}}>{label}</button>)}</div></div>}
           <div style={{border:'1px solid #d8e3f5',borderLeft:'5px solid #20a66a',borderRadius:14,padding:'18px 20px',marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:16,flexWrap:'wrap',background:'#fff'}}>
             <div><div style={{fontSize:13,color:'#168455',fontWeight:850}}>시범사업</div><div style={{fontSize:22,fontWeight:900,marginTop:3}}>30일 무료 체험</div><div style={{fontSize:12,color:'#64748b',marginTop:6}}>관리자 대시보드 · 매일 발신 관리 · 위험 감지 · 119·보호자 연결 · 통화 기록</div></div>
             <button className="btn-secondary" disabled={!!billing?.trialEndsAt} onClick={startTrial}>{billing?.trialEndsAt?'이미 체험함':'무료체험 시작'}</button>

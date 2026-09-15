@@ -622,6 +622,37 @@ export default function App() {
   };
   useEffect(() => { if (showUpgradeModal) fetchSubscriptionStatus(); }, [showUpgradeModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const startSubscriptionInvoice = async (planKey, planName) => {
+    const r = await authFetch(`${SERVER_URL}/billing/subscription/invoice`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ planKey, testMode: isPayTestEnabled() }),
+    });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) { notify(errMsg(d, '무통장 청구서 발급 실패')); return; }
+    const invoice = parseOr(TopupResponseSchema, d, null);
+    if (!invoice) { notify('청구서 응답을 처리할 수 없습니다'); return; }
+    const { requestPayment } = await import('@portone/browser-sdk/v2');
+    const response = await requestPayment({
+      storeId: invoice.storeId, channelKey: invoice.channelKey, paymentId: invoice.paymentId,
+      orderName: invoice.orderName, totalAmount: invoice.amount, currency: 'KRW', payMethod: 'VIRTUAL_ACCOUNT',
+      virtualAccount: { accountExpiry: { validHours: 24 } },
+      customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || '01000000000' },
+    });
+    if (response?.code !== undefined) { notify(`계좌 발급 실패: ${response.message || response.code}`); return; }
+    setShowUpgradeModal(false);
+    for (const delayMs of [1500, 3000, 5000, 8000, 12000]) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      const sr = await authFetch(`${SERVER_URL}/billing/payment/${invoice.paymentId}`);
+      if (!sr.ok) continue;
+      const status = parseOr(PaymentStatusSchema, await sr.json(), null);
+      if (status?.virtualAccount?.accountNumber) {
+        setVirtualAccountInfo({ amount: invoice.amount, description: `${planName} 월 구독료`, ...status.virtualAccount });
+        return;
+      }
+      if (status?.status === 'paid') { setPaymentSuccess({ amount: invoice.amount, desc: `${planName} 구독료 입금이 확인됐습니다.` }); return; }
+    }
+    notify('계좌 발급 확인이 지연되고 있습니다. 결제 내역에서 다시 확인해 주세요.', 'info');
+  };
+
   // 정액제 자동결제 등록 — 1단계(빌링키 발급 요청) → PortOne.js `requestIssueBillingKey()`로 결제수단
   // 등록 → 2단계(서버가 빌링키 재검증 후 첫 결제를 그 자리에서 승인, 다음 달부터는 서버 크론이 자동 재청구).
   // 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동 폴백한다.
@@ -629,6 +660,10 @@ export default function App() {
     if (subscribeBusy) return;
     setSubscribeBusy(planKey);
     try {
+      if (!options.replacePaymentMethod && subscriptionPaymentMethod === 'VIRTUAL_ACCOUNT') {
+        await startSubscriptionInvoice(planKey, planName);
+        return;
+      }
       const r = await authFetch(`${SERVER_URL}/billing/subscribe/register`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
