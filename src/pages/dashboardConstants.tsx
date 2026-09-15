@@ -40,24 +40,13 @@ export const BANK_LABELS: Record<string,string> = {
   K_BANK:'케이뱅크', KAKAO:'카카오뱅크', TOSS:'토스뱅크', SUHYUP:'수협은행',
 };
 
-// AI영실이 요금 정책 통합본 v1.0(전략기획실, 2026-08-28) §5 정액제 — 앱 설치 방식 4등급.
-// 정량제(선불 충전식 크레딧, 지금 쓰고 있는 방식)가 주력 트랙이지만, 예산을 고정해야 하는
-// 기관을 위한 보조 트랙으로 별도 안내한다. 실제 결제(포트원) 연동 전까지는 "신청 접수"만
-// 하고 담당자가 후속 안내하는 방식(1단계) — 여기서 자동으로 플랜이 바뀌지는 않는다.
+// 앱 설치형 전화의 현행 인·월 요금. 일반전화(070) 구독과 별도 트랙으로 결제한다.
 export const UPGRADE_PLANS = [
-  { key:'trial',    name:'시범사업', price:'무료',      unit:'30일',    features:['관리자 대시보드','전화 발신 관리','3단계 위험 감지','119·보호자 자동연결','통화 기록'] },
-  { key:'basic',     name:'베이직',   price:'11,000원', unit:'인·월',   features:['시범사업 전체 포함','건강 상태 추적','전화멘트 관리'] },
-  { key:'standard',  name:'스탠다드', price:'13,000원', unit:'인·월',   features:['베이직 전체 포함','리포트 / 통계','공공데이터 연동(산불·폭염·재난)'], recommended:true },
-  { key:'premium',   name:'프리미엄', price:'19,000원', unit:'인·월',   features:['스탠다드 전체 포함','방문 필요·현장출동 연계','IoT 연동'] },
+  { key:'trial', name:'시범사업', monthlyRate:0, price:'무료', unit:'30일 체험', summary:'운영 기능까지 체험', features:['관리자 대시보드 제공','전화 발신 관리 (매일 무제한)','3단계 위험 감지 (위험·주의·정상)','119·보호자 자동연결','어르신 관리·통화 기록'] },
+  { key:'basic', name:'베이직', monthlyRate:11_000, price:'11,000원', unit:'인·월', summary:'기본 운영·멘트', features:['시범사업 기능 전체','건강 상태 추적','전화멘트 관리'] },
+  { key:'standard', name:'스탠다드', monthlyRate:13_000, price:'13,000원', unit:'인·월', summary:'행정·재난 대응', features:['베이직 기능 전체','리포트 / 통계','공공데이터 연동 (산불·폭염·재난)'], recommended:true },
+  { key:'premium', name:'프리미엄', monthlyRate:19_000, price:'19,000원', unit:'인·월', summary:'IoT·현장 올케어', features:['스탠다드 기능 전체','방문 필요·현장출동 연계','IoT 연동'] },
 ];
-export const APP_PHONE_PLANS = [
-  { key:'app100', elderLimit:100, prices:{1:750000,3:1400000,5:2100000} },
-  { key:'app200', elderLimit:200, prices:{1:1050000,3:2350000,5:3650000} },
-  { key:'app300', elderLimit:300, prices:{1:1400000,3:3300000,5:5250000}, recommended:true },
-  { key:'app400', elderLimit:400, prices:{1:1700000,3:4300000,5:6900000} },
-  { key:'app500', elderLimit:500, prices:{1:2050000,3:5250000,5:8500000} },
-];
-export const APP_WEEKLY_FREQUENCIES = [1, 3, 5];
 export const billingPlanName = (key: string | null | undefined) => {
   if (!key) return '-';
   const match = /^app(100|200|300|400|500)_w([135])$/.exec(key);
