@@ -665,6 +665,12 @@ export default function App() {
         },
       });
       if (response?.code !== undefined) { notify(`자동결제 등록 실패: ${response.message || response.code}`); return; }
+      if (!response?.billingKey) {
+        // 결제창이 닫혔더라도 PortOne이 빌링키를 돌려주지 않으면 등록은 완료되지 않은 상태다.
+        // 이 상태를 성공처럼 넘기면 서버 확인 요청 자체가 빠져 운영자가 원인을 찾을 수 없다.
+        notify('자동결제 등록 실패: 결제사에서 빌링키를 받지 못했습니다. 다시 시도해 주세요.');
+        return;
+      }
 
       const confirmRes = await authFetch(`${SERVER_URL}/billing/subscribe/confirm`, {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -677,8 +683,13 @@ export default function App() {
       setPaymentSuccess({ amount: confirmData.amount, desc: `"${planName}" 플랜 자동결제가 등록되고 첫 결제가 완료됐습니다. 다음 달부터 자동으로 청구됩니다.` });
       fetchMe();
       fetchSubscriptionStatus();
-    } catch {
-      notify('네트워크 오류 — 결제 요청 실패');
+    } catch (error) {
+      const portoneError = error && typeof error === 'object'
+        ? error as { code?: unknown; message?: unknown }
+        : null;
+      const detail = portoneError?.message || portoneError?.code;
+      // 카드번호·인증정보 등이 섞일 수 있는 전체 오류 객체는 화면이나 콘솔에 기록하지 않는다.
+      notify(detail ? `자동결제 등록 실패: ${String(detail)}` : '자동결제 등록 실패: 결제창 응답을 처리하지 못했습니다.');
     } finally {
       setSubscribeBusy(null);
     }
