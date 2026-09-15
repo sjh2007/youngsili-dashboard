@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
-import { CallEngineProviderSchema, OpsMetricsSchema, parseOr } from '../schemas';
+import { CallEngineProviderSchema, OpsMetricsSchema, PilotMetricsSchema, parseOr } from '../schemas';
 // App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적) —
 // 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
 // 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
@@ -491,6 +491,10 @@ export default function ConsoleApp() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsMonths, setStatsMonths] = useState(6);
   const [statsOrg, setStatsOrg] = useState('');
+  const [pilotData, setPilotData] = useState<any>(null);
+  const [pilotLoading, setPilotLoading] = useState(false);
+  const [pilotFrom, setPilotFrom] = useState(() => localDateKey(new Date(Date.now() - 13 * 86400_000)) || '');
+  const [pilotTo, setPilotTo] = useState(() => localDateKey(new Date()) || '');
 
   // ── 사용자(기관 소속 계정) 관리 ──
   const [users, setUsers] = useState<any[]>([]);
@@ -940,6 +944,17 @@ export default function ConsoleApp() {
     finally { setStatsLoading(false); }
   };
   const orgName = (orgId: string) => orgs.find((o: any) => o.orgId === orgId)?.name || orgId;
+  const fetchPilotMetrics = async () => {
+    if (!statsOrg) { notify('파일럿 기관을 먼저 선택하세요'); return; }
+    setPilotLoading(true);
+    try {
+      const params = new URLSearchParams({ org: statsOrg, from: pilotFrom, to: pilotTo });
+      const r = await authFetch(`${SERVER_URL}/console/pilot-metrics?${params.toString()}`);
+      const raw = await requireJson(r, '파일럿 지표 조회 실패');
+      setPilotData(parseOr(PilotMetricsSchema, raw, null));
+    } catch (e:any) { notify(e?.message || '파일럿 지표 조회 실패'); }
+    finally { setPilotLoading(false); }
+  };
 
   // ── 사용자(기관 소속 계정) 관리 ──
   const fetchUsers = async () => {
@@ -1396,6 +1411,48 @@ export default function ConsoleApp() {
                 </div>
               </section>
             )}
+            <section className="section" style={{marginTop:16}}>
+              <div className="script-editor-header" style={{marginBottom:10}}>
+                <div>
+                  <div className="section-title" style={{marginBottom:3}}>기관 파일럿 지표</div>
+                  <div style={{fontSize:12,color:'#5f6368'}}>예약 안부전화만 집계하며 수동·경보·기능 테스트 발신은 제외합니다.</div>
+                </div>
+                <button className={`btn-download ${pilotLoading?'btn-calling':''}`} onClick={fetchPilotMetrics} disabled={pilotLoading || !statsOrg}>
+                  {pilotLoading?'조회 중...':'파일럿 조회'}
+                </button>
+              </div>
+              <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
+                <select className="form-input" style={{width:240,margin:0}} value={statsOrg} onChange={e=>{setStatsOrg(e.target.value);setPilotData(null);}}>
+                  <option value="">파일럿 기관 선택</option>
+                  {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
+                </select>
+                <label style={{fontSize:12,color:'#5f6368'}}>시작일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotFrom} onChange={e=>setPilotFrom(e.target.value)} /></label>
+                <label style={{fontSize:12,color:'#5f6368'}}>종료일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotTo} onChange={e=>setPilotTo(e.target.value)} /></label>
+              </div>
+              {!pilotData ? (
+                <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{statsOrg?'기간을 확인하고 파일럿 조회를 누르세요.':'기관을 선택해야 파일럿 지표를 조회할 수 있습니다.'}</div>
+              ) : (
+                <>
+                  {pilotData.note && <div style={{background:'#fef7e0',color:'#754d00',border:'1px solid #f9ab00',borderRadius:6,padding:'10px 12px',fontSize:13,marginBottom:12}}>{pilotData.note}</div>}
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
+                    {[
+                      ['예정',pilotData.scheduledExpected,'건',false],
+                      ['발신 시도',pilotData.scheduledAttempts,'건',pilotData.missingExpected>0],
+                      ['시도율',pilotData.attemptRate==null?'-':Math.round(pilotData.attemptRate*100),'%',pilotData.attemptRate!=null&&pilotData.attemptRate<.99],
+                      ['완료',pilotData.completed,'건',false],
+                      ['미응답',pilotData.missed,'건',false],
+                      ['기술 실패',pilotData.failed,'건',pilotData.failed>0],
+                      ['예약 누락',pilotData.missingExpected,'건',pilotData.missingExpected>0],
+                      ['중복 발신',pilotData.duplicateDispatches,'건',pilotData.duplicateDispatches>0],
+                      ['결과 저장 누락',pilotData.completedWithoutCallResult,'건',pilotData.completedWithoutCallResult>0],
+                    ].map(([label,value,unit,danger]:any)=><div key={label} style={{border:`1px solid ${danger?'#f6aea9':'#dadce0'}`,borderRadius:8,padding:'12px 14px',background:danger?'#fce8e6':'#fff'}}>
+                      <div style={{fontSize:12,color:'#5f6368'}}>{label}</div>
+                      <div style={{fontSize:23,fontWeight:700,color:danger?'#c5221f':'#202124',marginTop:3}}>{value}{value!=='-'&&<span style={{fontSize:12,fontWeight:500,marginLeft:3}}>{unit}</span>}</div>
+                    </div>)}
+                  </div>
+                </>
+              )}
+            </section>
           </div>
         )}
 

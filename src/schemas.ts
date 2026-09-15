@@ -316,6 +316,26 @@ export const OpsMetricsSchema = loose({
   }),
 });
 
+// GET /console/pilot-metrics — 예약 안부전화만 분리한 기관 파일럿 지표.
+export const PilotMetricsSchema = loose({
+  orgId: z.string(),
+  from: z.string(),
+  to: z.string(),
+  scheduledExpected: z.number(),
+  scheduledAttempts: z.number(),
+  completed: z.number(),
+  missed: z.number(),
+  failed: z.number(),
+  pending: z.number(),
+  missingExpected: z.number(),
+  duplicateDispatches: z.number(),
+  completedWithoutCallResult: z.number(),
+  attemptRate: z.number().nullable(),
+  technicalFailureRate: z.number().nullable(),
+  resultCompletenessRate: z.number().nullable(),
+  note: z.string().nullable(),
+});
+
 export const CallEngineProviderSchema = loose({
   provider: z.enum(['gemini', 'openai']),
   reason: z.string().default(''),
