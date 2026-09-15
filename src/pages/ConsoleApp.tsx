@@ -1249,11 +1249,11 @@ export default function ConsoleApp() {
                     <tbody>{privacyPurgeJobs.map((job:any) => (
                       <tr key={job.id} style={{borderBottom:'1px solid #f1f3f4'}}>
                         <td style={{padding:'10px'}}>{job.orgId || '-'}</td>
-                        <td style={{padding:'10px'}}>{job.maskedPhone || '번호 비공개'}</td>
+                        <td style={{padding:'10px'}}>{job.type==='retention'?'보관기간 자동 파기':(job.maskedPhone || '번호 비공개')}</td>
                         <td style={{padding:'10px',fontWeight:700,color:job.status==='failed'?'#c5221f':'#b45309'}}>{job.status==='failed'?'실패':job.status==='running'?'처리 중':'대기'}</td>
                         <td style={{padding:'10px'}}>{(Object.values(job.progress || {}) as any[]).reduce((sum:number, value:any)=>sum+Number(value || 0),0)}건</td>
                         <td style={{padding:'10px',maxWidth:320,wordBreak:'break-word'}}>{job.error || '-'}</td>
-                        <td style={{padding:'10px'}}><button className="btn-secondary" disabled={job.status!=='failed' || privacyRetryBusy===job.id} onClick={()=>retryPrivacyPurge(job)}>{privacyRetryBusy===job.id?'재시도 중...':'재시도'}</button></td>
+                        <td style={{padding:'10px'}}><button className="btn-secondary" disabled={!job.retryable || privacyRetryBusy===job.id} onClick={()=>retryPrivacyPurge(job)}>{privacyRetryBusy===job.id?'재시도 중...':job.retryable?'재시도':'다음 배치 재처리'}</button></td>
                       </tr>
                     ))}</tbody>
                   </table>
