@@ -678,7 +678,11 @@ export default function App() {
 
       const confirmRes = await authFetch(`${SERVER_URL}/billing/subscribe/confirm`, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ issueId: reg.issueId, billingKey: response.billingKey }),
+        body: JSON.stringify({
+          issueId: reg.issueId,
+          billingKey: response.billingKey,
+          ...(response.billingIssueToken ? { billingIssueToken: response.billingIssueToken } : {}),
+        }),
       });
       const confirmData = await confirmRes.json().catch(()=>({}));
       if (!confirmRes.ok) { notify(errMsg(confirmData, '결제 승인 실패')); return; }
