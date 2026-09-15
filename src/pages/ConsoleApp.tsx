@@ -442,6 +442,8 @@ export default function ConsoleApp() {
   const [callEngineReason, setCallEngineReason] = useState('');
   const [callEngineBusy, setCallEngineBusy] = useState(false);
   const [loadingHealth, setLoadingHealth] = useState(false);
+  const [privacyPurgeJobs, setPrivacyPurgeJobs] = useState<any[]>([]);
+  const [privacyRetryBusy, setPrivacyRetryBusy] = useState('');
   const [history, setHistory] = useState<any[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyOrg, setHistoryOrg] = useState('');
@@ -561,16 +563,24 @@ export default function ConsoleApp() {
   const fetchHealth = async () => {
     setLoadingHealth(true);
     try {
-      const [hRes, cRes, mRes, providerRes] = await Promise.all([
+      const [hRes, cRes, mRes, providerRes, privacyRes] = await Promise.all([
         authFetch(`${SERVER_URL}/console/health`),
         authFetch(`${SERVER_URL}/console/calls/active`),
         authFetch(`${SERVER_URL}/admin/metrics?hours=24`),
         authFetch(`${SERVER_URL}/admin/call-engine/provider`),
+        authFetch(`${SERVER_URL}/console/privacy-purge-jobs`),
       ]);
       const hData = await requireJson(hRes, '시스템 상태 조회 실패');
       const cData = await requireJson(cRes, '진행 중 통화 조회 실패');
       if (hData && Array.isArray(hData.components)) setHealth(hData);
       if (Array.isArray(cData)) setActiveCalls(cData);
+      try {
+        const privacyData = await requireJson(privacyRes, '개인정보 파기 작업 조회 실패');
+        setPrivacyPurgeJobs(Array.isArray(privacyData?.jobs) ? privacyData.jobs : []);
+      } catch (privacyError: any) {
+        setPrivacyPurgeJobs([]);
+        notify(privacyError?.message || '개인정보 파기 작업 조회 실패');
+      }
       try {
         const mData = await requireJson(mRes, '안전 운영 지표 조회 실패');
         setOpsMetrics(parseOr(OpsMetricsSchema, mData, null));
@@ -588,6 +598,22 @@ export default function ConsoleApp() {
       }
     } catch (e:any) { notify(e?.message || '시스템 상태 조회 실패'); }
     finally { setLoadingHealth(false); }
+  };
+
+  const retryPrivacyPurge = async (job: any) => {
+    if (!window.confirm(`${job.orgId || '기관 미확인'} · ${job.maskedPhone || '번호 비공개'} 파기 작업을 재시도할까요?`)) return;
+    setPrivacyRetryBusy(job.id);
+    try {
+      const response = await authFetch(`${SERVER_URL}/console/privacy-purge-jobs/${encodeURIComponent(job.id)}/retry`, { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) { notify(errMsg(data, '개인정보 파기 재시도 실패')); return; }
+      notify(`개인정보 파기 완료 · 삭제 ${Number(data.deleted || 0)}건 · 비식별 ${Number(data.anonymized || 0)}건`, 'success');
+      await fetchHealth();
+    } catch (e: any) {
+      notify(e?.message || '개인정보 파기 재시도 실패');
+    } finally {
+      setPrivacyRetryBusy('');
+    }
   };
 
   const updateCallEngineProvider = async () => {
@@ -1211,6 +1237,29 @@ export default function ConsoleApp() {
                 </div>
               )}
             </section>
+            {!!privacyPurgeJobs.length && (
+              <section className="section" style={{marginTop:20,borderColor:'#f6aea9'}}>
+                <div className="section-title" style={{marginBottom:4,color:'#c5221f'}}>개인정보 파기 확인 필요</div>
+                <div style={{fontSize:12,color:'#5f6368',marginBottom:12}}>파기 실패 또는 중단 작업입니다. 처리 건수와 오류를 확인한 뒤 실패 작업만 재시도할 수 있습니다.</div>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                    <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                      <th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>대상</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}>진행</th><th style={{padding:'8px 10px'}}>오류</th><th style={{padding:'8px 10px'}}>처리</th>
+                    </tr></thead>
+                    <tbody>{privacyPurgeJobs.map((job:any) => (
+                      <tr key={job.id} style={{borderBottom:'1px solid #f1f3f4'}}>
+                        <td style={{padding:'10px'}}>{job.orgId || '-'}</td>
+                        <td style={{padding:'10px'}}>{job.maskedPhone || '번호 비공개'}</td>
+                        <td style={{padding:'10px',fontWeight:700,color:job.status==='failed'?'#c5221f':'#b45309'}}>{job.status==='failed'?'실패':job.status==='running'?'처리 중':'대기'}</td>
+                        <td style={{padding:'10px'}}>{(Object.values(job.progress || {}) as any[]).reduce((sum:number, value:any)=>sum+Number(value || 0),0)}건</td>
+                        <td style={{padding:'10px',maxWidth:320,wordBreak:'break-word'}}>{job.error || '-'}</td>
+                        <td style={{padding:'10px'}}><button className="btn-secondary" disabled={job.status!=='failed' || privacyRetryBusy===job.id} onClick={()=>retryPrivacyPurge(job)}>{privacyRetryBusy===job.id?'재시도 중...':'재시도'}</button></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </section>
+            )}
             <section className="section" style={{marginTop:20}}>
               <div className="section-title" style={{marginBottom:4}}>안전 운영 사건</div>
               <div style={{fontSize:12,color:'#5f6368',marginBottom:12}}>전체 미완료 사건 · 미확인 15분, 조치중 60분 초과 시 지연으로 표시</div>
