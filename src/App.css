@@ -5561,3 +5561,109 @@ textarea, select {
      303px 안에 313px를 밀어 넣고 있었다(실측). 줄바꿈을 허용한다. */
   .alert-banner { flex-wrap: wrap !important; }
 }
+
+/* 구독 관리 — 결제 포털처럼 현재 상태를 먼저 읽고, 변경 도구는 필요할 때만 연다. */
+.subscription-overview {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+}
+.subscription-overview__header {
+  padding: 24px 24px 22px;
+}
+.subscription-status {
+  position: relative;
+  padding-left: 15px;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 800;
+}
+.subscription-status::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  content: '';
+  transform: translateY(-50%);
+}
+.subscription-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid #eef2f6;
+  border-bottom: 1px solid #eef2f6;
+  background: #fbfcfd;
+}
+.subscription-fact {
+  min-height: 76px;
+  padding: 17px 24px;
+}
+.subscription-fact + .subscription-fact {
+  border-left: 1px solid #eef2f6;
+}
+.subscription-fact__label {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+.subscription-fact__value {
+  margin-top: 5px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 750;
+}
+.subscription-fact__value.is-ok { color: #166534; }
+.subscription-fact__value.is-error { color: #b91c1c; }
+.subscription-fact__meta {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+}
+.subscription-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 16px 24px;
+  flex-wrap: wrap;
+}
+.subscription-actions .btn-secondary {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-color: #dbe3ec;
+  box-shadow: none;
+  font-size: 13px;
+}
+.subscription-cancel {
+  min-height: 36px;
+  margin-left: auto;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.subscription-cancel:hover,
+.subscription-cancel:focus-visible { color: #b91c1c; }
+.subscription-editor {
+  margin-top: 12px;
+  padding: 20px 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+}
+
+@media (max-width: 640px) {
+  .subscription-overview__header { padding: 20px; }
+  .subscription-facts { grid-template-columns: 1fr; }
+  .subscription-fact { min-height: auto; padding: 14px 20px; }
+  .subscription-fact + .subscription-fact { border-top: 1px solid #eef2f6; border-left: 0; }
+  .subscription-actions { align-items: stretch; padding: 14px 20px; }
+  .subscription-actions .btn-secondary { flex: 1 1 calc(50% - 4px); }
+  .subscription-cancel { width: 100%; margin: 2px 0 0; text-align: left; }
+}
