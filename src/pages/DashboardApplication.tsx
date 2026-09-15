@@ -668,6 +668,10 @@ export default function App() {
       if (!response?.billingKey) {
         // 결제창이 닫혔더라도 PortOne이 빌링키를 돌려주지 않으면 등록은 완료되지 않은 상태다.
         // 이 상태를 성공처럼 넘기면 서버 확인 요청 자체가 빠져 운영자가 원인을 찾을 수 없다.
+        console.error('[billing-subscribe] PortOne returned no billing key', {
+          code: response?.code,
+          message: response?.message,
+        });
         notify('자동결제 등록 실패: 결제사에서 빌링키를 받지 못했습니다. 다시 시도해 주세요.');
         return;
       }
@@ -689,6 +693,10 @@ export default function App() {
         : null;
       const detail = portoneError?.message || portoneError?.code;
       // 카드번호·인증정보 등이 섞일 수 있는 전체 오류 객체는 화면이나 콘솔에 기록하지 않는다.
+      console.error('[billing-subscribe] PortOne request failed', {
+        code: portoneError?.code,
+        message: portoneError?.message,
+      });
       notify(detail ? `자동결제 등록 실패: ${String(detail)}` : '자동결제 등록 실패: 결제창 응답을 처리하지 못했습니다.');
     } finally {
       setSubscribeBusy(null);
