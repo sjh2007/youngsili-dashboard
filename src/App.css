@@ -5657,6 +5657,34 @@ textarea, select {
   border-radius: 14px;
   background: #fff;
 }
+.subscription-credit-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+.subscription-credit-option {
+  display: flex;
+  min-height: 74px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  transition: border-color .15s ease, background .15s ease;
+}
+.subscription-credit-option:hover,
+.subscription-credit-option:focus-visible {
+  border-color: #246beb;
+  background: #f8fbff;
+  outline: none;
+}
+.subscription-credit-option b { font-size: 15px; }
+.subscription-credit-option span { margin-top: 5px; color: #64748b; font-size: 11px; }
 
 @media (max-width: 640px) {
   .subscription-overview__header { padding: 20px; }
@@ -5666,4 +5694,5 @@ textarea, select {
   .subscription-actions { align-items: stretch; padding: 14px 20px; }
   .subscription-actions .btn-secondary { flex: 1 1 calc(50% - 4px); }
   .subscription-cancel { width: 100%; margin: 2px 0 0; text-align: left; }
+  .subscription-credit-options { grid-template-columns: 1fr; }
 }

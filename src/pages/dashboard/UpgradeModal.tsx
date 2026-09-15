@@ -19,7 +19,7 @@ export default function UpgradeModal(props: any) {
     setRefundReasonPreset, setRefundReasonCustom,
     subscriptionActionBusy, scheduleSubscriptionPlanChange, testSubscriptionRenewal,
   } = props;
-  const [manageAction, setManageAction] = useState<'plan'|'payment'|null>(null);
+  const [manageAction, setManageAction] = useState<'plan'|'payment'|'credit'|null>(null);
   const [selectedWeeks, setSelectedWeeks] = useState(4);
   const [selectedAppKey, setSelectedAppKey] = useState('app300');
   const [selectedAppFrequency, setSelectedAppFrequency] = useState(1);
@@ -59,12 +59,15 @@ export default function UpgradeModal(props: any) {
             {subStatus.pendingPlan&&<div style={{marginTop:14,padding:'11px 13px',borderRadius:10,background:'#fff7ed',color:'#9a3412',fontSize:13}}>다음 결제일부터 <b>{billingPlanName(subStatus.pendingPlan)}</b> 요금제로 변경 예정입니다.</div>}
             {subStatus.lastChargeError&&<div style={{marginTop:10,padding:'11px 13px',borderRadius:10,background:'#fef2f2',color:'#b91c1c',fontSize:13}}>최근 청구 실패: {subStatus.lastChargeError}</div>}
             <div className="subscription-actions">
+              <button className="btn-primary" onClick={()=>setManageAction(manageAction==='credit'?null:'credit')}>{manageAction==='credit'?'충전 닫기':'크레딧 충전'}</button>
               <button className="btn-secondary" onClick={()=>setManageAction(manageAction==='plan'?null:'plan')}>{manageAction==='plan'?'변경 닫기':'요금제 변경'}</button>
               <button className="btn-secondary" onClick={()=>setManageAction(manageAction==='payment'?null:'payment')}>{manageAction==='payment'?'변경 닫기':'결제수단 변경'}</button>
               {payTestEnabled&&subStatus.testMode&&<button className="btn-secondary" disabled={subscriptionActionBusy==='renew'} onClick={testSubscriptionRenewal}>{subscriptionActionBusy==='renew'?'재결제 중...':'다음 달 재결제 테스트'}</button>}
               <button className="subscription-cancel" disabled={subCancelBusy} onClick={cancelSubscription}>{subCancelBusy?'처리 중...':'자동결제 해지'}</button>
             </div>
           </section>
+
+          {manageAction==='credit'&&<div className="subscription-editor"><b style={{fontSize:16}}>크레딧 충전</b><p style={{fontSize:13,color:'#64748b',lineHeight:1.6}}>포함 통화를 모두 사용한 뒤에도 충전 크레딧으로 계속 통화할 수 있습니다. 구매한 크레딧은 결제일로부터 1년간 유효합니다.</p><div className="subscription-credit-options">{CHARGE_TIERS.map(item=><button key={item.key} type="button" className="subscription-credit-option" onClick={()=>setPendingTopup({amount:item.amount})}><b>{item.amount.toLocaleString()}원</b><span>{item.calls} 이용 가능</span></button>)}</div></div>}
 
           {manageAction==='payment'&&<div className="subscription-editor"><b style={{fontSize:16}}>새 결제수단 등록</b><p style={{fontSize:13,color:'#64748b',lineHeight:1.6}}>새 수단의 빌링키가 정상 확인된 뒤 기존 수단을 교체합니다. 지금 추가 결제되지는 않습니다.</p><div style={{display:'flex',gap:8,margin:'12px 0'}}>{(payTestEnabled?[['CARD','신용·체크카드'],['TRANSFER','계좌 자동이체']]:[['CARD','신용·체크카드']]).map(([value,label])=><button key={value} type="button" aria-pressed={subscriptionPaymentMethod===value} onClick={()=>setSubscriptionPaymentMethod(value)} style={{padding:'9px 14px',borderRadius:9,border:subscriptionPaymentMethod===value?'2px solid #246BEB':'1px solid #dbe4f0',background:subscriptionPaymentMethod===value?'#eaf2ff':'#fff',fontWeight:750}}>{label}</button>)}</div><button className="btn-primary" disabled={!!subscribeBusy} onClick={()=>startSubscription(subStatus.plan,billingPlanName(subStatus.plan),{replacePaymentMethod:true})}>{subscribeBusy?'등록 중...':'이 결제수단으로 변경'}</button></div>}
 
