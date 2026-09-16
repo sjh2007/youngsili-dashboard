@@ -131,6 +131,7 @@ export default function App() {
   const [caregivers, setCaregivers]     = useState(CAREGIVERS);
   const [alertsData, setAlertsData]     = useState([]);
   const [alertCount, setAlertCount]     = useState(0);
+  const notifiedBillingAlertsRef = useRef<Set<string>>(new Set());
   const [healthLoading, setHealthLoading] = useState(false);
   // 영실이 콘솔(총괄 관리자 전용) — 3개 서버 헬스체크 + 전체 기관 진행 중인 통화
   const [consoleHealth, setConsoleHealth] = useState(null);   // {status, components:[{name,ok,latencyMs,detail}]}
@@ -161,7 +162,6 @@ export default function App() {
   const [topupBusy, setTopupBusy] = useState(false); // 포트원 결제 요청 처리 중(버튼 중복 클릭 방지)
   const [paymentSuccess, setPaymentSuccess] = useState(null); // 결제 접수 완료 모달 {amount, desc}(null이면 모달 숨김)
   const [subscribeBusy, setSubscribeBusy] = useState(null); // 결제 요청 처리 중인 planKey(중복 클릭 방지)
-  const [subscriptionPaymentMethod, setSubscriptionPaymentMethod] = useState('CARD');
   const [subStatus, setSubStatus] = useState(null); // GET /billing/subscription — {plan, autoRenew, nextChargeAt, lastChargeError, elderCount, monthlyAmount}
   const [subscriptionActionBusy, setSubscriptionActionBusy] = useState<string|null>(null);
   const [subCancelBusy, setSubCancelBusy] = useState(false);
@@ -455,72 +455,6 @@ export default function App() {
       if (r.ok) setBilling(parseOr(BillingBalanceSchema, await r.json(), null));
     } catch {}
   };
-  // 30일 무료체험 시작 — 요금제 업그레이드 모달의 "시범사업" 카드. 기관당 1회만 가능(서버가 재시작 차단).
-  const startTrial = async () => {
-    if (subscribeBusy) return;
-    setSubscribeBusy('trial');
-    try {
-      const r = await authFetch(`${SERVER_URL}/billing/start-trial`, { method: 'POST' });
-      const d = await r.json().catch(()=>({}));
-      if (!r.ok) { notify(errMsg(d, '체험 시작 실패')); return; }
-      setShowUpgradeModal(false);
-      notify('30일 무료체험이 시작됐습니다.', 'success');
-      fetchBillingBalance();
-    } catch {
-      notify('네트워크 오류 — 체험 시작 실패');
-    } finally {
-      setSubscribeBusy(null);
-    }
-  };
-  // 일반전화 무료체험은 통화료 대신 070 번호 기본요금 7,000원을 카드로 먼저 결제한다.
-  // 체험 권한은 클라이언트 결제창 결과가 아니라 서버가 PortOne 웹훅을 재검증한 뒤에만 열린다.
-  const startPaidPstnTrial = async () => {
-    if (subscribeBusy) return;
-    setSubscribeBusy('pstn_trial');
-    try {
-      const r = await authFetch(`${SERVER_URL}/billing/trial`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ testMode: isPayTestEnabled() }),
-      });
-      const d = await r.json().catch(()=>({}));
-      if (r.status === 501) { notify('결제 설정이 준비되지 않아 체험을 시작할 수 없습니다. 1877-1979로 문의해 주세요.'); return; }
-      if (!r.ok) { notify(errMsg(d, '체험 기본요금 결제 요청 실패')); return; }
-      const trial = parseOr(TopupResponseSchema, d, null);
-      if (!trial) { notify('결제 요청 응답을 처리할 수 없습니다'); return; }
-      const { requestPayment } = await import('@portone/browser-sdk/v2');
-      const response = await requestPayment({
-        storeId: trial.storeId,
-        channelKey: trial.channelKey,
-        paymentId: trial.paymentId,
-        orderName: trial.orderName,
-        totalAmount: trial.amount,
-        currency: 'KRW',
-        payMethod: 'CARD',
-        card: { installment: { monthOption: { availableMonthList: [0] } } },
-        bypass: { inicis_v2: { acceptmethod: ['noeasypay'], P_RESERVED: ['noeasypay=Y'] } },
-        customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || undefined },
-      });
-      if (response?.code !== undefined) { notify(`결제 실패: ${response.message || response.code}`); return; }
-      setShowUpgradeModal(false);
-      for (const delayMs of [1200, 2500, 4500, 7000]) {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-        const statusResponse = await authFetch(`${SERVER_URL}/billing/payment/${trial.paymentId}`);
-        if (!statusResponse.ok) continue;
-        const status = parseOr(PaymentStatusSchema, await statusResponse.json(), null);
-        if (status?.status === 'paid') {
-          setPaymentSuccess({ amount: trial.amount, desc: `${isPayTestEnabled()?'테스트 결제':'070 번호 기본요금 결제'}가 완료되어 30일 무료체험이 시작됐습니다.` });
-          fetchBillingBalance();
-          return;
-        }
-        if (['failed','cancelled','review_required'].includes(status?.status || '')) {
-          notify('결제 상태를 확인할 수 없습니다. 다시 결제하지 말고 담당자에게 문의해 주세요.');
-          return;
-        }
-      }
-      notify('결제 확인이 지연되고 있습니다. 다시 결제하지 말고 결제 내역에서 상태를 확인해 주세요.', 'info');
-    } catch { notify('네트워크 오류 — 체험 기본요금 결제 실패'); }
-    finally { setSubscribeBusy(null); }
-  };
   // 크레딧 충전(2단계, 포트원) — 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동
   // 폴백한다(운영에 아직 포트원 키가 안 들어간 동안도 화면이 안 깨지게). 설정돼 있으면
   // PortOne.js 결제창을 띄우고, 실제 크레딧 반영은 서버 웹훅이 비동기로 처리하므로 결제
@@ -622,42 +556,6 @@ export default function App() {
   };
   useEffect(() => { if (showUpgradeModal) fetchSubscriptionStatus(); }, [showUpgradeModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startSubscriptionInvoice = async (planKey, planName) => {
-    const r = await authFetch(`${SERVER_URL}/billing/subscription/invoice`, {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ planKey, testMode: isPayTestEnabled() }),
-    });
-    const d = await r.json().catch(()=>({}));
-    if (!r.ok) { notify(errMsg(d, '무통장 청구서 발급 실패')); return; }
-    const invoice = parseOr(TopupResponseSchema, d, null);
-    if (!invoice) { notify('청구서 응답을 처리할 수 없습니다'); return; }
-    const { requestPayment } = await import('@portone/browser-sdk/v2');
-    const response = await requestPayment({
-      storeId: invoice.storeId, channelKey: invoice.channelKey, paymentId: invoice.paymentId,
-      orderName: invoice.orderName, totalAmount: invoice.amount, currency: 'KRW', payMethod: 'VIRTUAL_ACCOUNT',
-      virtualAccount: { accountExpiry: { validHours: 24 } },
-      customer: { email: me?.email || undefined, fullName: me?.name || me?.orgName || '고객', phoneNumber: me?.phone || '01000000000' },
-    });
-    if (!response) {
-      console.error('[subscription-invoice] PortOne window closed without a completion response');
-      notify('가상계좌가 발급되지 않았습니다. 결제창이 완료 응답 없이 닫혔습니다. 입력 내용을 확인한 뒤 다시 시도해 주세요.');
-      return;
-    }
-    if (response?.code !== undefined) { notify(`계좌 발급 실패: ${response.message || response.code}`); return; }
-    for (const delayMs of [1500, 3000, 5000, 8000, 12000]) {
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-      const sr = await authFetch(`${SERVER_URL}/billing/payment/${invoice.paymentId}`);
-      if (!sr.ok) continue;
-      const status = parseOr(PaymentStatusSchema, await sr.json(), null);
-      if (status?.virtualAccount?.accountNumber) {
-        setShowUpgradeModal(false);
-        setVirtualAccountInfo({ amount: invoice.amount, description: `${planName} 월 구독료`, ...status.virtualAccount });
-        return;
-      }
-      if (status?.status === 'paid') { setShowUpgradeModal(false); setPaymentSuccess({ amount: invoice.amount, desc: `${planName} 구독료 입금이 확인됐습니다.` }); return; }
-    }
-    notify('계좌 발급 확인이 지연되고 있습니다. 결제 내역에서 다시 확인해 주세요.', 'info');
-  };
-
   // 정액제 자동결제 등록 — 1단계(빌링키 발급 요청) → PortOne.js `requestIssueBillingKey()`로 결제수단
   // 등록 → 2단계(서버가 빌링키 재검증 후 첫 결제를 그 자리에서 승인, 다음 달부터는 서버 크론이 자동 재청구).
   // 서버가 포트원 미설정(501)이면 기존 "접수 안내" 문구로 자동 폴백한다.
@@ -665,16 +563,12 @@ export default function App() {
     if (subscribeBusy) return;
     setSubscribeBusy(planKey);
     try {
-      if (!options.replacePaymentMethod && subscriptionPaymentMethod === 'VIRTUAL_ACCOUNT') {
-        await startSubscriptionInvoice(planKey, planName);
-        return;
-      }
       const r = await authFetch(`${SERVER_URL}/billing/subscribe/register`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
           planKey,
           testMode: isPayTestEnabled(),
-          ...(isPayTestEnabled() ? { billingKeyMethod: subscriptionPaymentMethod } : {}),
+          ...(isPayTestEnabled() ? { billingKeyMethod: 'CARD' } : {}),
           ...(options.replacePaymentMethod ? { replacePaymentMethod: true } : {}),
         }),
       });
@@ -1161,6 +1055,12 @@ export default function App() {
       setAlertsData(data);
       const unread = data.filter(a=>a.status ? a.status === 'new' : !a.read);   // 폐루프: 미확인(new)만 배지
       setAlertCount(unread.length);
+      const lowCreditAlert = unread.find(a => a.category === 'low_credit' && !notifiedBillingAlertsRef.current.has(String(a.id)));
+      if (lowCreditAlert) {
+        notifiedBillingAlertsRef.current.add(String(lowCreditAlert.id));
+        notify(lowCreditAlert.message || '크레딧 잔액이 10,000원 이하입니다. 충전해 주세요.', 'info');
+        fetchBillingBalance();
+      }
       // 어르신별 "가장 최근" 위험 알림만 반영 (data는 최신순 → 이름별 첫 항목이 최신)
       const latestByName = {};
       unread.forEach(a => {
@@ -2908,12 +2808,12 @@ export default function App() {
               <div style={{marginTop:18,fontSize:20,fontWeight:800,color:'#fff'}}>
                 {activeSubscriptions.length
                   ? activeSubscriptions.map((item:any)=>billingPlanName(item.plan)).join(' · ')
-                  : trialActive ? '시범사업(30일 체험)'
+                  : trialActive ? '기존 시범 이용'
                   : '정량제(선불 충전)'}
               </div>
               {trialActive && activeSubscriptions.length===0 && (
                 <div style={{fontSize:12.5,color:'#94a3b8',marginTop:4}}>
-                  체험 종료 {new Date(billing.trialEndsAt).toLocaleDateString('ko-KR')}까지
+                  이용 종료 {new Date(billing.trialEndsAt).toLocaleDateString('ko-KR')}까지
                 </div>
               )}
             </div>
@@ -2926,11 +2826,11 @@ export default function App() {
                 <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#94a3b8',fontWeight:600}}>
                   <Wallet size={14}/> 남은 크레딧
                 </div>
-                <div style={{fontSize:28,fontWeight:900,marginTop:6,letterSpacing:-0.5,color: billing?.creditBalance<=200?'#dc2626':'#0f172a'}}>
+                <div style={{fontSize:28,fontWeight:900,marginTop:6,letterSpacing:-0.5,color: billing?.creditBalance<=10000?'#dc2626':'#0f172a'}}>
                   {typeof billing?.creditBalance === 'number' ? billing.creditBalance.toLocaleString() : '-'}
                   <span style={{fontSize:15,fontWeight:700,marginLeft:4,color:'#94a3b8'}}>원</span>
                 </div>
-                {billing?.creditBalance<=200 && (
+                {billing?.creditBalance<=10000 && (
                   <div style={{fontSize:12,color:'#dc2626',marginTop:6,fontWeight:600}}>잔액이 얼마 남지 않았어요</div>
                 )}
               </div>
@@ -2973,9 +2873,8 @@ export default function App() {
           fetchPaymentHistory={fetchPaymentHistory} setPendingTopup={setPendingTopup}
           subStatus={subStatus}
           subCancelBusy={subCancelBusy} cancelSubscription={cancelSubscription} subscribeBusy={subscribeBusy}
-          payTestEnabled={isPayTestEnabled()} subscriptionPaymentMethod={subscriptionPaymentMethod}
-          setSubscriptionPaymentMethod={setSubscriptionPaymentMethod}
-          billing={billing} startTrial={startTrial} startPaidPstnTrial={startPaidPstnTrial} startSubscription={startSubscription}
+          payTestEnabled={isPayTestEnabled()}
+          billing={billing} startSubscription={startSubscription}
           subscriptionActionBusy={subscriptionActionBusy}
           scheduleSubscriptionPlanChange={scheduleSubscriptionPlanChange}
           testSubscriptionRenewal={testSubscriptionRenewal}
@@ -3208,7 +3107,7 @@ export default function App() {
             <div className="sidebar-org-code sidebar-credit-balance" style={{cursor:'pointer'}} title="클릭하면 현재 플랜·잔액·결제수단을 볼 수 있어요"
               onClick={()=>{ setShowPlanModal(true); fetchSubscriptionStatus(); }}>
               <span className="sidebar-org-label">크레딧 잔액</span>
-              <span className="sidebar-org-value" style={{color: billing.creditBalance <= 200 ? '#dc2626' : undefined}}>
+              <span className="sidebar-org-value" style={{color: billing.creditBalance <= 10000 ? '#dc2626' : undefined}}>
                 {billing.creditBalance.toLocaleString()}
               </span>
             </div>

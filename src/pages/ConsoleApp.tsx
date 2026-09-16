@@ -474,7 +474,6 @@ export default function ConsoleApp() {
   const [testAmount, setTestAmount] = useState('300000');
   const [testPayMethod, setTestPayMethod] = useState('CARD');
   const [testPlanKey, setTestPlanKey] = useState('basic');
-  const [testSubscriptionMethod, setTestSubscriptionMethod] = useState('CARD');
   const [testCardBin, setTestCardBin] = useState('');
   const [testRefundPaymentId, setTestRefundPaymentId] = useState('');
   const [testRefundReason, setTestRefundReason] = useState('테스트 환불 요청');
@@ -827,7 +826,7 @@ export default function ConsoleApp() {
     setTestBusy('subscribe');
     logTest(`정액제 테스트 시작 — ${testOrgId}, ${testPlanKey}`);
     try {
-      const regRes = await authFetch(`${SERVER_URL}/console/test/subscribe/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orgId: testOrgId, planKey: testPlanKey, billingKeyMethod: testSubscriptionMethod }) });
+      const regRes = await authFetch(`${SERVER_URL}/console/test/subscribe/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ orgId: testOrgId, planKey: testPlanKey, billingKeyMethod: 'CARD' }) });
       const reg = await regRes.json().catch(()=>({}));
       if (!regRes.ok) { logTest(`❌ 빌링키 발급 요청 실패: ${errMsg(reg,'실패')}`); return; }
       logTest(`✅ 빌링키 발급 요청 생성됨(issueId=${reg.issueId}, ${reg.amount.toLocaleString()}원) — 카드 등록창 호출...`);
@@ -1908,10 +1907,7 @@ export default function ConsoleApp() {
                   <option value="standard">스탠다드</option>
                   <option value="premium">프리미엄</option>
                 </select>
-                <select className="form-input" style={{width:200,margin:0}} value={testSubscriptionMethod} onChange={e=>setTestSubscriptionMethod(e.target.value)}>
-                  <option value="CARD">신용·체크카드</option>
-                  <option value="TRANSFER">계좌 자동이체</option>
-                </select>
+                <div className="form-input" style={{width:200,margin:0}}>신용·체크카드</div>
                 <button className="btn-primary" disabled={testBusy==='subscribe'} onClick={testSubscribeFlow}>{testBusy==='subscribe'?'진행 중...':'테스트 등록'}</button>
               </div>
               <div style={{fontSize:12,color:'#94a3b8',marginTop:8}}>선택한 기관에 등록된 어르신 수가 있어야 금액 계산이 됩니다.</div>
