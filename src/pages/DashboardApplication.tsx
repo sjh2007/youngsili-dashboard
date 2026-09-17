@@ -131,7 +131,9 @@ export default function App() {
   const [caregivers, setCaregivers]     = useState(CAREGIVERS);
   const [alertsData, setAlertsData]     = useState([]);
   const [alertCount, setAlertCount]     = useState(0);
-  const notifiedBillingAlertsRef = useRef<Set<string>>(new Set());
+  // 읽지 않은 저잔액 경고는 메뉴에 새로 진입할 때 다시 안내한다.
+  // 마지막으로 표시한 페이지를 기억해 15초 폴링마다 반복되는 것은 막는다.
+  const lastBillingAlertPageRef = useRef('');
   const [healthLoading, setHealthLoading] = useState(false);
   // 영실이 콘솔(총괄 관리자 전용) — 3개 서버 헬스체크 + 전체 기관 진행 중인 통화
   const [consoleHealth, setConsoleHealth] = useState(null);   // {status, components:[{name,ok,latencyMs,detail}]}
@@ -1055,9 +1057,9 @@ export default function App() {
       setAlertsData(data);
       const unread = data.filter(a=>a.status ? a.status === 'new' : !a.read);   // 폐루프: 미확인(new)만 배지
       setAlertCount(unread.length);
-      const lowCreditAlert = unread.find(a => a.category === 'low_credit' && !notifiedBillingAlertsRef.current.has(String(a.id)));
-      if (lowCreditAlert) {
-        notifiedBillingAlertsRef.current.add(String(lowCreditAlert.id));
+      const lowCreditAlert = unread.find(a => a.category === 'low_credit');
+      if (lowCreditAlert && lastBillingAlertPageRef.current !== page) {
+        lastBillingAlertPageRef.current = page;
         notify(lowCreditAlert.message || '크레딧 잔액이 10,000원 이하입니다. 충전해 주세요.', 'info');
         fetchBillingBalance();
       }

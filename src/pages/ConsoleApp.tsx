@@ -11,6 +11,7 @@ import {
   Activity, BarChart3, Phone, CreditCard, Receipt, RotateCcw, Building2,
   Users as UsersIcon, HeartHandshake, Megaphone, FileClock, FlaskConical, LogOut, UserCog, BookOpen,
   CalendarDays, ChevronLeft, ChevronRight,
+  AlertTriangle, LifeBuoy, Search,
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -318,6 +319,13 @@ function Pager({ page, setPage, total }: { page: number; setPage: (fn: (p: numbe
   );
 }
 
+function csvCell(value: unknown): string {
+  const text = value == null ? '' : String(value);
+  // 스프레드시트 수식 주입을 막으면서 쉼표·줄바꿈·따옴표를 보존한다.
+  const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
 type MonthlyRow = { month: string; total: number; completed: number; missed: number; failed: number; riskCritical: number; riskUrgent: number; riskWarning: number };
 
 const CHART_FONT = "Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -389,6 +397,9 @@ function OrganizationUsageChart({ data, orgName }: { data:any[]; orgName:(orgId:
 }
 
 const NAV = [
+  { id: 'incidents', label: '장애·사고 센터', icon: AlertTriangle },
+  { id: 'support', label: '기관 고객지원', icon: LifeBuoy },
+  { id: 'approvals', label: '승인·운영 통제', icon: FileClock },
   { id: 'health', label: '시스템 모니터링', icon: Activity },
   { id: 'stats', label: '통계', icon: BarChart3 },
   { id: 'calls', label: '통화 이력', icon: Phone },
@@ -408,7 +419,7 @@ const NAV = [
 type PageId = typeof NAV[number]['id'];
 
 /** CS 담당자(role:'cs')에게 보이는 사이드바 범위 — 백엔드 @AllowCs() 라우트와 1:1로 맞춘다 */
-const CS_ALLOWED_PAGES: PageId[] = ['stats', 'calls', 'payments', 'refunds', 'users', 'elders', 'notices'];
+const CS_ALLOWED_PAGES: PageId[] = ['support', 'stats', 'calls', 'payments', 'refunds', 'users', 'elders', 'notices'];
 
 export default function ConsoleApp() {
   const [authUser, setAuthUser] = useState<any>(null);
@@ -416,8 +427,12 @@ export default function ConsoleApp() {
   const [authorized, setAuthorized] = useState<boolean | null>(null); // null=확인 중, true/false=결과
   const [consoleRole, setConsoleRole] = useState<string | null>(null); // 'superadmin' | 'cs' — 사이드바 범위 결정용
   const [page, setPage] = useState<PageId>('health');
-  // 도움말 보기 — 별도 정적 HTML(같은 origin)을 iframe으로 띄우고, 내부 스크롤 없이 콘텐츠
-  // 실제 높이만큼 자동으로 늘어나게 한다(기관 대시보드 HelpGuide.tsx와 동일 패턴).
+  // 운영 nginx는 클릭재킹 방지를 위해 모든 HTML 응답에 X-Frame-Options: DENY를 적용한다.
+  // 같은 origin의 정적 도움말을 fetch한 뒤 srcDoc으로 표시해 보안 헤더를 완화하지 않는다.
+  const [helpContent, setHelpContent] = useState('');
+  const [helpError, setHelpError] = useState('');
+  const [helpLoading, setHelpLoading] = useState(false);
+  const [helpRetry, setHelpRetry] = useState(0);
   const [helpHeight, setHelpHeight] = useState(600);
   const onHelpLoad = useCallback((e: any) => {
     const iframe = e.target;
@@ -425,8 +440,11 @@ export default function ConsoleApp() {
     if (!doc) return;
     const sync = () => setHelpHeight(doc.documentElement.scrollHeight);
     sync();
-    const ro = new (iframe.contentWindow.ResizeObserver)(sync);
-    ro.observe(doc.body);
+    const ResizeObserverCtor = iframe.contentWindow?.ResizeObserver;
+    if (ResizeObserverCtor && doc.body) {
+      const ro = new ResizeObserverCtor(sync);
+      ro.observe(doc.body);
+    }
   }, []);
   const [toast, setToast] = useState<{message:string; tone:'info'|'success'|'error'}|null>(null);
   const notify = (message: unknown, tone: 'info'|'success'|'error' = 'error') => {
@@ -435,14 +453,37 @@ export default function ConsoleApp() {
   };
 
   const [health, setHealth] = useState<any>(null);
+  const [incidents, setIncidents] = useState<any[]>([]);
+  const [incidentsPage, setIncidentsPage] = useState(1);
+  const [incidentLoading, setIncidentLoading] = useState(false);
+  const [incidentBusy, setIncidentBusy] = useState('');
+  const [incidentStatus, setIncidentStatus] = useState('');
+  const [incidentCategory, setIncidentCategory] = useState('');
+  const [supportTickets, setSupportTickets] = useState<any[]>([]);
+  const [supportPage, setSupportPage] = useState(1);
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [supportBusy, setSupportBusy] = useState('');
+  const [diagnosticCallId, setDiagnosticCallId] = useState('');
+  const [diagnostic, setDiagnostic] = useState<any>(null);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+  const [approvals, setApprovals] = useState<any[]>([]);
+  const [approvalsPage, setApprovalsPage] = useState(1);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalBusy, setApprovalBusy] = useState('');
+  const [privacySummary, setPrivacySummary] = useState<any>(null);
+  const [notificationDeliveries, setNotificationDeliveries] = useState<any[]>([]);
   const [activeCalls, setActiveCalls] = useState<any[]>([]);
+  const [activeCallsPage, setActiveCallsPage] = useState(1);
   const [opsMetrics, setOpsMetrics] = useState<any>(null);
   const [callEngineProvider, setCallEngineProvider] = useState<any>(null);
+  const [callEngineHistory, setCallEngineHistory] = useState<any[]>([]);
+  const [callEngineHistoryPage, setCallEngineHistoryPage] = useState(1);
   const [nextCallEngineProvider, setNextCallEngineProvider] = useState<'gemini'|'openai'>('gemini');
   const [callEngineReason, setCallEngineReason] = useState('');
   const [callEngineBusy, setCallEngineBusy] = useState(false);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [privacyPurgeJobs, setPrivacyPurgeJobs] = useState<any[]>([]);
+  const [privacyPurgePage, setPrivacyPurgePage] = useState(1);
   const [privacyRetryBusy, setPrivacyRetryBusy] = useState('');
   const [history, setHistory] = useState<any[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
@@ -451,6 +492,7 @@ export default function ConsoleApp() {
   const [subs, setSubs] = useState<any[]>([]);
   const [subsPage, setSubsPage] = useState(1);
   const [subsLoading, setSubsLoading] = useState(false);
+  const [subscriptionRetryBusy, setSubscriptionRetryBusy] = useState('');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [calendarPayments, setCalendarPayments] = useState<any[]>([]);
   const [calendarSubs, setCalendarSubs] = useState<any[]>([]);
@@ -487,6 +529,7 @@ export default function ConsoleApp() {
 
   // ── 통계 ──
   const [statsData, setStatsData] = useState<any>(null); // { monthly, byOrg }
+  const [statsOrgPage, setStatsOrgPage] = useState(1);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsMonths, setStatsMonths] = useState(6);
   const [statsOrg, setStatsOrg] = useState('');
@@ -509,9 +552,14 @@ export default function ConsoleApp() {
   const [eldersOrgFilter, setEldersOrgFilter] = useState('');
   const [eldersSearch, setEldersSearch] = useState('');
   const [elderBusy, setElderBusy] = useState('');
+  // 홈페이지 체험 전화 '번호당 1회' 해제 — superadmin 전용
+  const [demoResetPhone, setDemoResetPhone] = useState('');
+  const [demoResetReason, setDemoResetReason] = useState('');
+  const [demoResetBusy, setDemoResetBusy] = useState(false);
 
   // ── 공지 ──
   const [notices, setNotices] = useState<any[]>([]);
+  const [noticesPage, setNoticesPage] = useState(1);
   const [noticesLoading, setNoticesLoading] = useState(false);
   const [noticeTitle, setNoticeTitle] = useState('');
   const [noticeBody, setNoticeBody] = useState('');
@@ -520,6 +568,7 @@ export default function ConsoleApp() {
 
   // ── 콘솔 CS 계정 관리(superadmin 전용) ──
   const [csAccounts, setCsAccounts] = useState<any[]>([]);
+  const [csAccountsPage, setCsAccountsPage] = useState(1);
   const [csAccountsLoading, setCsAccountsLoading] = useState(false);
   const [csEmail, setCsEmail] = useState('');
   const [csPassword, setCsPassword] = useState('');
@@ -566,20 +615,22 @@ export default function ConsoleApp() {
   const fetchHealth = async () => {
     setLoadingHealth(true);
     try {
-      const [hRes, cRes, mRes, providerRes, privacyRes] = await Promise.all([
+      const [hRes, cRes, mRes, providerRes, providerHistoryRes, privacyRes] = await Promise.all([
         authFetch(`${SERVER_URL}/console/health`),
         authFetch(`${SERVER_URL}/console/calls/active`),
         authFetch(`${SERVER_URL}/admin/metrics?hours=24`),
         authFetch(`${SERVER_URL}/admin/call-engine/provider`),
+        authFetch(`${SERVER_URL}/admin/call-engine/provider-history`),
         authFetch(`${SERVER_URL}/console/privacy-purge-jobs`),
       ]);
       const hData = await requireJson(hRes, '시스템 상태 조회 실패');
       const cData = await requireJson(cRes, '진행 중 통화 조회 실패');
       if (hData && Array.isArray(hData.components)) setHealth(hData);
-      if (Array.isArray(cData)) setActiveCalls(cData);
+      if (Array.isArray(cData)) { setActiveCalls(cData); setActiveCallsPage(1); }
       try {
         const privacyData = await requireJson(privacyRes, '개인정보 파기 작업 조회 실패');
         setPrivacyPurgeJobs(Array.isArray(privacyData?.jobs) ? privacyData.jobs : []);
+        setPrivacyPurgePage(1);
       } catch (privacyError: any) {
         setPrivacyPurgeJobs([]);
         notify(privacyError?.message || '개인정보 파기 작업 조회 실패');
@@ -599,18 +650,138 @@ export default function ConsoleApp() {
         setCallEngineProvider(null);
         notify(providerError?.message || 'AI 엔진 설정 조회 실패');
       }
+      try {
+        const historyData = await requireJson(providerHistoryRes, 'AI 엔진 전환 이력 조회 실패');
+        setCallEngineHistory(Array.isArray(historyData?.changes) ? historyData.changes : []);
+        setCallEngineHistoryPage(1);
+      } catch (historyError: any) {
+        setCallEngineHistory([]);
+        notify(historyError?.message || 'AI 엔진 전환 이력 조회 실패');
+      }
     } catch (e:any) { notify(e?.message || '시스템 상태 조회 실패'); }
     finally { setLoadingHealth(false); }
+  };
+
+  const fetchIncidents = async () => {
+    setIncidentLoading(true);
+    try {
+      const query = new URLSearchParams();
+      if (incidentStatus) query.set('status', incidentStatus);
+      if (incidentCategory) query.set('category', incidentCategory);
+      const response = await authFetch(`${SERVER_URL}/console/incidents?${query.toString()}`);
+      const data = await requireJson(response, '장애·사고 조회 실패');
+      setIncidents(Array.isArray(data?.incidents) ? data.incidents : []);
+      setIncidentsPage(1);
+    } catch (error: any) {
+      notify(error?.message || '장애·사고 조회 실패');
+    } finally {
+      setIncidentLoading(false);
+    }
+  };
+
+  const updateIncident = async (incident: any, status: string) => {
+    const assignee = window.prompt('담당자 이름 또는 팀을 입력하세요.', incident.assignee || '') ?? undefined;
+    if (assignee === undefined) return;
+    const actionNote = window.prompt(status === 'resolved' ? '해결 조치 기록을 입력하세요. (필수)' : '현재 조치 기록을 입력하세요.', incident.actionNote || '') ?? undefined;
+    if (actionNote === undefined || (status === 'resolved' && !actionNote.trim())) {
+      if (status === 'resolved') notify('해결 처리에는 조치 기록이 필요합니다.');
+      return;
+    }
+    const preventionNote = status === 'resolved'
+      ? window.prompt('재발 방지 메모를 입력하세요.', incident.preventionNote || '') ?? undefined
+      : incident.preventionNote || undefined;
+    if (status === 'resolved' && preventionNote === undefined) return;
+    setIncidentBusy(incident.id);
+    try {
+      const response = await authFetch(`${SERVER_URL}/console/incidents/${encodeURIComponent(incident.id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, assignee: assignee.trim() || null, actionNote: actionNote.trim(), preventionNote: preventionNote?.trim() }),
+      });
+      await requireJson(response, '사건 처리 상태 변경 실패');
+      notify('사건 처리 기록을 저장했습니다.', 'success');
+      await fetchIncidents();
+    } catch (error: any) {
+      notify(error?.message || '사건 처리 상태 변경 실패');
+    } finally {
+      setIncidentBusy('');
+    }
+  };
+
+  const fetchSupportTickets = async () => {
+    setSupportLoading(true);
+    try {
+      const response = await authFetch(`${SERVER_URL}/console/support-tickets`);
+      const data = await requireJson(response, '고객지원 티켓 조회 실패');
+      setSupportTickets(Array.isArray(data) ? data : []);
+      setSupportPage(1);
+    } catch (error: any) {
+      notify(error?.message || '고객지원 티켓 조회 실패');
+    } finally {
+      setSupportLoading(false);
+    }
+  };
+
+  const createSupportTicket = async () => {
+    const orgId = window.prompt('기관 ID를 입력하세요.');
+    if (!orgId?.trim()) return;
+    const title = window.prompt('문의 제목을 입력하세요.');
+    if (!title?.trim()) return;
+    const description = window.prompt('문의 내용과 확인한 증상을 입력하세요.');
+    if (!description?.trim()) return;
+    const severityInput = window.prompt('심각도: low / medium / high / critical', 'medium');
+    if (!severityInput) return;
+    const severity = severityInput.trim().toLowerCase();
+    if (!['low','medium','high','critical'].includes(severity)) { notify('심각도 값을 확인해 주세요.'); return; }
+    const callId = window.prompt('관련 통화 ID가 있으면 입력하세요. (선택)', '') ?? '';
+    setSupportBusy('create');
+    try {
+      const response = await authFetch(`${SERVER_URL}/console/support-tickets`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ orgId:orgId.trim(), title:title.trim(), description:description.trim(), severity, ...(callId.trim()?{callId:callId.trim()}:{}) }),
+      });
+      await requireJson(response, '고객지원 티켓 생성 실패');
+      notify('고객지원 티켓을 생성했습니다.', 'success');
+      await fetchSupportTickets();
+    } catch (error:any) { notify(error?.message || '고객지원 티켓 생성 실패'); }
+    finally { setSupportBusy(''); }
+  };
+
+  const updateSupportTicket = async (ticket:any, status:string) => {
+    const assignee = window.prompt('담당자 이름 또는 팀을 입력하세요.', ticket.assignee || '') ?? undefined;
+    if (assignee === undefined) return;
+    const operatorNote = window.prompt('조치 내용 또는 기관 안내 내용을 입력하세요.', ticket.operatorNote || '') ?? undefined;
+    if (!operatorNote?.trim()) { notify('조치 기록을 입력해 주세요.'); return; }
+    setSupportBusy(ticket.id);
+    try {
+      const response = await authFetch(`${SERVER_URL}/console/support-tickets/${encodeURIComponent(ticket.id)}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status,assignee:assignee.trim(),operatorNote:operatorNote.trim()}),
+      });
+      await requireJson(response, '티켓 상태 변경 실패');
+      notify('티켓 처리 기록을 저장했습니다.', 'success');
+      await fetchSupportTickets();
+    } catch(error:any) { notify(error?.message || '티켓 상태 변경 실패'); }
+    finally { setSupportBusy(''); }
+  };
+
+  const fetchCallDiagnostic = async (rawId?:string) => {
+    const callId=(rawId ?? diagnosticCallId).trim();
+    if(!callId){ notify('통화 ID를 입력해 주세요.'); return; }
+    setDiagnosticLoading(true); setDiagnostic(null);
+    try {
+      const response=await authFetch(`${SERVER_URL}/console/call-diagnostics/${encodeURIComponent(callId)}`);
+      setDiagnostic(await requireJson(response,'통화 진단 조회 실패'));
+    } catch(error:any){ notify(error?.message || '통화 진단 조회 실패'); }
+    finally{ setDiagnosticLoading(false); }
   };
 
   const retryPrivacyPurge = async (job: any) => {
     if (!window.confirm(`${job.orgId || '기관 미확인'} · ${job.maskedPhone || '번호 비공개'} 파기 작업을 재시도할까요?`)) return;
     setPrivacyRetryBusy(job.id);
     try {
-      const response = await authFetch(`${SERVER_URL}/console/privacy-purge-jobs/${encodeURIComponent(job.id)}/retry`, { method: 'POST' });
+      const response = await authFetch(`${SERVER_URL}/console/approvals`, { method: 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'privacy_purge_retry', targetId:job.id, reason:'개인정보 파기 실패 확인 후 재시도 요청', payload:{} }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) { notify(errMsg(data, '개인정보 파기 재시도 실패')); return; }
-      notify(`개인정보 파기 완료 · 삭제 ${Number(data.deleted || 0)}건 · 비식별 ${Number(data.anonymized || 0)}건`, 'success');
+      notify('개인정보 파기 재시도 승인 요청을 등록했습니다.', 'success');
       await fetchHealth();
     } catch (e: any) {
       notify(e?.message || '개인정보 파기 재시도 실패');
@@ -627,16 +798,13 @@ export default function ConsoleApp() {
     }
     setCallEngineBusy(true);
     try {
-      const response = await authFetch(`${SERVER_URL}/admin/call-engine/provider`, {
-        method: 'PATCH', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ provider: nextCallEngineProvider, reason }),
+      const response = await authFetch(`${SERVER_URL}/console/approvals`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'engine_change', targetId:'call-engine', reason, payload:{ provider:nextCallEngineProvider } }),
       });
-      const data = parseOr(CallEngineProviderSchema, await requireJson(response, 'AI 엔진 전환 실패'), null);
-      if (!data) throw new Error('AI 엔진 응답 형식이 올바르지 않습니다.');
-      setCallEngineProvider(data);
-      setNextCallEngineProvider(data.provider);
+      await requireJson(response, 'AI 엔진 전환 승인 요청 실패');
       setCallEngineReason('');
-      notify(`신규 일반전화 엔진을 ${data.provider === 'openai' ? 'OpenAI Realtime' : 'Gemini Live'}로 변경했습니다.`, 'success');
+      notify('AI 엔진 전환 승인 요청을 등록했습니다.', 'success');
     } catch (error:any) { notify(error?.message || 'AI 엔진 전환 실패'); }
     finally { setCallEngineBusy(false); }
   };
@@ -663,6 +831,29 @@ export default function ConsoleApp() {
       setSubsPage(1);
     } catch (e:any) { notify(e?.message || '정기결제 현황 조회 실패'); }
     finally { setSubsLoading(false); }
+  };
+
+  const retryFailedSubscription = async (subscription: any) => {
+    const track = subscription.track as 'app'|'pstn';
+    if (!track || !subscription.lastChargeError) { notify('재청구 가능한 실패 구독이 아닙니다'); return; }
+    const reason = window.prompt('수동 재청구 사유를 입력하세요. 감사 로그에 기록됩니다.', '자동결제 실패 확인 후 수동 재시도');
+    if (!reason || reason.trim().length < 5) { notify('재청구 사유를 5자 이상 입력하세요'); return; }
+    const confirmOrgId = window.prompt(`중복 결제 방지를 위해 기관 ID를 정확히 입력하세요.\n기관: ${subscription.orgName || subscription.orgId}\n기관 ID: ${subscription.orgId}`, '');
+    if (confirmOrgId !== subscription.orgId) { notify('기관 ID가 일치하지 않아 재청구하지 않았습니다'); return; }
+    if (!window.confirm(`${subscription.orgName || subscription.orgId}의 ${track==='app'?'앱 전화':'일반 전화'} 요금 ${Number(subscription.monthlyAmount || 0).toLocaleString()}원을 지금 재청구합니다. 계속할까요?`)) return;
+    const busyKey = `${subscription.orgId}:${track}`;
+    setSubscriptionRetryBusy(busyKey);
+    try {
+      const response = await authFetch(`${SERVER_URL}/console/approvals`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ action:'subscription_retry', targetId:subscription.orgId, reason:reason.trim(), payload:{ track, confirmOrgId } }),
+      });
+      const data = await response.json().catch(()=>({}));
+      if (!response.ok) { notify(errMsg(data, '수동 재청구 실패')); return; }
+      notify('수동 재청구 승인 요청을 등록했습니다.', 'success');
+      await fetchSubs();
+    } catch { notify('네트워크 오류 — 수동 재청구 실패'); }
+    finally { setSubscriptionRetryBusy(''); }
   };
 
   const fetchPaymentCalendar = async () => {
@@ -713,6 +904,26 @@ export default function ConsoleApp() {
       else notify(errMsg(d, '충전 실패'));
     } catch { notify('네트워크 오류 — 충전 실패'); }
     finally { setOrgBusy(''); }
+  };
+  const editOrgLifecycle = async (org:any) => {
+    const contractStatus = window.prompt('계약 상태: prospect / contracted / expired / terminated', org.contractStatus || 'prospect');
+    if (!contractStatus || !['prospect','contracted','expired','terminated'].includes(contractStatus)) { if(contractStatus!==null) notify('계약 상태 값이 올바르지 않습니다'); return; }
+    const rolloutStage = window.prompt('도입 단계: preparing / testing / operating / paused / terminated', org.rolloutStage || 'preparing');
+    if (!rolloutStage || !['preparing','testing','operating','paused','terminated'].includes(rolloutStage)) { if(rolloutStage!==null) notify('도입 단계 값이 올바르지 않습니다'); return; }
+    const contractStartAt = window.prompt('계약 시작일 YYYY-MM-DD (없으면 비움)', org.contractStartAt || ''); if(contractStartAt===null)return;
+    const contractEndAt = window.prompt('계약 종료일 YYYY-MM-DD (없으면 비움)', org.contractEndAt || ''); if(contractEndAt===null)return;
+    const primaryContactName = window.prompt('기관 담당자 이름', org.primaryContactName || ''); if(primaryContactName===null)return;
+    const emergencyContactName = window.prompt('비상 연락 담당자 이름', org.emergencyContactName || ''); if(emergencyContactName===null)return;
+    const callMode = window.prompt('통화 방식: app / pstn / both', org.callMode || 'both');
+    if (!callMode || !['app','pstn','both'].includes(callMode)) { if(callMode!==null) notify('통화 방식이 올바르지 않습니다'); return; }
+    const terminated = rolloutStage==='terminated';
+    const terminationDataExported = terminated ? window.confirm('해지 전 기관 데이터 내보내기를 완료했습니까?') : !!org.terminationDataExported;
+    const terminationPurgeConfirmed = terminated ? window.confirm('보존기간과 파기 대상을 확인했습니까?') : !!org.terminationPurgeConfirmed;
+    setOrgBusy(org.orgId);
+    try {
+      const r=await authFetch(`${SERVER_URL}/console/orgs/${encodeURIComponent(org.orgId)}/lifecycle`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({contractStatus,rolloutStage,contractStartAt:contractStartAt||null,contractEndAt:contractEndAt||null,primaryContactName,primaryContactPhone:'',emergencyContactName,emergencyContactPhone:'',callMode,featureFlags:org.featureFlags||{},terminationDataExported,terminationPurgeConfirmed})});
+      await requireJson(r,'기관 운영정보 저장 실패'); notify('기관 계약·도입 정보를 저장했습니다.','success'); await fetchOrgs();
+    } catch(e:any){notify(e?.message||'기관 운영정보 저장 실패');} finally{setOrgBusy('');}
   };
 
   const fetchAuditLogs = async () => {
@@ -939,6 +1150,7 @@ export default function ConsoleApp() {
       if (statsOrg) params.set('org', statsOrg);
       const r = await authFetch(`${SERVER_URL}/console/stats?${params.toString()}`);
       setStatsData(await r.json().catch(() => null));
+      setStatsOrgPage(1);
     } catch { notify('통계 조회 실패'); }
     finally { setStatsLoading(false); }
   };
@@ -953,6 +1165,72 @@ export default function ConsoleApp() {
       setPilotData(parseOr(PilotMetricsSchema, raw, null));
     } catch (e:any) { notify(e?.message || '파일럿 지표 조회 실패'); }
     finally { setPilotLoading(false); }
+  };
+
+  const downloadPilotSlaCsv = () => {
+    if (!pilotData || !statsOrg) { notify('먼저 기관 SLA 지표를 조회하세요'); return; }
+    const terminal = pilotData.completed + pilotData.missed + pilotData.failed;
+    const answeredBase = pilotData.completed + pilotData.missed;
+    const connectionRate = answeredBase ? pilotData.completed / answeredBase : null;
+    const targets = [
+      { metric:'예약 발신률', value:pilotData.attemptRate, target:0.99, pass:pilotData.attemptRate != null && pilotData.attemptRate >= 0.99, unit:'%' },
+      { metric:'연결률', value:connectionRate, target:0.8, pass:connectionRate != null && connectionRate >= 0.8, unit:'%' },
+      { metric:'기술 실패율', value:pilotData.technicalFailureRate, target:0.01, pass:pilotData.technicalFailureRate != null && pilotData.technicalFailureRate <= 0.01, unit:'%' },
+      { metric:'결과 저장률', value:pilotData.resultCompletenessRate, target:1, pass:pilotData.resultCompletenessRate != null && pilotData.resultCompletenessRate >= 1, unit:'%' },
+    ];
+    const rows = [
+      ['기관', orgName(statsOrg), '조회 기간', `${pilotFrom} ~ ${pilotTo}`],
+      ['예정 발신', pilotData.scheduledExpected, '발신 시도', pilotData.scheduledAttempts],
+      ['완료', pilotData.completed, '미응답', pilotData.missed],
+      ['기술 실패', pilotData.failed, '집계 완료 건', terminal],
+      [],
+      ['지표', '측정값', '운영 목표', '판정'],
+      ...targets.map(item => [item.metric, item.value == null ? '측정 전' : `${(item.value*100).toFixed(1)}${item.unit}`, `${(item.target*100).toFixed(1)}${item.unit}`, item.value == null ? '측정 전' : item.pass ? '충족' : '위반']),
+      ['위험 알림 확인 시간', '측정 전', '', '데이터 연동 필요'],
+      ['조치 완료 시간', '측정 전', '', '데이터 연동 필요'],
+      ['음성 품질 평가', '측정 전', '', '기관별 품질 데이터 필요'],
+      ['요금제 초과량', '측정 전', '', '구독 사용량 연동 필요'],
+      ['담당자 처리 시간', '측정 전', '', '담당자 조치 이력 연동 필요'],
+    ];
+    const csv = `\uFEFF${rows.map(row => row.map(csvCell).join(',')).join('\r\n')}`;
+    const url = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `영실이_SLA_${statsOrg}_${pilotFrom}_${pilotTo}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const printPilotSlaPdf = () => {
+    if (!pilotData || !statsOrg) { notify('먼저 기관 SLA 지표를 조회하세요'); return; }
+    const popup = window.open('', '_blank', 'noopener,noreferrer');
+    if (!popup) { notify('PDF 출력을 위해 팝업을 허용해 주세요'); return; }
+    const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c] || c));
+    const rows = [
+      ['예약 발신률', pilotData.attemptRate],
+      ['기술 실패율', pilotData.technicalFailureRate],
+      ['결과 저장률', pilotData.resultCompletenessRate],
+    ];
+    popup.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>영실이 SLA 보고서</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#202124}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #dadce0;padding:10px;text-align:left}@media print{button{display:none}}</style></head><body><h1>기관별 SLA 보고서</h1><p>기관: ${esc(orgName(statsOrg))}</p><p>기간: ${esc(pilotFrom)} ~ ${esc(pilotTo)}</p><table><thead><tr><th>지표</th><th>측정값</th></tr></thead><tbody>${rows.map(([label,value])=>`<tr><td>${esc(label)}</td><td>${value==null?'측정 전':`${(Number(value)*100).toFixed(1)}%`}</td></tr>`).join('')}<tr><td>완료 / 미응답 / 기술 실패</td><td>${esc(pilotData.completed)} / ${esc(pilotData.missed)} / ${esc(pilotData.failed)}</td></tr></tbody></table><p style="margin-top:18px;color:#5f6368">측정되지 않은 지표는 정상으로 간주하지 않습니다.</p><button onclick="window.print()">PDF로 저장 / 인쇄</button></body></html>`);
+    popup.document.close();
+  };
+
+  const fetchApprovals = async () => {
+    setApprovalLoading(true);
+    try {
+      const [a,p,n] = await Promise.all([authFetch(`${SERVER_URL}/console/approvals`),authFetch(`${SERVER_URL}/console/privacy-summary`),authFetch(`${SERVER_URL}/console/notification-deliveries`)]);
+      const [ad,pd,nd] = await Promise.all([requireJson(a,'승인 목록 조회 실패'),requireJson(p,'개인정보 현황 조회 실패'),requireJson(n,'알림 전달 내역 조회 실패')]);
+      setApprovals(Array.isArray(ad?.approvals)?ad.approvals:[]); setApprovalsPage(1); setPrivacySummary(pd); setNotificationDeliveries(Array.isArray(nd?.deliveries)?nd.deliveries:[]);
+    } catch(e:any) { notify(e?.message || '운영 통제 현황 조회 실패'); } finally { setApprovalLoading(false); }
+  };
+  const decideApproval = async (item:any, approve:boolean) => {
+    const note = window.prompt(approve?'승인 사유를 입력하세요.':'반려 사유를 입력하세요.','검토 결과 이상 없음');
+    if (!note || note.trim().length < 3) return;
+    setApprovalBusy(item.id);
+    try { const r=await authFetch(`${SERVER_URL}/console/approvals/${encodeURIComponent(item.id)}/${approve?'approve':'reject'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note:note.trim()})}); await requireJson(r,approve?'승인 실행 실패':'반려 실패'); notify(approve?'승인 작업을 실행했습니다.':'요청을 반려했습니다.','success'); await fetchApprovals(); }
+    catch(e:any){notify(e?.message||'승인 처리 실패');} finally{setApprovalBusy('');}
   };
 
   // ── 사용자(기관 소속 계정) 관리 ──
@@ -1020,6 +1298,30 @@ export default function ConsoleApp() {
     } catch { notify('어르신 목록 조회 실패'); }
     finally { setEldersLoading(false); }
   };
+  /**
+   * 체험 전화 '번호당 1회' 해제. 인증 없이 열린 발신 경로(POST /demo/call)의 방어를
+   * 한 칸 여는 동작이라 사유를 반드시 받고, 서버가 신청 이력을 보관한 뒤 지운다.
+   */
+  const resetDemoCall = async () => {
+    const phone = demoResetPhone.replace(/\D/g, '');
+    const reason = demoResetReason.trim();
+    if (!/^01[016789]\d{7,8}$/.test(phone)) { notify('휴대폰 번호 형식이 올바르지 않습니다'); return; }
+    if (!reason) { notify('해제 사유를 입력하세요'); return; }
+    if (!window.confirm(`${demoResetPhone}\n\n이 번호의 체험 전화 1회 제한을 해제합니다.\n해제하면 이 번호로 체험 전화를 다시 신청할 수 있습니다. 계속할까요?`)) return;
+    setDemoResetBusy(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/demo-calls/${encodeURIComponent(phone)}/reset`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { notify(errMsg(d, '체험 제한 해제 실패')); return; }
+      notify('체험 전화 제한을 해제했습니다.', 'success');
+      setDemoResetPhone(''); setDemoResetReason('');
+    } catch { notify('네트워크 오류 — 체험 제한 해제 실패'); }
+    finally { setDemoResetBusy(false); }
+  };
+
   const transferElder = async (elder: any) => {
     const targetOrgId = window.prompt(
       `"${elder.name || elder.phone}" 어르신을 이관할 기관의 orgId를 입력하세요.\n(현재: ${elder.orgId})\n\n선택 가능: ${orgs.map((o: any) => `${o.orgId}(${o.name})`).join(', ')}`,
@@ -1049,6 +1351,7 @@ export default function ConsoleApp() {
       const r = await authFetch(`${SERVER_URL}/console/notices`);
       const d = await r.json().catch(() => []);
       setNotices(Array.isArray(d) ? d : []);
+      setNoticesPage(1);
     } catch { notify('공지 목록 조회 실패'); }
     finally { setNoticesLoading(false); }
   };
@@ -1091,6 +1394,7 @@ export default function ConsoleApp() {
       const r = await authFetch(`${SERVER_URL}/console/staff`);
       const d = await r.json().catch(() => []);
       setCsAccounts(Array.isArray(d) ? d : []);
+      setCsAccountsPage(1);
     } catch { notify('CS 계정 목록 조회 실패'); }
     finally { setCsAccountsLoading(false); }
   };
@@ -1124,6 +1428,9 @@ export default function ConsoleApp() {
     // 계정에서 GET /console/calls/active(비허용 라우트) 403이 콘솔에 찍힌다(2026-09-01 발견).
     if (consoleRole === null) return;
     if (page === 'test') fetchTestCallTarget();
+    if (page === 'incidents') fetchIncidents();
+    if (page === 'support') fetchSupportTickets();
+    if (page === 'approvals') fetchApprovals();
     if (page === 'health') fetchHealth();
     if (page === 'calls') fetchHistory();
     if (page === 'subscriptions') fetchSubs();
@@ -1146,6 +1453,22 @@ export default function ConsoleApp() {
   useEffect(() => {
     if (consoleRole === 'cs' && !CS_ALLOWED_PAGES.includes(page)) setPage('stats');
   }, [consoleRole]); // eslint-disable-line
+
+  useEffect(() => {
+    if (page !== 'help' || helpContent) return;
+    let cancelled = false;
+    setHelpLoading(true);
+    setHelpError('');
+    fetch('/help/console-guide.html', { credentials: 'same-origin' })
+      .then(response => {
+        if (!response.ok) throw new Error(`도움말 응답 오류(${response.status})`);
+        return response.text();
+      })
+      .then(html => { if (!cancelled) setHelpContent(html); })
+      .catch(error => { if (!cancelled) setHelpError(error?.message || '도움말을 불러오지 못했습니다.'); })
+      .finally(() => { if (!cancelled) setHelpLoading(false); });
+    return () => { cancelled = true; };
+  }, [page, helpContent, helpRetry]);
 
   if (!authChecked) return null;
   if (!authUser) return <LoginScreen />;
@@ -1206,6 +1529,96 @@ export default function ConsoleApp() {
         </div>
         <div style={{flex:1,padding:'24px 32px',overflowY:'auto'}}>
 
+        {page === 'support' && (
+          <div className="fade-in">
+            <section className="section" style={{marginBottom:16}}>
+              <div className="script-editor-header" style={{marginBottom:14,alignItems:'flex-end'}}>
+                <div><div className="section-title" style={{marginBottom:4}}>통화 ID 진단</div><div style={{fontSize:12,color:'#5f6368'}}>대화 원문과 전체 전화번호를 노출하지 않고 발신·결과·위험 상태를 확인합니다. 조회 이력은 감사 로그에 남습니다.</div></div>
+              </div>
+              <div style={{display:'flex',gap:8,maxWidth:720}}>
+                <input className="form-input" value={diagnosticCallId} onChange={e=>setDiagnosticCallId(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchCallDiagnostic();}} placeholder="통화 ID" aria-label="진단할 통화 ID" />
+                <button className="btn-primary" onClick={()=>fetchCallDiagnostic()} disabled={diagnosticLoading}><Search size={15}/> {diagnosticLoading?'조회 중':'진단'}</button>
+              </div>
+              {diagnostic && <div style={{marginTop:14,padding:16,border:'1px solid #dadce0',borderRadius:10,background:'#f8fafd'}}>
+                <div style={{fontWeight:700,marginBottom:10}}>통화 {diagnostic.callId}</div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:12}}>
+                  {[['발신 요청',diagnostic.dispatch?[diagnostic.dispatch]:[]],['통화 결과',diagnostic.calls||[]],['위험 감지',diagnostic.risks||[]]].map(([label,items]:any)=><div key={label}><div style={{fontSize:12,fontWeight:700,color:'#5f6368',marginBottom:6}}>{label}</div>{items.length?items.map((item:any,index:number)=><div key={index} style={{fontSize:12,background:'#fff',border:'1px solid #e8eaed',borderRadius:8,padding:10,marginBottom:6,wordBreak:'break-word'}}>{Object.entries(item).filter(([,v])=>v!==null&&v!==''&&v!==0).map(([k,v])=><div key={k}><strong>{k}</strong>: {String(v)}</div>)}</div>):<div style={{fontSize:12,color:'#9aa0a6'}}>기록 없음</div>}</div>)}
+                </div>
+              </div>}
+            </section>
+            <section className="section">
+              <div className="script-editor-header" style={{marginBottom:10}}><div><div className="section-title" style={{marginBottom:4}}>기관 문의 티켓 ({supportTickets.length}건)</div><div style={{fontSize:12,color:'#5f6368'}}>담당자, SLA 기한, 기관 안내와 조치 상태를 관리합니다.</div></div><div style={{display:'flex',gap:8}}><button className="btn-secondary" onClick={fetchSupportTickets} disabled={supportLoading}>{supportLoading?'조회 중':'새로고침'}</button><button className="btn-primary" onClick={createSupportTicket} disabled={supportBusy==='create'}>새 티켓</button></div></div>
+              <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:1100}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>등록</th><th style={{padding:8}}>기관</th><th style={{padding:8}}>심각도</th><th style={{padding:8}}>문의</th><th style={{padding:8}}>통화 ID</th><th style={{padding:8}}>담당자</th><th style={{padding:8}}>SLA</th><th style={{padding:8}}>상태</th><th style={{padding:8}}>처리</th></tr></thead><tbody>{supportTickets.slice((supportPage-1)*PAGE_SIZE,supportPage*PAGE_SIZE).map((ticket:any)=>{
+                const overdue=ticket.slaDueAt&&new Date(ticket.slaDueAt).getTime()<Date.now()&&!['resolved','closed'].includes(ticket.status);
+                return <tr key={ticket.id} style={{borderBottom:'1px solid #f1f3f4',verticalAlign:'top',background:overdue?'#fff8f7':'#fff'}}><td style={{padding:8,whiteSpace:'nowrap'}}>{ticket.createdAt?new Date(ticket.createdAt).toLocaleString():'-'}</td><td style={{padding:8}}>{ticket.orgId}</td><td style={{padding:8,fontWeight:700,color:ticket.severity==='critical'?'#c5221f':ticket.severity==='high'?'#e37400':'#5f6368'}}>{ticket.severity}</td><td style={{padding:8,minWidth:260}}><strong>{ticket.title}</strong><div style={{marginTop:4,color:'#5f6368',whiteSpace:'pre-wrap'}}>{ticket.description}</div>{ticket.operatorNote&&<div style={{marginTop:6,color:'#1a73e8'}}>조치: {ticket.operatorNote}</div>}</td><td style={{padding:8}}>{ticket.callId?<button className="btn-secondary" style={{fontSize:11}} onClick={()=>{setDiagnosticCallId(ticket.callId);fetchCallDiagnostic(ticket.callId);}}>{ticket.callId}</button>:'-'}</td><td style={{padding:8}}>{ticket.assignee||'미지정'}</td><td style={{padding:8,color:overdue?'#c5221f':'inherit',fontWeight:overdue?700:400}}>{ticket.slaDueAt?new Date(ticket.slaDueAt).toLocaleString():'-'}{overdue?' · 초과':''}</td><td style={{padding:8,fontWeight:600}}>{ticket.status}</td><td style={{padding:8}}><div style={{display:'flex',gap:5,flexWrap:'wrap'}}><button className="btn-secondary" disabled={supportBusy===ticket.id} onClick={()=>updateSupportTicket(ticket,'in_progress')}>처리 중</button><button className="btn-secondary" disabled={supportBusy===ticket.id} onClick={()=>updateSupportTicket(ticket,'waiting_org')}>기관 회신 대기</button><button className="btn-primary" disabled={supportBusy===ticket.id} onClick={()=>updateSupportTicket(ticket,'resolved')}>해결</button></div></td></tr>})}</tbody></table><Pager page={supportPage} setPage={setSupportPage} total={supportTickets.length}/>{!supportTickets.length&&!supportLoading&&<div style={{padding:24,textAlign:'center',color:'#5f6368'}}>등록된 기관 문의가 없습니다.</div>}</div>
+            </section>
+          </div>
+        )}
+
+        {page === 'incidents' && (
+          <div className="fade-in">
+            <section className="section">
+              <div className="script-editor-header" style={{marginBottom:14,alignItems:'flex-end'}}>
+                <div>
+                  <div className="section-title" style={{marginBottom:4}}>장애·사고 통합 센터</div>
+                  <div style={{fontSize:12,color:'#5f6368'}}>통화·예약·위험 알림·결제·크론 장애를 모아 보고, 원본 상태와 분리해 운영 조치 기록을 남깁니다.</div>
+                </div>
+                <button className={`btn-download ${incidentLoading?'btn-calling':''}`} onClick={fetchIncidents} disabled={incidentLoading}>{incidentLoading?'조회 중...':'새로고침'}</button>
+              </div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}}>
+                <select className="form-input" style={{width:180}} value={incidentStatus} onChange={e=>setIncidentStatus(e.target.value)} aria-label="처리 상태 필터">
+                  <option value="">전체 처리 상태</option><option value="open">미처리</option><option value="acknowledged">확인</option><option value="in_progress">조치 중</option><option value="resolved">해결</option><option value="deferred">보류</option>
+                </select>
+                <select className="form-input" style={{width:190}} value={incidentCategory} onChange={e=>setIncidentCategory(e.target.value)} aria-label="사건 유형 필터">
+                  <option value="">전체 사건 유형</option><option value="call">통화 발신</option><option value="voice_engine">음성 엔진</option><option value="silence">무음 통화</option><option value="schedule">예약 누락</option><option value="risk">위험 알림</option><option value="billing">결제·환불</option><option value="scheduler">크론 작업</option><option value="infrastructure">인프라</option>
+                </select>
+                <button className="btn-secondary" onClick={fetchIncidents}>필터 적용</button>
+                <div style={{marginLeft:'auto',fontSize:13,color:'#5f6368',alignSelf:'center'}}>현재 {incidents.length}건</div>
+              </div>
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5,minWidth:1240}}>
+                  <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
+                    <th style={{padding:'9px 10px'}}>심각도</th><th style={{padding:'9px 10px'}}>발생 시각</th><th style={{padding:'9px 10px'}}>기관</th><th style={{padding:'9px 10px'}}>유형·내용</th><th style={{padding:'9px 10px'}}>담당자</th><th style={{padding:'9px 10px'}}>처리 상태</th><th style={{padding:'9px 10px'}}>조치 기록</th><th style={{padding:'9px 10px'}}>재발 방지</th><th style={{padding:'9px 10px'}}>처리</th>
+                  </tr></thead>
+                  <tbody>{incidents.slice((incidentsPage-1)*PAGE_SIZE, incidentsPage*PAGE_SIZE).map((incident:any) => {
+                    const severityLabel:Record<string,string> = {critical:'긴급',high:'높음',medium:'중간',low:'낮음'};
+                    const severityColor:Record<string,string> = {critical:'#b3261e',high:'#c5221f',medium:'#b06000',low:'#5f6368'};
+                    const statusLabel:Record<string,string> = {open:'미처리',acknowledged:'확인',in_progress:'조치 중',resolved:'해결',deferred:'보류'};
+                    return <tr key={incident.id} style={{borderBottom:'1px solid #f1f3f4',verticalAlign:'top',background:incident.severity==='critical'&&incident.status!=='resolved'?'#fff8f7':'#fff'}}>
+                      <td style={{padding:'12px 10px',fontWeight:700,color:severityColor[incident.severity]||'#5f6368'}}>{severityLabel[incident.severity]||incident.severity}</td>
+                      <td style={{padding:'12px 10px',whiteSpace:'nowrap'}}>{incident.occurredAt?new Date(incident.occurredAt).toLocaleString():'-'}</td>
+                      <td style={{padding:'12px 10px'}}>{incident.orgName||'전체 시스템'}<div style={{fontSize:11,color:'#9aa0a6'}}>{incident.orgId||'-'}</div></td>
+                      <td style={{padding:'12px 10px',minWidth:220}}><strong>{incident.title}</strong><div style={{color:'#5f6368',marginTop:4,wordBreak:'break-word'}}>{incident.detail}</div></td>
+                      <td style={{padding:'12px 10px'}}>{incident.assignee||'미지정'}</td>
+                      <td style={{padding:'12px 10px',fontWeight:600}}>{statusLabel[incident.status]||incident.status}</td>
+                      <td style={{padding:'12px 10px',maxWidth:220,whiteSpace:'pre-wrap'}}>{incident.actionNote||'-'}</td>
+                      <td style={{padding:'12px 10px',maxWidth:220,whiteSpace:'pre-wrap'}}>{incident.preventionNote||'-'}</td>
+                      <td style={{padding:'10px',whiteSpace:'nowrap'}}><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        <button className="btn-secondary" disabled={incidentBusy===incident.id} onClick={()=>updateIncident(incident,'acknowledged')}>확인</button>
+                        <button className="btn-secondary" disabled={incidentBusy===incident.id} onClick={()=>updateIncident(incident,'in_progress')}>조치 중</button>
+                        <button className="btn-secondary" disabled={incidentBusy===incident.id} onClick={()=>updateIncident(incident,'resolved')}>해결</button>
+                      </div></td>
+                    </tr>;
+                  })}</tbody>
+                </table>
+              </div>
+              <Pager page={incidentsPage} setPage={setIncidentsPage} total={incidents.length} />
+              {!incidentLoading && incidents.length===0 && <div style={{padding:'28px 0',textAlign:'center',color:'#5f6368'}}>조건에 맞는 열린 사건이 없습니다.</div>}
+            </section>
+          </div>
+        )}
+
+        {page === 'approvals' && (
+          <div className="fade-in">
+            <section className="section">
+              <div className="script-editor-header" style={{marginBottom:12}}><div><div className="section-title" style={{marginBottom:3}}>승인 대기열</div><div style={{fontSize:12,color:'#5f6368'}}>요청자와 승인자를 분리해 재청구·환불·크레딧·기관 정지·엔진 전환·파기 재시도를 실행합니다.</div></div><button className={`btn-download ${approvalLoading?'btn-calling':''}`} onClick={fetchApprovals} disabled={approvalLoading}>{approvalLoading?'조회 중...':'새로고침'}</button></div>
+              <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:900}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>요청 시각</th><th style={{padding:8}}>작업</th><th style={{padding:8}}>대상</th><th style={{padding:8}}>사유</th><th style={{padding:8}}>요청자</th><th style={{padding:8}}>상태</th><th style={{padding:8}}>처리</th></tr></thead><tbody>{approvals.slice((approvalsPage-1)*PAGE_SIZE,approvalsPage*PAGE_SIZE).map((item:any)=><tr key={item.id} style={{borderBottom:'1px solid #f1f3f4'}}><td style={{padding:8,whiteSpace:'nowrap'}}>{item.requestedAt?new Date(item.requestedAt).toLocaleString():'-'}</td><td style={{padding:8,fontWeight:700}}>{item.action}</td><td style={{padding:8}}>{item.targetId}</td><td style={{padding:8}}>{item.reason}</td><td style={{padding:8}}>{item.requesterEmail||'-'}</td><td style={{padding:8}}>{item.status}</td><td style={{padding:8}}>{item.status==='pending'?<div style={{display:'flex',gap:6}}><button className="btn-primary" disabled={approvalBusy===item.id} onClick={()=>decideApproval(item,true)}>승인</button><button className="btn-secondary" disabled={approvalBusy===item.id} onClick={()=>decideApproval(item,false)}>반려</button></div>:'-'}</td></tr>)}</tbody></table><Pager page={approvalsPage} setPage={setApprovalsPage} total={approvals.length}/>{!approvals.length&&!approvalLoading&&<div style={{padding:20,color:'#5f6368'}}>승인 요청이 없습니다.</div>}</div>
+            </section>
+            <section className="section" style={{marginTop:16}}><div className="section-title">개인정보 보존·파기 현황</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10}}>{[['보존기간',`${privacySummary?.retentionMonths??'-'}개월`],['파기 예정',`${privacySummary?.preview?.total??0}건`],['대기',`${privacySummary?.counts?.pending??0}건`],['진행 중',`${privacySummary?.counts?.running??0}건`],['실패',`${privacySummary?.counts?.failed??0}건`]].map(([label,value])=><div key={label} style={{border:'1px solid #dadce0',borderRadius:8,padding:14}}><div style={{fontSize:12,color:'#5f6368'}}>{label}</div><div style={{fontSize:22,fontWeight:700,marginTop:4}}>{value}</div></div>)}</div></section>
+            <section className="section" style={{marginTop:16}}><div className="section-title">외부 운영 알림 전달 내역</div><div style={{fontSize:12,color:'#5f6368',marginBottom:10}}>웹훅에는 심각도·제목·기관 ID만 전송하며 전화번호와 대화 원문은 포함하지 않습니다.</div><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>시각</th><th style={{padding:8}}>심각도</th><th style={{padding:8}}>내용</th><th style={{padding:8}}>기관</th><th style={{padding:8}}>상태</th></tr></thead><tbody>{notificationDeliveries.slice(0,50).map((item:any)=><tr key={item.id} style={{borderBottom:'1px solid #f1f3f4'}}><td style={{padding:8}}>{item.createdAt?new Date(item.createdAt).toLocaleString():'-'}</td><td style={{padding:8}}>{item.severity}</td><td style={{padding:8}}>{item.title}</td><td style={{padding:8}}>{item.orgId||'전체'}</td><td style={{padding:8}}>{item.status}</td></tr>)}</tbody></table>{!notificationDeliveries.length&&<div style={{padding:20,color:'#5f6368'}}>전달 기록이 없습니다.</div>}</div></section>
+          </div>
+        )}
+
         {page === 'health' && (
           <div className="fade-in">
             <section className="section" style={{marginBottom:20}}>
@@ -1231,6 +1644,50 @@ export default function ConsoleApp() {
                   {callEngineProvider.changedAt && ` · 마지막 변경 ${new Date(callEngineProvider.changedAt).toLocaleString()} ${callEngineProvider.changedByEmail || ''}`}
                 </div>
                 {callEngineProvider.runtime?.openaiConfigured===true && callEngineProvider.runtime?.openaiReady!==true && <div style={{fontSize:12,color:'#b45309',marginTop:6}}>OpenAI 계정의 API 크레딧과 Realtime 사용 권한을 확인해 주세요.</div>}
+                <div style={{marginTop:16,borderTop:'1px solid #e8eaed',paddingTop:14}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:10}}>
+                    <strong style={{fontSize:13}}>070 런타임 무결성·음성 품질</strong>
+                    {callEngineProvider.runtime?.imageApproved===false || callEngineProvider.runtime?.moduleApproved===false
+                      ? <span className="gcp-chip" style={{background:'#fce8e6',color:'#c5221f'}}>승인값 불일치 · 즉시 확인</span>
+                      : callEngineProvider.runtime?.telemetryAvailable
+                        ? <span className="gcp-chip" style={{background:'#e6f4ea',color:'#188038'}}>상태 수집 중</span>
+                        : <span className="gcp-chip" style={{background:'#fef7e0',color:'#b06000'}}>상세 상태 확인 불가</span>}
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:8}}>
+                    {[
+                      ['콜엔진 연결', callEngineProvider.runtime?.engineConnected==null?'확인 불가':callEngineProvider.runtime.engineConnected?'정상':'오류'],
+                      ['FreeSWITCH 연결', callEngineProvider.runtime?.freeSwitchConnected==null?'확인 불가':callEngineProvider.runtime.freeSwitchConnected?'정상':'오류'],
+                      ['FreeSWITCH 이미지', callEngineProvider.runtime?.freeSwitchImage||'확인 불가'],
+                      ['이미지 digest', callEngineProvider.runtime?.freeSwitchImageDigest||'확인 불가'],
+                      ['mod_audio_stream hash', callEngineProvider.runtime?.modAudioStreamHash||'확인 불가'],
+                      ['마지막 재시작', callEngineProvider.runtime?.restartedAt?new Date(callEngineProvider.runtime.restartedAt).toLocaleString():'확인 불가'],
+                      ['최근 음성 재생 성공률', callEngineProvider.runtime?.audioPlaybackSuccessRate==null?'확인 불가':`${Math.round(callEngineProvider.runtime.audioPlaybackSuccessRate*100)}%`],
+                      ['최근 24시간 무음 통화', callEngineProvider.runtime?.silentCallCount24h==null?'확인 불가':`${callEngineProvider.runtime.silentCallCount24h}건`],
+                      ['마지막 정상 통화', callEngineProvider.runtime?.lastHealthyCallAt?new Date(callEngineProvider.runtime.lastHealthyCallAt).toLocaleString():'확인 불가'],
+                    ].map(([label,value])=><div key={label} style={{border:'1px solid #e8eaed',borderRadius:8,padding:'10px 12px',minWidth:0}}>
+                      <div style={{fontSize:11.5,color:'#5f6368'}}>{label}</div>
+                      <div title={String(value)} style={{fontSize:12.5,fontWeight:600,color:'#202124',marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{value}</div>
+                    </div>)}
+                  </div>
+                  {!callEngineProvider.runtime?.telemetryAvailable && <div style={{fontSize:12,color:'#b06000',marginTop:9}}>콜엔진이 아직 이미지·FreeSWITCH·음성 품질 상태를 제공하지 않습니다. 값이 없다는 이유로 정상 판정하지 않습니다.</div>}
+                </div>
+                <div style={{marginTop:16,borderTop:'1px solid #e8eaed',paddingTop:14}}>
+                  <strong style={{fontSize:13}}>AI 엔진 전환 이력</strong>
+                  <div style={{overflowX:'auto',marginTop:8}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5,minWidth:760}}>
+                      <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>시각</th><th style={{padding:8}}>전환</th><th style={{padding:8}}>사유</th><th style={{padding:8}}>적용 통화</th><th style={{padding:8}}>방식</th><th style={{padding:8}}>운영자</th><th style={{padding:8}}>결과</th></tr></thead>
+                      <tbody>{callEngineHistory.slice((callEngineHistoryPage-1)*PAGE_SIZE, callEngineHistoryPage*PAGE_SIZE).map((change:any)=><tr key={change.id} style={{borderBottom:'1px solid #f1f3f4'}}>
+                        <td style={{padding:8,whiteSpace:'nowrap'}}>{change.changedAt?new Date(change.changedAt).toLocaleString():'-'}</td>
+                        <td style={{padding:8,fontWeight:600}}>{change.from} → {change.to}</td>
+                        <td style={{padding:8}}>{change.reason||'-'}</td><td style={{padding:8}}>{change.callId||'신규 통화 전체'}</td>
+                        <td style={{padding:8}}>{change.automatic?'자동':'수동'}{change.autoRevert?' · 자동 복귀':''}</td><td style={{padding:8}}>{change.operatorEmail||'-'}</td>
+                        <td style={{padding:8,color:change.success?'#188038':'#c5221f',fontWeight:600}}>{change.success?'성공':'실패'}</td>
+                      </tr>)}</tbody>
+                    </table>
+                    <Pager page={callEngineHistoryPage} setPage={setCallEngineHistoryPage} total={callEngineHistory.length} />
+                    {!callEngineHistory.length && <div style={{padding:'12px 4px',color:'#5f6368'}}>저장된 전환 이력이 없습니다.</div>}
+                  </div>
+                </div>
               </>}
             </section>
             <section className="section">
@@ -1260,7 +1717,7 @@ export default function ConsoleApp() {
                     <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
                       <th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>대상</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}>진행</th><th style={{padding:'8px 10px'}}>오류</th><th style={{padding:'8px 10px'}}>처리</th>
                     </tr></thead>
-                    <tbody>{privacyPurgeJobs.map((job:any) => (
+                    <tbody>{privacyPurgeJobs.slice((privacyPurgePage-1)*PAGE_SIZE, privacyPurgePage*PAGE_SIZE).map((job:any) => (
                       <tr key={job.id} style={{borderBottom:'1px solid #f1f3f4'}}>
                         <td style={{padding:'10px'}}>{job.orgId || '-'}</td>
                         <td style={{padding:'10px'}}>{job.type==='retention'?'보관기간 자동 파기':(job.maskedPhone || '번호 비공개')}</td>
@@ -1271,6 +1728,7 @@ export default function ConsoleApp() {
                       </tr>
                     ))}</tbody>
                   </table>
+                  <Pager page={privacyPurgePage} setPage={setPrivacyPurgePage} total={privacyPurgeJobs.length} />
                 </div>
               </section>
             )}
@@ -1324,13 +1782,14 @@ export default function ConsoleApp() {
                       <th style={{padding:'8px 10px'}}>이름</th><th style={{padding:'8px 10px'}}>전화번호</th><th style={{padding:'8px 10px'}}>기관</th>
                       <th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}>경과</th>
                     </tr></thead>
-                    <tbody>{activeCalls.map((c:any) => (
+                    <tbody>{activeCalls.slice((activeCallsPage-1)*PAGE_SIZE, activeCallsPage*PAGE_SIZE).map((c:any) => (
                       <tr key={c.callId} style={{borderBottom:'1px solid #f1f3f4'}}>
                         <td style={{padding:'10px'}}>{c.name}</td><td style={{padding:'10px'}}>{c.phone}</td><td style={{padding:'10px'}}>{c.orgId}</td>
                         <td style={{padding:'10px'}}>{c.status}</td><td style={{padding:'10px'}}>{c.elapsedSec}초</td>
                       </tr>
                     ))}</tbody>
                   </table>
+                  <Pager page={activeCallsPage} setPage={setActiveCallsPage} total={activeCalls.length} />
                 </div>
               )}
             </section>
@@ -1392,7 +1851,7 @@ export default function ConsoleApp() {
                     </tr></thead>
                     <tbody>{(() => {
                       const maxOrgTotal = Math.max(1, ...statsData.byOrg.map((o:any)=>o.total));
-                      return statsData.byOrg.map((o:any) => (
+                      return statsData.byOrg.slice((statsOrgPage-1)*PAGE_SIZE, statsOrgPage*PAGE_SIZE).map((o:any) => (
                       <tr key={o.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
                         <td style={{padding:'10px',minWidth:220}}>
                           <div style={{marginBottom:4}}>{orgName(o.orgId)}</div>
@@ -1407,32 +1866,65 @@ export default function ConsoleApp() {
                       ));
                     })()}</tbody>
                   </table>
+                  <Pager page={statsOrgPage} setPage={setStatsOrgPage} total={statsData.byOrg.length} />
                 </div>
               </section>
             )}
             <section className="section" style={{marginTop:16}}>
               <div className="script-editor-header" style={{marginBottom:10}}>
                 <div>
-                  <div className="section-title" style={{marginBottom:3}}>기관 파일럿 지표</div>
-                  <div style={{fontSize:12,color:'#5f6368'}}>예약 안부전화만 집계하며 수동·경보·기능 테스트 발신은 제외합니다.</div>
+                  <div className="section-title" style={{marginBottom:3}}>기관별 SLA 보고서</div>
+                  <div style={{fontSize:12,color:'#5f6368'}}>예약 안부전화만 집계하며 수동·경보·기능 테스트 발신은 제외합니다. 조회 결과는 CSV로 내려받을 수 있습니다.</div>
                 </div>
-                <button className={`btn-download ${pilotLoading?'btn-calling':''}`} onClick={fetchPilotMetrics} disabled={pilotLoading || !statsOrg}>
-                  {pilotLoading?'조회 중...':'파일럿 조회'}
-                </button>
+                <div style={{display:'flex',gap:8}}>
+                  <button className="btn-download" onClick={printPilotSlaPdf} disabled={!pilotData || pilotLoading}>PDF 출력</button>
+                  <button className="btn-download" onClick={downloadPilotSlaCsv} disabled={!pilotData || pilotLoading}>CSV 다운로드</button>
+                  <button className={`btn-download ${pilotLoading?'btn-calling':''}`} onClick={fetchPilotMetrics} disabled={pilotLoading || !statsOrg}>
+                    {pilotLoading?'조회 중...':'SLA 조회'}
+                  </button>
+                </div>
               </div>
               <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
                 <select className="form-input" style={{width:240,margin:0}} value={statsOrg} onChange={e=>{setStatsOrg(e.target.value);setPilotData(null);}}>
-                  <option value="">파일럿 기관 선택</option>
+                  <option value="">보고서 기관 선택</option>
                   {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
                 </select>
-                <label style={{fontSize:12,color:'#5f6368'}}>시작일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotFrom} onChange={e=>setPilotFrom(e.target.value)} /></label>
-                <label style={{fontSize:12,color:'#5f6368'}}>종료일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotTo} onChange={e=>setPilotTo(e.target.value)} /></label>
+                <label style={{fontSize:12,color:'#5f6368'}}>시작일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotFrom} onChange={e=>{setPilotFrom(e.target.value);setPilotData(null);}} /></label>
+                <label style={{fontSize:12,color:'#5f6368'}}>종료일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotTo} onChange={e=>{setPilotTo(e.target.value);setPilotData(null);}} /></label>
               </div>
               {!pilotData ? (
                 <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{statsOrg?'기간을 확인하고 파일럿 조회를 누르세요.':'기관을 선택해야 파일럿 지표를 조회할 수 있습니다.'}</div>
               ) : (
-                <>
+                (() => {
+                  const answeredBase = pilotData.completed + pilotData.missed;
+                  const connectionRate = answeredBase ? pilotData.completed / answeredBase : null;
+                  const slaRows = [
+                    {label:'예약 발신률',value:pilotData.attemptRate,target:'99% 이상',pass:pilotData.attemptRate!=null&&pilotData.attemptRate>=.99,invert:false},
+                    {label:'연결률',value:connectionRate,target:'80% 이상',pass:connectionRate!=null&&connectionRate>=.8,invert:false},
+                    {label:'기술 실패율',value:pilotData.technicalFailureRate,target:'1% 이하',pass:pilotData.technicalFailureRate!=null&&pilotData.technicalFailureRate<=.01,invert:true},
+                    {label:'결과 저장률',value:pilotData.resultCompletenessRate,target:'100%',pass:pilotData.resultCompletenessRate!=null&&pilotData.resultCompletenessRate>=1,invert:false},
+                  ];
+                  const violations = slaRows.filter(row=>row.value!=null&&!row.pass).length;
+                  return <>
                   {pilotData.note && <div style={{background:'#fef7e0',color:'#754d00',border:'1px solid #f9ab00',borderRadius:6,padding:'10px 12px',fontSize:13,marginBottom:12}}>{pilotData.note}</div>}
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:10}}>
+                    <div>
+                      <strong style={{fontSize:14}}>기관별 SLA 운영 지표</strong>
+                      <div style={{fontSize:11.5,color:'#64748b',marginTop:3}}>현재 기준은 계약상 보장 수치가 아닌 내부 운영 목표입니다.</div>
+                    </div>
+                    <span className="gcp-chip" style={{background:violations?'#fce8e6':'#e6f4ea',color:violations?'#c5221f':'#188038'}}>{violations ? `운영 목표 위반 ${violations}건` : '운영 목표 충족'}</span>
+                  </div>
+                  <div style={{overflowX:'auto',marginBottom:14}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                      <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>지표</th><th style={{padding:8}}>측정값</th><th style={{padding:8}}>운영 목표</th><th style={{padding:8}}>판정</th></tr></thead>
+                      <tbody>{slaRows.map(row=><tr key={row.label} style={{borderBottom:'1px solid #f1f3f4'}}>
+                        <td style={{padding:8,fontWeight:600}}>{row.label}</td>
+                        <td style={{padding:8}}>{row.value==null?'측정 전':`${(row.value*100).toFixed(1)}%`}</td>
+                        <td style={{padding:8}}>{row.target}</td>
+                        <td style={{padding:8,fontWeight:700,color:row.value==null?'#5f6368':row.pass?'#188038':'#c5221f'}}>{row.value==null?'측정 전':row.pass?'충족':'위반'}</td>
+                      </tr>)}</tbody>
+                    </table>
+                  </div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
                     {[
                       ['예정',pilotData.scheduledExpected,'건',false],
@@ -1449,7 +1941,11 @@ export default function ConsoleApp() {
                       <div style={{fontSize:23,fontWeight:700,color:danger?'#c5221f':'#202124',marginTop:3}}>{value}{value!=='-'&&<span style={{fontSize:12,fontWeight:500,marginLeft:3}}>{unit}</span>}</div>
                     </div>)}
                   </div>
-                </>
+                  <div style={{marginTop:14,padding:'12px 14px',border:'1px solid #e2e8f0',borderRadius:8,background:'#f8fafc',fontSize:12,color:'#64748b',lineHeight:1.7}}>
+                    위험 알림 확인 시간·조치 완료 시간·음성 품질·요금제 초과량·담당자 처리 시간은 기관별 측정 데이터가 아직 없어 `측정 전`으로 CSV에 포함됩니다. 임의 수치로 정상 판정하지 않습니다.
+                  </div>
+                </>;
+                })()
               )}
             </section>
           </div>
@@ -1491,13 +1987,21 @@ export default function ConsoleApp() {
               <div className="section-title" style={{marginBottom:0}}>정기결제 현황 ({subs.length}개 구독)</div>
               <button className={`btn-download ${subsLoading?'btn-calling':''}`} onClick={fetchSubs} disabled={subsLoading}>{subsLoading?'조회 중...':'새로고침'}</button>
             </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10,marginBottom:12}}>
+              {[
+                ['결제 실패',subs.filter((s:any)=>s.lastChargeError).length,'#c5221f'],
+                ['7일 내 결제 예정',subs.filter((s:any)=>s.autoRenew&&s.nextChargeAt&&Date.parse(s.nextChargeAt)>=Date.now()&&Date.parse(s.nextChargeAt)<=Date.now()+7*86400_000).length,'#1a73e8'],
+                ['청구일 경과',subs.filter((s:any)=>s.autoRenew&&s.nextChargeAt&&Date.parse(s.nextChargeAt)<Date.now()).length,'#b06000'],
+                ['자동결제 활성',subs.filter((s:any)=>s.autoRenew).length,'#188038'],
+              ].map(([label,value,color]:any)=><div key={label} style={{border:'1px solid #dadce0',borderRadius:8,padding:'10px 12px'}}><div style={{fontSize:11.5,color:'#5f6368'}}>{label}</div><div style={{fontSize:22,fontWeight:700,color,marginTop:2}}>{value}<span style={{fontSize:12,fontWeight:500,marginLeft:3}}>건</span></div></div>)}
+            </div>
             {subs.some((s:any)=>s.lastChargeError) && <div role="alert" style={{padding:'10px 12px',marginBottom:12,borderRadius:8,background:'#fce8e6',color:'#b3261e',fontSize:13,fontWeight:700}}>자동결제 오류 {subs.filter((s:any)=>s.lastChargeError).length}개 기관 · 최근 오류 열을 확인해 주세요.</div>}
             {subs.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{subsLoading?'불러오는 중...':'기관 데이터가 없습니다'}</div> : (
               <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
                   <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
                     <th style={{padding:'8px 10px'}}>기관명</th><th style={{padding:'8px 10px'}}>통화 방식</th><th style={{padding:'8px 10px'}}>요금제</th><th style={{padding:'8px 10px'}}>대상자</th>
-                    <th style={{padding:'8px 10px'}}>월 청구액</th><th style={{padding:'8px 10px'}}>자동결제</th><th style={{padding:'8px 10px'}}>다음 청구일</th><th style={{padding:'8px 10px'}}>최근 오류</th>
+                    <th style={{padding:'8px 10px'}}>월 청구액</th><th style={{padding:'8px 10px'}}>자동결제</th><th style={{padding:'8px 10px'}}>다음 청구일</th><th style={{padding:'8px 10px'}}>최근 오류</th><th style={{padding:'8px 10px'}}>재청구</th>
                   </tr></thead>
                   <tbody>{subs.slice((subsPage-1)*PAGE_SIZE, subsPage*PAGE_SIZE).map((s:any) => (
                     <tr key={`${s.orgId}-${s.track || 'legacy'}`} style={{borderBottom:'1px solid #f1f3f4'}}>
@@ -1506,6 +2010,9 @@ export default function ConsoleApp() {
                       <td style={{padding:'10px'}}><span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:s.autoRenew?'#e6f4ea':'#f1f3f4',color:s.autoRenew?'#1e8e3e':'#5f6368'}}>{s.autoRenew?'등록됨':'미등록'}</span></td>
                       <td style={{padding:'10px',color:'#5f6368'}}>{s.nextChargeAt ? new Date(s.nextChargeAt).toLocaleDateString('ko-KR') : '-'}</td>
                       <td style={{padding:'10px',color:s.lastChargeError?'#c5221f':'#5f6368',fontSize:12}}>{s.lastChargeError || '-'}</td>
+                      <td style={{padding:'10px'}}>{s.lastChargeError && s.track && s.nextChargeAt && Date.parse(s.nextChargeAt)<=Date.now()
+                        ? <button className="btn-secondary" disabled={subscriptionRetryBusy===`${s.orgId}:${s.track}`} onClick={()=>retryFailedSubscription(s)}>{subscriptionRetryBusy===`${s.orgId}:${s.track}`?'처리 중...':'수동 재청구'}</button>
+                        : <span style={{fontSize:12,color:'#94a3b8'}}>{s.lastChargeError?'예정일 전':'-'}</span>}</td>
                     </tr>
                   ))}</tbody>
                 </table>
@@ -1631,13 +2138,13 @@ export default function ConsoleApp() {
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
                   <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
                     <th style={{padding:'8px 10px'}}>기관명</th><th style={{padding:'8px 10px'}}>기관코드</th><th style={{padding:'8px 10px'}}>요금제</th>
-                    <th style={{padding:'8px 10px'}}>크레딧 잔액</th><th style={{padding:'8px 10px'}}>대상자</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}></th>
+                    <th style={{padding:'8px 10px'}}>계약·도입</th><th style={{padding:'8px 10px'}}>통화</th><th style={{padding:'8px 10px'}}>크레딧 잔액</th><th style={{padding:'8px 10px'}}>대상자</th><th style={{padding:'8px 10px'}}>상태</th><th style={{padding:'8px 10px'}}></th>
                   </tr></thead>
                   <tbody>{orgs.slice((orgsPage-1)*PAGE_SIZE, orgsPage*PAGE_SIZE).map((o:any) => {
                     const suspended = o.suspended === true;
                     return (
                     <tr key={o.orgId} style={{borderBottom:'1px solid #f1f3f4'}}>
-                      <td style={{padding:'10px'}}>{o.name}</td><td style={{padding:'10px',fontFamily:'monospace',color:'#5f6368'}}>{o.code}</td><td style={{padding:'10px'}}>{o.plan || '미설정'}</td>
+                      <td style={{padding:'10px'}}>{o.name}</td><td style={{padding:'10px',fontFamily:'monospace',color:'#5f6368'}}>{o.code}</td><td style={{padding:'10px'}}>{o.plan || '미설정'}</td><td style={{padding:'10px',fontSize:12}}>{o.contractStatus||'prospect'}<div style={{color:'#5f6368'}}>{o.rolloutStage||'preparing'} · {o.contractEndAt||'종료일 미정'}</div></td><td style={{padding:'10px'}}>{o.callMode||'both'}</td>
                       <td style={{padding:'10px'}}>{o.creditExpiryUnreconciledBalance != null && Number(o.creditExpiryUnreconciledBalance) !== 0
                         ? <span title="원장과 저장 잔액이 일치하지 않습니다" style={{fontWeight:800,color:'#c5221f'}}>원장 확인 필요 ({Number(o.creditExpiryUnreconciledBalance).toLocaleString()}원)</span>
                         : o.creditBalance == null ? <span style={{color:'#94a3b8'}}>무제한(구기관)</span> : <span style={{fontWeight:700,color:o.creditBalance<=0?'#c5221f':'#0f172a'}}>{Number(o.creditBalance).toLocaleString()}원</span>}</td>
@@ -1645,6 +2152,7 @@ export default function ConsoleApp() {
                       <td style={{padding:'10px'}}><span style={{fontSize:12,fontWeight:600,padding:'2px 10px',borderRadius:12,background:suspended?'#fce8e6':'#e6f4ea',color:suspended?'#c5221f':'#1e8e3e'}}>{suspended?'정지됨':'정상'}</span></td>
                       <td style={{padding:'10px',whiteSpace:'nowrap'}}>
                         <div style={{display:'flex',gap:6}}>
+                          <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px'}} disabled={orgBusy===o.orgId} onClick={()=>editOrgLifecycle(o)}>운영정보</button>
                           <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:'#1a73e8'}} disabled={orgBusy===o.orgId} onClick={()=>creditOrg(o)}>충전</button>
                           <button className="btn-secondary" style={{fontSize:13,padding:'4px 10px',color:suspended?'#1e8e3e':'#c5221f'}} disabled={orgBusy===o.orgId} onClick={()=>toggleOrgSuspend(o,!suspended)}>{orgBusy===o.orgId?'처리 중...':(suspended?'재개':'정지')}</button>
                         </div>
@@ -1747,6 +2255,25 @@ export default function ConsoleApp() {
           </section>
         )}
 
+        {page === 'elders' && consoleRole !== 'cs' && (
+          <section className="section fade-in" style={{marginTop:16}}>
+            <div className="section-title" style={{marginBottom:10}}>홈페이지 체험 전화 제한 해제</div>
+            <div style={{fontSize:13,color:'#5f6368',marginBottom:12,lineHeight:1.6}}>
+              체험 전화는 번호당 1회만 받을 수 있습니다. 도입 검토 중 재시연 요청처럼 다시 걸어야 하는 경우에만 해제하세요.
+              해제하면 신청 이력은 보관되고 제한만 풀립니다. IP 일 3회·전체 일 30통·평일 09~18시 상한은 그대로 적용됩니다.
+            </div>
+            <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+              <input className="form-input" style={{width:200,margin:0}} placeholder="010-0000-0000"
+                value={demoResetPhone} onChange={e=>setDemoResetPhone(e.target.value)} />
+              <input className="form-input" style={{width:300,margin:0}} placeholder="해제 사유 (감사 로그에 남습니다)"
+                maxLength={200} value={demoResetReason} onChange={e=>setDemoResetReason(e.target.value)} />
+              <button className="btn-primary" disabled={demoResetBusy} onClick={resetDemoCall}>
+                {demoResetBusy ? '해제 중...' : '제한 해제'}
+              </button>
+            </div>
+          </section>
+        )}
+
         {page === 'notices' && (
           <div className="fade-in">
             <section className="section" style={{marginBottom:16}}>
@@ -1764,7 +2291,7 @@ export default function ConsoleApp() {
               </div>
               {notices.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{noticesLoading?'불러오는 중...':'게시된 공지가 없습니다'}</div> : (
                 <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                  {notices.map((n:any) => (
+                  {notices.slice((noticesPage-1)*PAGE_SIZE, noticesPage*PAGE_SIZE).map((n:any) => (
                     <div key={n.id} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:'14px 16px',opacity:n.active?1:0.55}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
                         <div>
@@ -1783,6 +2310,7 @@ export default function ConsoleApp() {
                       </div>
                     </div>
                   ))}
+                  <Pager page={noticesPage} setPage={setNoticesPage} total={notices.length} />
                 </div>
               )}
             </section>
@@ -1821,7 +2349,7 @@ export default function ConsoleApp() {
                     <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
                       <th style={{padding:'8px 10px'}}>이메일</th><th style={{padding:'8px 10px'}}>이름</th><th style={{padding:'8px 10px'}}></th>
                     </tr></thead>
-                    <tbody>{csAccounts.map((u:any) => (
+                    <tbody>{csAccounts.slice((csAccountsPage-1)*PAGE_SIZE, csAccountsPage*PAGE_SIZE).map((u:any) => (
                       <tr key={u.uid} style={{borderBottom:'1px solid #f1f3f4'}}>
                         <td style={{padding:'10px'}}>{u.email}</td>
                         <td style={{padding:'10px'}}>{u.name || '-'}</td>
@@ -1829,6 +2357,7 @@ export default function ConsoleApp() {
                       </tr>
                     ))}</tbody>
                   </table>
+                  <Pager page={csAccountsPage} setPage={setCsAccountsPage} total={csAccounts.length} />
                 </div>
               )}
             </section>
@@ -1837,13 +2366,15 @@ export default function ConsoleApp() {
 
         {page === 'help' && (
           <section className="section fade-in" style={{padding:0,overflow:'hidden'}}>
-            <iframe
+            {helpLoading && <div style={{padding:28,color:'#5f6368'}}>도움말을 불러오는 중입니다.</div>}
+            {helpError && <div style={{padding:28,color:'#c5221f'}}>{helpError} <button className="btn-secondary" onClick={()=>{setHelpError('');setHelpRetry(value=>value+1);}}>다시 시도</button></div>}
+            {helpContent && <iframe
               title="영실이 콘솔 도움말"
-              src="/help/console-guide.html"
+              srcDoc={helpContent}
               onLoad={onHelpLoad}
               scrolling="no"
               style={{width:'100%',height:helpHeight,border:0,display:'block'}}
-            />
+            />}
           </section>
         )}
 

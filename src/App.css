@@ -793,12 +793,11 @@ body {
 
 /* ── 전화 관리 추가 스타일 ── */
 
-/* 토스트 — notify() 공용. 화면을 가리지 않고 하단에 잠시 떴다 자동으로 사라진다 */
+/* 토스트 — notify() 공용. 주요 내용을 가리지 않도록 우측 상단에 잠시 표시한다. */
 .toast-viewport {
   position: fixed;
-  left: 50%;
-  bottom: 32px;
-  transform: translateX(-50%);
+  top: 24px;
+  right: 24px;
   z-index: 1200;
   pointer-events: none;
 }
@@ -806,30 +805,35 @@ body {
   pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   background: #1e293b;
   color: #f8fafc;
-  padding: 14px 20px;
+  padding: 17px 22px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.5;
   box-shadow: 0 12px 32px rgba(15,23,42,0.28);
-  max-width: min(420px, 86vw);
+  max-width: min(480px, 86vw);
   cursor: pointer;
   animation: toastIn 0.22s ease;
 }
+.toast svg { width: 20px; height: 20px; }
 .toast--hiding { animation: toastOut 0.18s ease forwards; }
 .toast--success svg { color: #4ade80; flex-shrink: 0; }
 .toast--error svg { color: #f87171; flex-shrink: 0; }
 .toast--info svg { color: #60a5fa; flex-shrink: 0; }
 @keyframes toastIn {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateX(14px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 @keyframes toastOut {
-  from { opacity: 1; transform: translateY(0); }
-  to   { opacity: 0; transform: translateY(10px); }
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(10px); }
+}
+@media (max-width: 640px) {
+  .toast-viewport { top: 12px; left: 12px; right: 12px; }
+  .toast { max-width: none; width: 100%; }
 }
 
 /* 모달 */
