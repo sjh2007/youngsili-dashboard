@@ -537,6 +537,10 @@ export default function ConsoleApp() {
   const [pilotLoading, setPilotLoading] = useState(false);
   const [pilotFrom, setPilotFrom] = useState(() => localDateKey(new Date(Date.now() - 13 * 86400_000)) || '');
   const [pilotTo, setPilotTo] = useState(() => localDateKey(new Date()) || '');
+  const [pilotPrograms, setPilotPrograms] = useState<any[]>([]);
+  const [pilotOwner, setPilotOwner] = useState('');
+  const [pilotSubjectCount, setPilotSubjectCount] = useState('10');
+  const [pilotProgramBusy, setPilotProgramBusy] = useState(false);
 
   // ── 사용자(기관 소속 계정) 관리 ──
   const [users, setUsers] = useState<any[]>([]);
@@ -1165,6 +1169,34 @@ export default function ConsoleApp() {
       setPilotData(parseOr(PilotMetricsSchema, raw, null));
     } catch (e:any) { notify(e?.message || '파일럿 지표 조회 실패'); }
     finally { setPilotLoading(false); }
+  };
+  const fetchPilotPrograms = async () => {
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/pilot-programs`);
+      setPilotPrograms(await requireJson(r, '파일럿 운영 목록 조회 실패'));
+    } catch (e:any) { notify(e?.message || '파일럿 운영 목록 조회 실패'); }
+  };
+  const createPilotProgram = async () => {
+    if (!statsOrg || !pilotOwner.trim()) { notify('기관과 운영 담당자를 입력하세요'); return; }
+    setPilotProgramBusy(true);
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/pilot-programs`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orgId:statsOrg,startDate:pilotFrom,endDate:pilotTo,subjectCount:Number(pilotSubjectCount),ownerName:pilotOwner.trim(),callMode:'pstn070'})});
+      await requireJson(r, '파일럿 운영 등록 실패');
+      notify('14일 파일럿 계획을 등록했습니다');
+      await fetchPilotPrograms();
+    } catch (e:any) { notify(e?.message || '파일럿 운영 등록 실패'); }
+    finally { setPilotProgramBusy(false); }
+  };
+  const changePilotStatus = async (p:any, status:'active'|'completed'|'stopped') => {
+    const label = status==='active'?'시작':status==='completed'?'완료':'중단';
+    const reason = window.prompt(`${label} 사유를 5자 이상 입력하세요`);
+    if (!reason) return;
+    const readinessConfirmed = status!=='active' || window.confirm('비상 연락망·동의·대상자 일정·시험 통화·readyz·수동 안부 담당자를 모두 확인했습니까?');
+    if (status==='active' && !readinessConfirmed) return;
+    try {
+      const r = await authFetch(`${SERVER_URL}/console/pilot-programs/${encodeURIComponent(p.id)}/status`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,reason,readinessConfirmed})});
+      await requireJson(r, `파일럿 ${label} 실패`); notify(`파일럿을 ${label} 처리했습니다`); await fetchPilotPrograms();
+    } catch(e:any) { notify(e?.message || `파일럿 ${label} 실패`); }
   };
 
   const downloadPilotSlaCsv = () => {
@@ -1891,6 +1923,19 @@ export default function ConsoleApp() {
                 </select>
                 <label style={{fontSize:12,color:'#5f6368'}}>시작일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotFrom} onChange={e=>{setPilotFrom(e.target.value);setPilotData(null);}} /></label>
                 <label style={{fontSize:12,color:'#5f6368'}}>종료일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotTo} onChange={e=>{setPilotTo(e.target.value);setPilotData(null);}} /></label>
+              </div>
+              <div style={{border:'1px solid #dadce0',borderRadius:8,padding:14,marginBottom:14,background:'#f8fafc'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:10}}>
+                  <strong style={{fontSize:14}}>14일 파일럿 운영 등록</strong>
+                  <button className="btn-download" onClick={fetchPilotPrograms}>운영 목록 새로고침</button>
+                </div>
+                <div style={{fontSize:12,color:'#5f6368',marginBottom:10}}>위 기관·시작일·종료일을 사용합니다. 종료일은 시작일 포함 정확히 14일이어야 합니다.</div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'end'}}>
+                  <label style={{fontSize:12,color:'#5f6368'}}>대상자 수<input className="form-input" type="number" min="1" max="100" style={{width:110,margin:'4px 0 0'}} value={pilotSubjectCount} onChange={e=>setPilotSubjectCount(e.target.value)}/></label>
+                  <label style={{fontSize:12,color:'#5f6368'}}>운영 담당자<input className="form-input" style={{width:190,margin:'4px 0 0'}} value={pilotOwner} onChange={e=>setPilotOwner(e.target.value)} placeholder="기관 담당자 이름"/></label>
+                  <button className="btn-primary" disabled={pilotProgramBusy||!statsOrg} onClick={createPilotProgram}>{pilotProgramBusy?'등록 중...':'계획 등록'}</button>
+                </div>
+                {pilotPrograms.length>0 && <div style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr style={{textAlign:'left',borderBottom:'1px solid #dadce0'}}><th style={{padding:7}}>기관</th><th>기간</th><th>대상</th><th>담당자</th><th>상태</th><th>조치</th></tr></thead><tbody>{pilotPrograms.map((p:any)=><tr key={p.id} style={{borderBottom:'1px solid #e2e8f0'}}><td style={{padding:7}}>{orgName(p.orgId)}</td><td>{p.startDate} ~ {p.endDate}</td><td>{p.subjectCount}명</td><td>{p.ownerName}</td><td>{({planned:'준비',active:'운영 중',completed:'완료',stopped:'중단'} as any)[p.status]||p.status}</td><td style={{display:'flex',gap:5,padding:'5px 0'}}>{p.status==='planned'&&<button className="btn-download" onClick={()=>changePilotStatus(p,'active')}>시작</button>}{p.status==='active'&&<><button className="btn-download" onClick={()=>changePilotStatus(p,'completed')}>완료</button><button className="btn-download" onClick={()=>changePilotStatus(p,'stopped')}>중단</button></>}</td></tr>)}</tbody></table></div>}
               </div>
               {!pilotData ? (
                 <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{statsOrg?'기간을 확인하고 파일럿 조회를 누르세요.':'기관을 선택해야 파일럿 지표를 조회할 수 있습니다.'}</div>
