@@ -196,10 +196,13 @@ function GcpStyle() {
           width: calc(100% - 8px); text-align: left;
         }
         .gcp-console .gcp-nav-item:hover { background: #f1f3f4; }
+        .gcp-console .gcp-nav-item:focus-visible { outline:3px solid rgba(26,115,232,.35); outline-offset:1px; }
         .gcp-console .gcp-nav-item.is-active { background: #e8f0fe; color: #1a73e8; }
         .gcp-console .gcp-nav-item.is-active svg { color: #1a73e8; }
         .gcp-console .gcp-topbar { background: #fff; border-bottom: 1px solid #dadce0; }
         .gcp-console .toast-viewport .toast { font-family: 'Roboto', sans-serif; }
+        .gcp-console .skip-link { position:fixed; z-index:10000; top:8px; left:8px; padding:10px 14px; border-radius:6px; background:#202124; color:#fff; transform:translateY(-160%); }
+        .gcp-console .skip-link:focus { transform:translateY(0); }
         .gcp-console .payment-calendar-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
         .gcp-console .payment-calendar-caption { margin-top:5px; color:#5f6368; font-size:12.5px; }
         .gcp-console .payment-calendar-actions { display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
@@ -274,13 +277,13 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn?: () => void }) {
           <div style={{fontSize:20,fontWeight:500,color:'#202124'}}>AI영실이 운영 콘솔</div>
           <div style={{fontSize:13,color:'#5f6368',marginTop:6}}>총괄 관리자 전용 — 일반 기관 계정은 접근할 수 없습니다</div>
         </div>
-        <div style={{fontSize:12.5,fontWeight:500,color:'#5f6368',margin:'14px 0 6px'}}>이메일</div>
+        <label htmlFor="console-login-email" style={{display:'block',fontSize:12.5,fontWeight:500,color:'#5f6368',margin:'14px 0 6px'}}>이메일</label>
         <input className="form-input" style={{width:'100%',height:44,padding:'0 14px',boxSizing:'border-box',fontSize:14.5,margin:0}}
-          type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="username" />
-        <div style={{fontSize:12.5,fontWeight:500,color:'#5f6368',margin:'16px 0 6px'}}>비밀번호</div>
+          id="console-login-email" type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="username" />
+        <label htmlFor="console-login-password" style={{display:'block',fontSize:12.5,fontWeight:500,color:'#5f6368',margin:'16px 0 6px'}}>비밀번호</label>
         <input className="form-input" style={{width:'100%',height:44,padding:'0 14px',boxSizing:'border-box',fontSize:14.5,margin:0}}
-          type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==='Enter' && doLogin()} autoComplete="current-password" />
-        {err && <div style={{color:'#c5221f',fontSize:13,marginTop:12,background:'#fce8e6',padding:'10px 12px',borderRadius:4}}>{err}</div>}
+          id="console-login-password" type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==='Enter' && doLogin()} autoComplete="current-password" aria-describedby={err?'console-login-error':undefined} />
+        {err && <div id="console-login-error" role="alert" style={{color:'#c5221f',fontSize:13,marginTop:12,background:'#fce8e6',padding:'10px 12px',borderRadius:4}}>{err}</div>}
         <button className="btn-primary" style={{width:'100%',height:44,fontSize:14.5,cursor:'pointer',marginTop:22}}
           disabled={busy} onClick={doLogin}>{busy ? '로그인 중...' : '로그인'}</button>
       </div>
@@ -1526,12 +1529,13 @@ export default function ConsoleApp() {
   return (
     <div className="gcp-console" style={{display:'flex',minHeight:'100vh'}}>
       <GcpStyle />
+      <a className="skip-link" href="#console-main">주요 콘텐츠로 바로가기</a>
       {toast && (
         <div className="toast-viewport">
-          <div className={`toast toast--${toast.tone}`}>{toast.message}</div>
+          <div className={`toast toast--${toast.tone}`} role={toast.tone==='error'?'alert':'status'} aria-live={toast.tone==='error'?'assertive':'polite'} aria-atomic="true">{toast.message}</div>
         </div>
       )}
-      <div className="gcp-sidebar" style={{width:232,padding:'16px 0',display:'flex',flexDirection:'column',flexShrink:0}}>
+      <nav className="gcp-sidebar" aria-label="운영 콘솔 메뉴" style={{width:232,padding:'16px 0',display:'flex',flexDirection:'column',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:9,padding:'6px 20px 18px'}}>
           <div style={{width:28,height:28,borderRadius:7,background:'#1a73e8',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>영</div>
           <div>
@@ -1543,8 +1547,8 @@ export default function ConsoleApp() {
           const Icon = item.icon;
           const active = page === item.id;
           return (
-            <button key={item.id} onClick={()=>setPage(item.id)} className={`gcp-nav-item ${active?'is-active':''}`}>
-              <Icon size={18} strokeWidth={active?2.25:1.75} style={{flexShrink:0,color: active?'#1a73e8':'#5f6368'}} />
+            <button key={item.id} onClick={()=>setPage(item.id)} aria-current={active?'page':undefined} className={`gcp-nav-item ${active?'is-active':''}`}>
+              <Icon aria-hidden="true" size={18} strokeWidth={active?2.25:1.75} style={{flexShrink:0,color: active?'#1a73e8':'#5f6368'}} />
               {item.label}
             </button>
           );
@@ -1553,13 +1557,13 @@ export default function ConsoleApp() {
           <div style={{fontSize:12,color:'#5f6368',padding:'0 4px 10px',wordBreak:'break-all'}}>{authUser.email}</div>
           <button className="btn-secondary" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:7}} onClick={()=>signOut(auth as any)}><LogOut size={14}/> 로그아웃</button>
         </div>
-      </div>
+      </nav>
       <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column'}}>
         <div className="gcp-topbar" style={{padding:'18px 32px',flexShrink:0}}>
           <div style={{fontSize:11.5,color:'#5f6368',fontWeight:500,letterSpacing:'.02em',marginBottom:2}}>AI영실이 운영 콘솔</div>
-          <div style={{fontSize:21,fontWeight:500,color:'#202124'}}>{NAV.find(n=>n.id===page)?.label}</div>
+          <h1 id="console-page-title" style={{fontSize:21,fontWeight:500,color:'#202124',margin:0}}>{NAV.find(n=>n.id===page)?.label}</h1>
         </div>
-        <div style={{flex:1,padding:'24px 32px',overflowY:'auto'}}>
+        <main id="console-main" aria-labelledby="console-page-title" tabIndex={-1} style={{flex:1,padding:'24px 32px',overflowY:'auto'}}>
 
         {page === 'support' && (
           <div className="fade-in">
@@ -1836,12 +1840,12 @@ export default function ConsoleApp() {
                 <button className={`btn-download ${statsLoading?'btn-calling':''}`} onClick={fetchStats} disabled={statsLoading}>{statsLoading?'조회 중...':'조회'}</button>
               </div>
               <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'center'}}>
-                <select className="form-input" style={{width:140,margin:0}} value={statsMonths} onChange={e=>setStatsMonths(Number(e.target.value))}>
+                <select aria-label="통계 조회 기간" className="form-input" style={{width:140,margin:0}} value={statsMonths} onChange={e=>setStatsMonths(Number(e.target.value))}>
                   <option value={3}>최근 3개월</option>
                   <option value={6}>최근 6개월</option>
                   <option value={12}>최근 12개월</option>
                 </select>
-                <select className="form-input" style={{width:220,margin:0}} value={statsOrg} onChange={e=>setStatsOrg(e.target.value)}>
+                <select aria-label="통계 조회 기관" className="form-input" style={{width:220,margin:0}} value={statsOrg} onChange={e=>setStatsOrg(e.target.value)}>
                   <option value="">전체 기관</option>
                   {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
                 </select>
@@ -1917,7 +1921,7 @@ export default function ConsoleApp() {
                 </div>
               </div>
               <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
-                <select className="form-input" style={{width:240,margin:0}} value={statsOrg} onChange={e=>{setStatsOrg(e.target.value);setPilotData(null);}}>
+                <select aria-label="파일럿 보고서 기관" className="form-input" style={{width:240,margin:0}} value={statsOrg} onChange={e=>{setStatsOrg(e.target.value);setPilotData(null);}}>
                   <option value="">보고서 기관 선택</option>
                   {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
                 </select>
@@ -2003,7 +2007,7 @@ export default function ConsoleApp() {
               <button className={`btn-download ${historyLoading?'btn-calling':''}`} onClick={fetchHistory} disabled={historyLoading}>{historyLoading?'조회 중...':'조회'}</button>
             </div>
             <div style={{display:'flex',gap:10,marginBottom:14}}>
-              <input className="form-input" style={{width:200,margin:0}} placeholder="기관코드 필터(선택)" value={historyOrg} onChange={e=>setHistoryOrg(e.target.value)} />
+              <input aria-label="통화 이력 기관코드 필터" className="form-input" style={{width:200,margin:0}} placeholder="기관코드 필터(선택)" value={historyOrg} onChange={e=>setHistoryOrg(e.target.value)} />
             </div>
             {history.length === 0 ? <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{historyLoading?'불러오는 중...':'조회된 통화 이력이 없습니다'}</div> : (
               <div style={{overflowX:'auto'}}>
@@ -2085,7 +2089,7 @@ export default function ConsoleApp() {
               <button className={`btn-download ${paymentsLoading?'btn-calling':''}`} onClick={fetchPayments} disabled={paymentsLoading}>{paymentsLoading?'조회 중...':'조회'}</button>
             </div>
             <div style={{display:'flex',gap:10,marginBottom:14}}>
-              <input className="form-input" style={{width:200,margin:0}} placeholder="기관코드 필터(선택)" value={paymentsOrg} onChange={e=>setPaymentsOrg(e.target.value)} />
+              <input aria-label="결제 내역 기관코드 필터" className="form-input" style={{width:200,margin:0}} placeholder="기관코드 필터(선택)" value={paymentsOrg} onChange={e=>setPaymentsOrg(e.target.value)} />
             </div>
             {payments.some(needsPaymentAttention) && <div role="alert" style={{padding:'10px 12px',marginBottom:12,borderRadius:8,background:'#fff4e5',color:'#8a4b00',fontSize:13,fontWeight:700}}>확인 필요한 결제 {payments.filter(needsPaymentAttention).length}건 · 최근 24시간 실패와 완료되지 않은 결제·환불 상태를 점검해 주세요.</div>}
             <div style={{fontSize:12,color:'#94a3b8',marginBottom:10}}>PortOne 원본 거래와 금액·상태가 일치할 때만 중간 상태를 복구합니다. 수동 검토 상태는 자동 변경하지 않습니다.</div>
@@ -2219,7 +2223,7 @@ export default function ConsoleApp() {
               <button className={`btn-download ${usersLoading?'btn-calling':''}`} onClick={fetchUsers} disabled={usersLoading}>{usersLoading?'조회 중...':'조회'}</button>
             </div>
             <div style={{display:'flex',gap:10,marginBottom:14}}>
-              <select className="form-input" style={{width:220,margin:0}} value={usersOrgFilter} onChange={e=>setUsersOrgFilter(e.target.value)}>
+              <select aria-label="사용자 소속 기관 필터" className="form-input" style={{width:220,margin:0}} value={usersOrgFilter} onChange={e=>setUsersOrgFilter(e.target.value)}>
                 <option value="">전체 기관</option>
                 {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
               </select>
@@ -2263,11 +2267,11 @@ export default function ConsoleApp() {
               <button className={`btn-download ${eldersLoading?'btn-calling':''}`} onClick={fetchElders} disabled={eldersLoading}>{eldersLoading?'조회 중...':'조회'}</button>
             </div>
             <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}>
-              <select className="form-input" style={{width:220,margin:0}} value={eldersOrgFilter} onChange={e=>setEldersOrgFilter(e.target.value)}>
+              <select aria-label="어르신 소속 기관 필터" className="form-input" style={{width:220,margin:0}} value={eldersOrgFilter} onChange={e=>setEldersOrgFilter(e.target.value)}>
                 <option value="">전체 기관</option>
                 {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
               </select>
-              <input className="form-input" style={{width:220,margin:0}} placeholder="이름·전화번호 검색" value={eldersSearch} onChange={e=>setEldersSearch(e.target.value)} />
+              <input aria-label="어르신 이름 또는 전화번호 검색" className="form-input" style={{width:220,margin:0}} placeholder="이름·전화번호 검색" value={eldersSearch} onChange={e=>setEldersSearch(e.target.value)} />
             </div>
             {(() => {
               const filtered = elders.filter((e:any) => !eldersSearch.trim() || String(e.name||'').includes(eldersSearch.trim()) || String(e.phone||'').includes(eldersSearch.trim()));
@@ -2323,9 +2327,9 @@ export default function ConsoleApp() {
           <div className="fade-in">
             <section className="section" style={{marginBottom:16}}>
               <div className="section-title" style={{marginBottom:10}}>새 공지 게시</div>
-              <input className="form-input" placeholder="제목" value={noticeTitle} onChange={e=>setNoticeTitle(e.target.value)} style={{marginBottom:8}} />
+              <input aria-label="공지 제목" className="form-input" placeholder="제목" value={noticeTitle} onChange={e=>setNoticeTitle(e.target.value)} style={{marginBottom:8}} />
               <textarea className="form-input" placeholder="내용" value={noticeBody} onChange={e=>setNoticeBody(e.target.value)} rows={4} style={{marginBottom:8,width:'100%',boxSizing:'border-box',resize:'vertical'}} />
-              <input className="form-input" placeholder="대상 기관 orgId(콤마 구분, 비우면 전체 기관)" value={noticeTargetOrgs} onChange={e=>setNoticeTargetOrgs(e.target.value)} style={{marginBottom:8}} />
+              <input aria-label="공지 대상 기관 ID" className="form-input" placeholder="대상 기관 orgId(콤마 구분, 비우면 전체 기관)" value={noticeTargetOrgs} onChange={e=>setNoticeTargetOrgs(e.target.value)} style={{marginBottom:8}} />
               <div style={{fontSize:12,color:'#94a3b8',marginBottom:10}}>기관코드: {orgs.map((o:any)=>`${o.orgId}(${o.name})`).join(', ') || '기관 목록 로딩 전'}</div>
               <button className="btn-primary" disabled={noticeBusy} onClick={createNoticeAction}>{noticeBusy?'게시 중...':'게시'}</button>
             </section>
@@ -2567,7 +2571,7 @@ export default function ConsoleApp() {
             </section>
           </div>
         )}
-        </div>
+        </main>
       </div>
     </div>
   );

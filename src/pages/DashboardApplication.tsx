@@ -2950,6 +2950,7 @@ export default function App() {
         />
       )}
 
+      <a className="skip-link" href="#main-content">주요 콘텐츠로 바로가기</a>
       {/* 모바일 서랍이 열렸을 때 본문을 덮는 배경 — 눌러서 닫는다(PC에서는 CSS로 숨김) */}
       <div
         className={`nav-backdrop${mobileNavOpen ? ' is-open' : ''}`}
@@ -2962,7 +2963,7 @@ export default function App() {
           <img src="/youngsili.png" alt="영실이" className="logo-icon" style={{width:42,height:42,borderRadius:12,objectFit:'cover',padding:0}} />
           <div><div className="logo-title">영실이</div><div className="logo-sub">어르신 관리 시스템</div></div>
         </div>
-        <nav className="nav">
+        <nav className="nav" aria-label="기관 대시보드 메뉴">
           {/* 주요 행동 — 화면당 하나만 강조 (레퍼런스: 상단 고정 CTA) */}
           <button className="nav-cta" onClick={()=>goPage('schedule')}>오늘 전화 시작</button>
 
@@ -2978,7 +2979,7 @@ export default function App() {
                   {id:'q-calls',  label:'통화',  icon:'calls',  go:'calls',  count:null},
                   {id:'q-notes',  label:'일지',  icon:'casenotes', go:'casenotes', count:null} ]
             ).map(q=>(
-              <button key={q.id} className="nav-quick-item" onClick={()=>goPage(q.go)}>
+              <button key={q.id} className="nav-quick-item" aria-current={page===q.go?'page':undefined} onClick={()=>goPage(q.go)}>
                 <span className={`nav-quick-num ${q.count>0 && (q as any).tone==='danger' ? 'is-danger' : ''}`}>
                   {q.count===null ? <NavIcon name={q.icon}/> : q.count}
                 </span>
@@ -3053,7 +3054,7 @@ export default function App() {
             const q = navQuery.trim();
             const isActive = (id) => page===id || (page==='detail'&&id==='elders') || (page==='register'&&id==='elders');
             const NavBtn = (item) => (
-              <button key={item.id} className={`nav-item ${isActive(item.id)?'active':''}`} onClick={()=>goPage(item.id)}>
+              <button key={item.id} aria-current={isActive(item.id)?'page':undefined} className={`nav-item ${isActive(item.id)?'active':''}`} onClick={()=>goPage(item.id)}>
                 <span className="nav-icon"><NavIcon name={item.icon}/></span>
                 <span>{item.label}</span>
                 {item.badge > 0 && <span className="nav-badge">{item.badge}</span>}
@@ -3118,7 +3119,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main" id="main-content">
+      <main className="main" id="main-content" tabIndex={-1}>
         {orgNotices.filter(n => !dismissedNoticeIds.includes(n.id)).map(n => (
           <div key={n.id} style={{background:'#eff6ff',borderBottom:'1px solid #bfdbfe',padding:'10px 16px',display:'flex',alignItems:'flex-start',gap:12,fontSize:15}}>
             <span style={{color:'#1d4ed8',fontWeight:700,flexShrink:0}}>{n.title}</span>

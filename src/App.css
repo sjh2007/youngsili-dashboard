@@ -9,6 +9,19 @@ body {
   color: #1e293b;
   font-variant-numeric: tabular-nums; /* P1-4: 숫자 지표 갱신 시 흔들림 방지 */
 }
+.skip-link {
+  position: fixed;
+  z-index: 10000;
+  top: 8px;
+  left: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #fff;
+  font-weight: 700;
+  transform: translateY(-160%);
+}
+.skip-link:focus { transform: translateY(0); }
 
 .app {
   display: flex;
