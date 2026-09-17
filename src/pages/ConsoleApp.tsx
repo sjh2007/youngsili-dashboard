@@ -529,6 +529,13 @@ export default function ConsoleApp() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [authCheckError, setAuthCheckError] = useState('');   // 네트워크/CORS 등 판정 자체가 실패한 경우 — "권한 없음"과 구분해야 함
   const [authCheckRetry, setAuthCheckRetry] = useState(0);
+  const [operationDialog, setOperationDialog] = useState<{kind:'retry'|'refund'|'suspend';target:any}|null>(null);
+  const [operationReason, setOperationReason] = useState('');
+  const [operationConfirmId, setOperationConfirmId] = useState('');
+  const [operationBusy, setOperationBusy] = useState(false);
+  const operationDialogRef = useRef<HTMLDivElement|null>(null);
+  const operationFirstRef = useRef<HTMLInputElement|HTMLTextAreaElement|null>(null);
+  const operationReturnFocus = useRef<HTMLElement|null>(null);
 
   // ── 통계 ──
   const [statsData, setStatsData] = useState<any>(null); // { monthly, byOrg }
@@ -846,27 +853,60 @@ export default function ConsoleApp() {
     finally { setSubsLoading(false); }
   };
 
+  const openOperationDialog = (kind:'retry'|'refund'|'suspend', target:any, reason='') => {
+    operationReturnFocus.current=document.activeElement as HTMLElement;
+    setOperationDialog({kind,target}); setOperationReason(reason); setOperationConfirmId('');
+    window.setTimeout(()=>operationFirstRef.current?.focus(),0);
+  };
+  const closeOperationDialog = () => {
+    if(operationBusy)return;
+    setOperationDialog(null); setOperationReason(''); setOperationConfirmId('');
+    window.setTimeout(()=>operationReturnFocus.current?.focus(),0);
+  };
+  const handleOperationDialogKeyDown = (event:any) => {
+    if(event.key==='Escape'&&!operationBusy){event.preventDefault();closeOperationDialog();return;}
+    if(event.key!=='Tab')return;
+    const items=Array.from(operationDialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled])')||[]);
+    if(!items.length){event.preventDefault();operationDialogRef.current?.focus();return;}
+    const first=items[0],last=items[items.length-1];
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  };
+  const submitOperationDialog = async () => {
+    if(!operationDialog)return;
+    const {kind,target}=operationDialog;
+    const reason=operationReason.trim();
+    if((kind==='retry'||kind==='refund')&&reason.length<5){notify('사유를 5자 이상 입력하세요');operationFirstRef.current?.focus();return;}
+    const expectedConfirmId=kind==='refund'?target.id:target.orgId;
+    if(operationConfirmId!==expectedConfirmId){notify(`${kind==='refund'?'결제':'기관'} ID가 일치하지 않습니다`);return;}
+    setOperationBusy(true);
+    try{
+      if(kind==='retry'){
+        const track=target.track as 'app'|'pstn'; const busyKey=`${target.orgId}:${track}`; setSubscriptionRetryBusy(busyKey);
+        const response=await authFetch(`${SERVER_URL}/console/approvals`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'subscription_retry',targetId:target.orgId,reason,payload:{track,confirmOrgId:operationConfirmId}})});
+        const data=await response.json().catch(()=>({})); if(!response.ok)throw new Error(errMsg(data,'수동 재청구 실패'));
+        notify('수동 재청구 승인 요청을 등록했습니다.','success'); await fetchSubs(); setSubscriptionRetryBusy('');
+      }else if(kind==='refund'){
+        setRefundBusy(target.id);
+        const response=await authFetch(`${SERVER_URL}/console/payments/${target.id}/refund`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})});
+        const data=await response.json().catch(()=>({})); if(!response.ok)throw new Error(errMsg(data,'환불 실패'));
+        notify(`환불 완료: ${Number(data.amount||0).toLocaleString()}원`,'success'); await fetchRefundable(); setRefundBusy('');
+      }else{
+        const verb=target.nextSuspended?'정지':'재개'; setOrgBusy(target.orgId);
+        const response=await authFetch(`${SERVER_URL}/console/orgs/${target.orgId}/suspend`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({suspended:target.nextSuspended})});
+        const data=await response.json().catch(()=>({})); if(!response.ok)throw new Error(errMsg(data,`${verb} 실패`));
+        notify(`"${target.name}" 기관을 ${verb}했습니다.`,'success'); await fetchOrgs(); setOrgBusy('');
+      }
+      setOperationDialog(null); setOperationReason(''); setOperationConfirmId('');
+      window.setTimeout(()=>operationReturnFocus.current?.focus(),0);
+    }catch(error:any){notify(error?.message||'작업 처리 실패');}
+    finally{setOperationBusy(false);setSubscriptionRetryBusy('');setRefundBusy('');setOrgBusy('');}
+  };
+
   const retryFailedSubscription = async (subscription: any) => {
     const track = subscription.track as 'app'|'pstn';
     if (!track || !subscription.lastChargeError) { notify('재청구 가능한 실패 구독이 아닙니다'); return; }
-    const reason = window.prompt('수동 재청구 사유를 입력하세요. 감사 로그에 기록됩니다.', '자동결제 실패 확인 후 수동 재시도');
-    if (!reason || reason.trim().length < 5) { notify('재청구 사유를 5자 이상 입력하세요'); return; }
-    const confirmOrgId = window.prompt(`중복 결제 방지를 위해 기관 ID를 정확히 입력하세요.\n기관: ${subscription.orgName || subscription.orgId}\n기관 ID: ${subscription.orgId}`, '');
-    if (confirmOrgId !== subscription.orgId) { notify('기관 ID가 일치하지 않아 재청구하지 않았습니다'); return; }
-    if (!window.confirm(`${subscription.orgName || subscription.orgId}의 ${track==='app'?'앱 전화':'일반 전화'} 요금 ${Number(subscription.monthlyAmount || 0).toLocaleString()}원을 지금 재청구합니다. 계속할까요?`)) return;
-    const busyKey = `${subscription.orgId}:${track}`;
-    setSubscriptionRetryBusy(busyKey);
-    try {
-      const response = await authFetch(`${SERVER_URL}/console/approvals`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ action:'subscription_retry', targetId:subscription.orgId, reason:reason.trim(), payload:{ track, confirmOrgId } }),
-      });
-      const data = await response.json().catch(()=>({}));
-      if (!response.ok) { notify(errMsg(data, '수동 재청구 실패')); return; }
-      notify('수동 재청구 승인 요청을 등록했습니다.', 'success');
-      await fetchSubs();
-    } catch { notify('네트워크 오류 — 수동 재청구 실패'); }
-    finally { setSubscriptionRetryBusy(''); }
+    openOperationDialog('retry', subscription, '자동결제 실패 확인 후 수동 재시도');
   };
 
   const fetchPaymentCalendar = async () => {
@@ -894,15 +934,7 @@ export default function ConsoleApp() {
     } catch (e:any) { notify(e?.message || '기관 목록 조회 실패'); }
   };
   const toggleOrgSuspend = async (org: any, nextSuspended: boolean) => {
-    const verb = nextSuspended ? '정지' : '재개';
-    if (!window.confirm(`"${org.name}" 기관을 ${verb}하시겠습니까?${nextSuspended ? ' 정지하면 소속 직원 전원이 즉시 로그인/이용이 막힙니다.' : ''}`)) return;
-    setOrgBusy(org.orgId);
-    try {
-      const r = await authFetch(`${SERVER_URL}/console/orgs/${org.orgId}/suspend`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ suspended: nextSuspended }) });
-      if (r.ok) { notify(`"${org.name}" 기관을 ${verb}했습니다.`, 'success'); fetchOrgs(); }
-      else { const d = await r.json().catch(()=>({})); notify(errMsg(d, `${verb} 실패`)); }
-    } catch { notify('네트워크 오류 — 기관 상태 변경 실패'); }
-    finally { setOrgBusy(''); }
+    openOperationDialog('suspend', {...org,nextSuspended}, '');
   };
   const creditOrg = async (org: any) => {
     const input = window.prompt(`"${org.name}" 기관에 충전할 금액(원)을 입력하세요.`, '1000');
@@ -986,24 +1018,7 @@ export default function ConsoleApp() {
     finally { setPaymentReconcileBusy(''); }
   };
   const doRefund = async (payment: any) => {
-    const subscription = payment.type === 'subscription';
-    const impact = subscription
-      ? '결제 전액을 원 결제수단으로 취소하고 현재 구독과 다음 자동결제를 즉시 종료합니다.'
-      : '미사용 유상 크레딧만 원 결제 카드로 취소됩니다.';
-    const reason = window.prompt(`"${payment.orgId}" 기관의 결제를 환불합니다. ${impact}\n환불 사유를 입력하세요.`, '');
-    if (reason === null) return;
-    if (!reason.trim()) { notify('환불 사유를 입력해야 합니다'); return; }
-    if (!window.confirm(subscription
-      ? `정기결제 ${Number(payment.amount || 0).toLocaleString()}원을 전액 환불하고 구독·자동갱신을 종료합니다. 계속할까요?`
-      : `결제 원장을 확인해 남은 유상 크레딧만 환불하고 회수합니다. 계속할까요?`)) return;
-    setRefundBusy(payment.id);
-    try {
-      const r = await authFetch(`${SERVER_URL}/console/payments/${payment.id}/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason: reason.trim() }) });
-      const d = await r.json().catch(()=>({}));
-      if (r.ok) { notify(`환불 완료: ${Number(d.amount || 0).toLocaleString()}원`, 'success'); fetchRefundable(); }
-      else notify(errMsg(d, '환불 실패'));
-    } catch { notify('네트워크 오류 — 환불 실패'); }
-    finally { setRefundBusy(''); }
+    openOperationDialog('refund', payment, '');
   };
   const doRejectRefund = async (payment: any) => {
     if (!window.confirm(`"${payment.orgId}" 기관의 환불 요청을 거절할까요? (실제 환불은 일어나지 않습니다)`)) return;
@@ -1572,6 +1587,31 @@ export default function ConsoleApp() {
             <textarea ref={pilotReasonRef} id="pilot-status-reason" className="form-input" rows={4} maxLength={500} value={pilotStatusReason} onChange={e=>setPilotStatusReason(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginTop:6}} placeholder={`${label} 사유를 5자 이상 입력하세요`}/>
             {pilotStatusDialog.status==='active'&&<label style={{display:'flex',gap:9,alignItems:'flex-start',marginTop:14,fontSize:13,lineHeight:1.55}}><input type="checkbox" checked={pilotReadinessConfirmed} onChange={e=>setPilotReadinessConfirmed(e.target.checked)} style={{marginTop:3}}/><span>비상 연락망, 개인정보 동의, 대상자 일정, 시험 통화, 운영 준비상태, 수동 안부 담당자를 모두 확인했습니다.</span></label>}
             <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}><button className="btn-secondary" disabled={pilotProgramBusy} onClick={closePilotStatusDialog}>취소</button><button className="btn-primary" disabled={pilotProgramBusy||pilotStatusReason.trim().length<5||(pilotStatusDialog.status==='active'&&!pilotReadinessConfirmed)} onClick={changePilotStatus}>{pilotProgramBusy?'처리 중...':`${label} 확정`}</button></div>
+          </div>
+        </div>;
+      })()}
+      {operationDialog&&(()=>{
+        const {kind,target}=operationDialog;
+        const isRetry=kind==='retry',isRefund=kind==='refund';
+        const title=isRetry?'수동 재청구 승인 요청':isRefund?'결제 환불':'기관 이용 상태 변경';
+        const expectedId=isRefund?target.id:target.orgId;
+        const impact=isRetry
+          ? `${target.track==='app'?'앱 전화':'일반 전화'} ${Number(target.monthlyAmount||0).toLocaleString()}원 재청구를 승인 대기열에 등록합니다. 승인 전에는 청구되지 않습니다.`
+          : isRefund
+            ? (target.type==='subscription'?`${Number(target.amount||0).toLocaleString()}원을 전액 환불하고 현재 구독과 다음 자동결제를 종료합니다.`:'결제 원장을 확인해 남은 미사용 유상 크레딧만 환불하고 회수합니다.')
+            : target.nextSuspended?'소속 직원의 로그인과 기관 기능 이용이 차단됩니다.':'소속 직원의 기관 기능 이용을 다시 허용합니다.';
+        return <div className="modal-overlay" onMouseDown={event=>{if(event.target===event.currentTarget)closeOperationDialog();}}>
+          <div ref={operationDialogRef} className="modal" role="alertdialog" aria-modal="true" aria-labelledby="operation-title" aria-describedby="operation-impact" tabIndex={-1} onKeyDown={handleOperationDialogKeyDown} style={{maxWidth:540}}>
+            <h2 id="operation-title" style={{marginTop:0}}>{title}</h2>
+            <div style={{background:'#f8fafc',border:'1px solid #dadce0',borderRadius:8,padding:12,fontSize:13,lineHeight:1.65}}>
+              <div><strong>기관:</strong> {target.orgName||target.name||target.orgId}</div>
+              {isRefund&&<div><strong>결제:</strong> {target.id} · {Number(target.amount||0).toLocaleString()}원</div>}
+              <div id="operation-impact" style={{color:isRefund||target.nextSuspended?'#b3261e':'#5f6368',marginTop:5}}>{impact}</div>
+            </div>
+            {(isRetry||isRefund)&&<><label htmlFor="operation-reason" style={{display:'block',fontSize:13,fontWeight:600,marginTop:15}}>처리 사유</label><textarea ref={operationFirstRef as any} id="operation-reason" className="form-input" rows={3} maxLength={500} value={operationReason} onChange={e=>setOperationReason(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginTop:6}}/></>}
+            <label htmlFor="operation-confirm-id" style={{display:'block',fontSize:13,fontWeight:600,marginTop:15}}>{isRefund?'결제':'기관'} ID 재입력</label>
+            <input ref={(!isRetry&&!isRefund?operationFirstRef:undefined) as any} id="operation-confirm-id" className="form-input" autoComplete="off" value={operationConfirmId} onChange={e=>setOperationConfirmId(e.target.value)} placeholder={expectedId} style={{width:'100%',boxSizing:'border-box',marginTop:6}}/>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}><button className="btn-secondary" disabled={operationBusy} onClick={closeOperationDialog}>취소</button><button className="btn-primary" disabled={operationBusy||operationConfirmId!==expectedId||((isRetry||isRefund)&&operationReason.trim().length<5)} onClick={submitOperationDialog}>{operationBusy?'처리 중...':isRetry?'승인 요청 등록':isRefund?'환불 실행':target.nextSuspended?'기관 정지':'기관 재개'}</button></div>
           </div>
         </div>;
       })()}
