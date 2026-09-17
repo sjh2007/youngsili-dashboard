@@ -2,7 +2,7 @@
 // 같은 레포·같은 authFetch/SERVER_URL/Firebase 로그인을 재사용하되, 진입점만 다르다
 // (src/index.tsx가 REACT_APP_TARGET=console일 때 App 대신 이 컴포넌트를 렌더).
 // 권한 판정은 별도 API 없이 GET /console/health 호출 결과(403이면 비superadmin)로 대신한다.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Chart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import 'apexcharts/dist/apexcharts.css';
@@ -544,6 +544,12 @@ export default function ConsoleApp() {
   const [pilotOwner, setPilotOwner] = useState('');
   const [pilotSubjectCount, setPilotSubjectCount] = useState('10');
   const [pilotProgramBusy, setPilotProgramBusy] = useState(false);
+  const [pilotStatusDialog, setPilotStatusDialog] = useState<{program:any;status:'active'|'completed'|'stopped'}|null>(null);
+  const [pilotStatusReason, setPilotStatusReason] = useState('');
+  const [pilotReadinessConfirmed, setPilotReadinessConfirmed] = useState(false);
+  const pilotDialogReturnFocus = useRef<HTMLElement|null>(null);
+  const pilotDialogRef = useRef<HTMLDivElement|null>(null);
+  const pilotReasonRef = useRef<HTMLTextAreaElement|null>(null);
 
   // ── 사용자(기관 소속 계정) 관리 ──
   const [users, setUsers] = useState<any[]>([]);
@@ -1190,16 +1196,37 @@ export default function ConsoleApp() {
     } catch (e:any) { notify(e?.message || '파일럿 운영 등록 실패'); }
     finally { setPilotProgramBusy(false); }
   };
-  const changePilotStatus = async (p:any, status:'active'|'completed'|'stopped') => {
+  const openPilotStatusDialog = (program:any, status:'active'|'completed'|'stopped') => {
+    pilotDialogReturnFocus.current = document.activeElement as HTMLElement;
+    setPilotStatusDialog({program,status}); setPilotStatusReason(''); setPilotReadinessConfirmed(status!=='active');
+    window.setTimeout(()=>pilotReasonRef.current?.focus(), 0);
+  };
+  const closePilotStatusDialog = () => {
+    setPilotStatusDialog(null); setPilotStatusReason(''); setPilotReadinessConfirmed(false);
+    window.setTimeout(()=>pilotDialogReturnFocus.current?.focus(), 0);
+  };
+  const handlePilotDialogKeyDown = (event:any) => {
+    if (event.key==='Escape'&&!pilotProgramBusy) { event.preventDefault(); closePilotStatusDialog(); return; }
+    if (event.key!=='Tab') return;
+    const items=Array.from(pilotDialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href]')||[]);
+    if (!items.length) { event.preventDefault(); pilotDialogRef.current?.focus(); return; }
+    const first=items[0],last=items[items.length-1];
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  };
+  const changePilotStatus = async () => {
+    if (!pilotStatusDialog) return;
+    const {program:p,status} = pilotStatusDialog;
     const label = status==='active'?'시작':status==='completed'?'완료':'중단';
-    const reason = window.prompt(`${label} 사유를 5자 이상 입력하세요`);
-    if (!reason) return;
-    const readinessConfirmed = status!=='active' || window.confirm('비상 연락망·동의·대상자 일정·시험 통화·readyz·수동 안부 담당자를 모두 확인했습니까?');
-    if (status==='active' && !readinessConfirmed) return;
+    const reason = pilotStatusReason.trim();
+    if (reason.length<5) { notify(`${label} 사유를 5자 이상 입력하세요`); pilotReasonRef.current?.focus(); return; }
+    if (status==='active' && !pilotReadinessConfirmed) { notify('시작 전 필수 조건 확인이 필요합니다'); return; }
+    setPilotProgramBusy(true);
     try {
-      const r = await authFetch(`${SERVER_URL}/console/pilot-programs/${encodeURIComponent(p.id)}/status`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,reason,readinessConfirmed})});
-      await requireJson(r, `파일럿 ${label} 실패`); notify(`파일럿을 ${label} 처리했습니다`); await fetchPilotPrograms();
+      const r = await authFetch(`${SERVER_URL}/console/pilot-programs/${encodeURIComponent(p.id)}/status`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,reason,readinessConfirmed:pilotReadinessConfirmed})});
+      await requireJson(r, `파일럿 ${label} 실패`); notify(`파일럿을 ${label} 처리했습니다`); closePilotStatusDialog(); await fetchPilotPrograms();
     } catch(e:any) { notify(e?.message || `파일럿 ${label} 실패`); }
+    finally { setPilotProgramBusy(false); }
   };
 
   const downloadPilotSlaCsv = () => {
@@ -1535,6 +1562,19 @@ export default function ConsoleApp() {
           <div className={`toast toast--${toast.tone}`} role={toast.tone==='error'?'alert':'status'} aria-live={toast.tone==='error'?'assertive':'polite'} aria-atomic="true">{toast.message}</div>
         </div>
       )}
+      {pilotStatusDialog && (()=>{
+        const label=pilotStatusDialog.status==='active'?'시작':pilotStatusDialog.status==='completed'?'완료':'중단';
+        return <div className="modal-overlay" onMouseDown={event=>{if(event.target===event.currentTarget)closePilotStatusDialog();}}>
+          <div ref={pilotDialogRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="pilot-status-title" aria-describedby="pilot-status-description" onKeyDown={handlePilotDialogKeyDown} tabIndex={-1} style={{maxWidth:520}}>
+            <h2 id="pilot-status-title" style={{marginTop:0}}>14일 파일럿 {label}</h2>
+            <p id="pilot-status-description" style={{color:'#5f6368',fontSize:13}}>{orgName(pilotStatusDialog.program.orgId)} · {pilotStatusDialog.program.startDate} ~ {pilotStatusDialog.program.endDate}</p>
+            <label htmlFor="pilot-status-reason" style={{display:'block',fontSize:13,fontWeight:600,marginTop:16}}>사유</label>
+            <textarea ref={pilotReasonRef} id="pilot-status-reason" className="form-input" rows={4} maxLength={500} value={pilotStatusReason} onChange={e=>setPilotStatusReason(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginTop:6}} placeholder={`${label} 사유를 5자 이상 입력하세요`}/>
+            {pilotStatusDialog.status==='active'&&<label style={{display:'flex',gap:9,alignItems:'flex-start',marginTop:14,fontSize:13,lineHeight:1.55}}><input type="checkbox" checked={pilotReadinessConfirmed} onChange={e=>setPilotReadinessConfirmed(e.target.checked)} style={{marginTop:3}}/><span>비상 연락망, 개인정보 동의, 대상자 일정, 시험 통화, 운영 준비상태, 수동 안부 담당자를 모두 확인했습니다.</span></label>}
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}><button className="btn-secondary" disabled={pilotProgramBusy} onClick={closePilotStatusDialog}>취소</button><button className="btn-primary" disabled={pilotProgramBusy||pilotStatusReason.trim().length<5||(pilotStatusDialog.status==='active'&&!pilotReadinessConfirmed)} onClick={changePilotStatus}>{pilotProgramBusy?'처리 중...':`${label} 확정`}</button></div>
+          </div>
+        </div>;
+      })()}
       <nav className="gcp-sidebar" aria-label="운영 콘솔 메뉴" style={{width:232,padding:'16px 0',display:'flex',flexDirection:'column',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:9,padding:'6px 20px 18px'}}>
           <div style={{width:28,height:28,borderRadius:7,background:'#1a73e8',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>영</div>
@@ -1939,7 +1979,7 @@ export default function ConsoleApp() {
                   <label style={{fontSize:12,color:'#5f6368'}}>운영 담당자<input className="form-input" style={{width:190,margin:'4px 0 0'}} value={pilotOwner} onChange={e=>setPilotOwner(e.target.value)} placeholder="기관 담당자 이름"/></label>
                   <button className="btn-primary" disabled={pilotProgramBusy||!statsOrg} onClick={createPilotProgram}>{pilotProgramBusy?'등록 중...':'계획 등록'}</button>
                 </div>
-                {pilotPrograms.length>0 && <div style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr style={{textAlign:'left',borderBottom:'1px solid #dadce0'}}><th style={{padding:7}}>기관</th><th>기간</th><th>대상</th><th>담당자</th><th>상태</th><th>조치</th></tr></thead><tbody>{pilotPrograms.map((p:any)=><tr key={p.id} style={{borderBottom:'1px solid #e2e8f0'}}><td style={{padding:7}}>{orgName(p.orgId)}</td><td>{p.startDate} ~ {p.endDate}</td><td>{p.subjectCount}명</td><td>{p.ownerName}</td><td>{({planned:'준비',active:'운영 중',completed:'완료',stopped:'중단'} as any)[p.status]||p.status}</td><td style={{display:'flex',gap:5,padding:'5px 0'}}>{p.status==='planned'&&<button className="btn-download" onClick={()=>changePilotStatus(p,'active')}>시작</button>}{p.status==='active'&&<><button className="btn-download" onClick={()=>changePilotStatus(p,'completed')}>완료</button><button className="btn-download" onClick={()=>changePilotStatus(p,'stopped')}>중단</button></>}</td></tr>)}</tbody></table></div>}
+                {pilotPrograms.length>0 && <div style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr style={{textAlign:'left',borderBottom:'1px solid #dadce0'}}><th style={{padding:7}}>기관</th><th>기간</th><th>대상</th><th>담당자</th><th>상태</th><th>조치</th></tr></thead><tbody>{pilotPrograms.map((p:any)=><tr key={p.id} style={{borderBottom:'1px solid #e2e8f0'}}><td style={{padding:7}}>{orgName(p.orgId)}</td><td>{p.startDate} ~ {p.endDate}</td><td>{p.subjectCount}명</td><td>{p.ownerName}</td><td>{({planned:'준비',active:'운영 중',completed:'완료',stopped:'중단'} as any)[p.status]||p.status}</td><td style={{display:'flex',gap:5,padding:'5px 0'}}>{p.status==='planned'&&<button className="btn-download" onClick={()=>openPilotStatusDialog(p,'active')}>시작</button>}{p.status==='active'&&<><button className="btn-download" onClick={()=>openPilotStatusDialog(p,'completed')}>완료</button><button className="btn-download" onClick={()=>openPilotStatusDialog(p,'stopped')}>중단</button></>}</td></tr>)}</tbody></table></div>}
               </div>
               {!pilotData ? (
                 <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{statsOrg?'기간을 확인하고 파일럿 조회를 누르세요.':'기관을 선택해야 파일럿 지표를 조회할 수 있습니다.'}</div>
