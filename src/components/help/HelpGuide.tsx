@@ -2,13 +2,15 @@
 // ⚙️ 계속 업데이트: 아래 HELP_ITEMS 배열에 항목을 추가/수정하면 바로 반영됩니다.
 //    업데이트 소식을 추가하면 ANNOUNCEMENTS 맨 앞에 넣고 App.js의 LATEST_NOTICE도 같은 id로 올리세요.
 import { useState, useMemo, useCallback } from 'react';
-import { BookOpen, Search, X, ExternalLink, Megaphone, ChevronDown, FileText } from 'lucide-react';
+import { BookOpen, Search, X, ExternalLink, Megaphone, ChevronDown, FileText, ClipboardCheck } from 'lucide-react';
 
-export const LATEST_NOTICE = 4;
+export const LATEST_NOTICE = 5;
 
 const SETUP_GUIDE_URL = 'https://www.krafte.net/youngsili-setup-guide.html';  // 그림 설치 매뉴얼(별도 배포)
+const OPERATIONS_RUNBOOK_URL = '/help/institution-operations-runbook.html';
 
 const ANNOUNCEMENTS = [
+  { id: 5, date: '2026-09-17', tag: '신규', text: '기관 운영 인수인계 문서가 추가됐어요. 업무 시작·종료 점검과 장애·위험 알림 대응 절차를 확인하세요.' },
   { id: 4, date: '2026-07-01', tag: '신규', text: '앱 설치·등록 그림 매뉴얼과 도움말 검색이 추가됐어요. 키워드로 빠르게 찾아보세요.' },
   { id: 3, date: '2026-06-29', tag: '신규', text: '기관코드 등록 방식이 추가됐어요. 어르신 폰 앱에 기관코드를 입력해 바로 등록 신청할 수 있습니다.' },
   { id: 2, date: '2026-06-29', tag: '개선', text: '"마지막 통화" 시각이 실제 통화 기준으로 정확히 표시되도록 개선했어요.' },
@@ -33,6 +35,13 @@ const HELP_ITEMS = [
   { cat: '대시보드 사용', q: '기관코드는 어디서 확인하나요?', kw: '기관코드 위치 확인 복사', a: '① 화면 좌측 하단(기관명 아래)에 항상 표시됩니다. ② 어르신 관리 화면 상단 "앱으로 어르신 등록하기" 안내에도 크게 표시되고, 클릭하면 복사됩니다.' },
   { cat: '대시보드 사용', q: '여러 어르신에게 한 번에 전화하려면?', kw: '일괄 발신 전체 앱알림 배치', a: '전화 발신 관리 → 대상 선택 → "앱 알림 발신". 받음/부재중이 표시되고, 부재중인 분만 골라 다시 보낼 수 있습니다.' },
 
+  // 기관 운영
+  { cat: '기관 운영', q: '업무를 시작할 때 무엇을 확인하나요?', kw: '일일 점검 업무 시작 예약 발신 위험 알림 장애 크레딧', a: '미확인 위험 알림, 오늘 예약 발신 대상과 건수, 전날 실패·미연결 통화, 결제·크레딧 경고를 순서대로 확인합니다. 오류가 있으면 무작정 다시 발신하지 말고 통화 ID와 발생 시각을 기록해 담당자에게 전달하세요.' },
+  { cat: '기관 운영', q: '통화 실패·장시간 무음이 발생했어요', kw: '통화 실패 무음 콜엔진 장애 재발신', a: '같은 대상에게 반복 발신하지 않습니다. 먼저 어르신 또는 보호자에게 일반 전화로 안부를 확인하고, 통화 ID·발생 시각·대상 기관·화면의 오류 문구를 기록해 운영팀에 전달합니다. 긴급 징후가 있으면 기관 비상 절차와 119 연결 기준을 우선 적용합니다.' },
+  { cat: '기관 운영', q: '위험 알림은 어떻게 처리하나요?', kw: '위험 긴급 주의 확인 조치 기록', a: '알림 내용을 확인한 뒤 담당자를 지정하고, 어르신·보호자 연락 또는 방문 결과를 조치 기록에 남깁니다. 긴급 알림은 즉시 확인하며, 연락이 안 되거나 생명·신체 위험이 의심되면 기관 비상 절차와 119 기준에 따라 대응합니다.' },
+  { cat: '기관 운영', q: '업무 종료 전에 무엇을 확인하나요?', kw: '마감 업무 종료 미처리 예약 누락', a: '오늘 예약 건수와 실제 발신 건수를 대조하고, 실패·미연결 통화와 미확인 위험 알림이 남아 있지 않은지 확인합니다. 남은 건은 담당자와 다음 조치 시각을 기록한 뒤 인계합니다.' },
+  { cat: '기관 운영', q: '기관 운영 인수인계 전체 문서', kw: '교육 인수인계 체크리스트 장애 결제 개인정보 역할', a: '업무 시작·종료 체크리스트, 장애 대응표, 결제·개인정보 금지사항, 담당자 교육 실습과 서명란을 포함한 전체 문서를 엽니다.', link: OPERATIONS_RUNBOOK_URL },
+
   // 위험·건강
   { cat: '위험·건강 알림', q: '위험 알림(긴급/주의) 대응', kw: '위험 긴급 주의 알림 키워드 119', a: '🔴 긴급("가슴이 아파·쓰러·119" 등): 즉시 어르신·보호자에게 연락하거나 방문. 🟡 주의("어지러워" 등): 통화 기록 확인 후 안부 전화. 위험 알림은 대시보드 홈 상단과 건강 상태 메뉴에서 확인합니다.' },
   { cat: '위험·건강 알림', q: '건강 상태는 어떻게 확인하나요?', kw: '건강 상태 건강체크 좋아요 안좋아요', a: '어르신이 앱에서 체크한 건강 상태가 건강 상태 메뉴에 표시되고, "안 좋아요"는 알림으로 옵니다.' },
@@ -48,7 +57,7 @@ const HELP_ITEMS = [
   { cat: '문제해결', q: '화면이 이상하거나 안 보일 때', kw: '흰화면 새로고침 캐시 오류', a: '브라우저에서 Ctrl+Shift+R(새로고침)을 한 번 눌러 최신 화면을 받아주세요.' },
 ];
 
-const CATS = ['시작하기', '앱 설치·등록', '대시보드 사용', '위험·건강 알림', '계정·기관', '문제해결'];
+const CATS = ['시작하기', '기관 운영', '앱 설치·등록', '대시보드 사용', '위험·건강 알림', '계정·기관', '문제해결'];
 
 const Card = ({ children, className = '' }: any) => <section className={`help-card ${className}`}>{children}</section>;
 
@@ -140,6 +149,17 @@ export default function HelpGuide(_props: any) {
           />
         </Card>
       ) : (<>
+      <a href={OPERATIONS_RUNBOOK_URL} target="_blank" rel="noopener noreferrer" className="help-setup-link">
+        <div>
+          <ClipboardCheck size={24}/>
+          <div style={{ flex: 1 }}>
+            <strong>기관 운영 인수인계·교육 문서</strong>
+            <p>업무 시작·종료 점검, 장애·위험 대응, 결제·개인정보 처리 원칙을 확인합니다.</p>
+          </div>
+          <span>문서 열기 <ExternalLink size={16}/></span>
+        </div>
+      </a>
+
       {/* 검색 */}
       <div className="help-search">
         <Search size={20}/>

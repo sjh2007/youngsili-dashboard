@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI영실이 기관 운영 인수인계</title>
+  <style>
+    :root{--ink:#0f172a;--muted:#475569;--line:#dbe3ed;--blue:#246beb;--pale:#f4f6f8;--red:#b91c1c;--amber:#92400e;--green:#15803d}
+    *{box-sizing:border-box}body{margin:0;background:var(--pale);color:var(--ink);font-family:Pretendard,"Noto Sans KR",system-ui,sans-serif;line-height:1.65}
+    main{width:min(1040px,calc(100% - 32px));margin:32px auto 80px}.hero,.card{background:#fff;border:1px solid var(--line);border-radius:16px}.hero{padding:36px;margin-bottom:18px;border-top:5px solid var(--blue)}
+    h1{margin:0 0 8px;font-size:32px}h2{font-size:22px;margin:0 0 14px}h3{font-size:17px;margin:0 0 6px}.lead{color:var(--muted);margin:0}.meta{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}.badge{padding:5px 10px;border-radius:999px;background:#eaf1ff;color:#174ea6;font-size:13px;font-weight:700}
+    .card{padding:26px;margin-top:16px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.box{border:1px solid var(--line);border-radius:12px;padding:18px}.box p{margin:4px 0;color:var(--muted)}
+    ol,ul{margin:8px 0;padding-left:24px}li+li{margin-top:7px}.check{list-style:none;padding:0}.check li{padding:9px 0 9px 34px;border-bottom:1px solid #edf1f5;position:relative}.check li:before{content:"□";position:absolute;left:4px;font-size:19px;color:var(--blue)}
+    table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:12px;border:1px solid var(--line);vertical-align:top;text-align:left}th{background:#f8fafc}.danger{border-left:4px solid #ef4444;background:#fff7f7;padding:16px 18px;border-radius:8px}.warn{border-left:4px solid #f59e0b;background:#fffbeb;padding:16px 18px;border-radius:8px}.ok{border-left:4px solid #22c55e;background:#f0fdf4;padding:16px 18px;border-radius:8px}
+    .sign{height:54px;border-bottom:1px solid #64748b;margin-top:8px}.actions{display:flex;gap:10px;margin-top:20px}.actions button{border:0;border-radius:9px;background:var(--blue);color:#fff;font:inherit;font-weight:700;padding:10px 16px;cursor:pointer}
+    @media(max-width:720px){main{width:min(100% - 20px,1040px);margin-top:12px}.hero,.card{padding:20px}.grid{grid-template-columns:1fr}h1{font-size:25px}.table-wrap{overflow:auto}table{min-width:760px}}
+    @media print{body{background:#fff}main{width:100%;margin:0}.hero,.card{break-inside:avoid;border-color:#94a3b8}.actions{display:none}}
+    :focus-visible{outline:3px solid #93b4ff;outline-offset:3px}
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <h1>AI영실이 기관 운영 인수인계</h1>
+    <p class="lead">기관 담당자가 070 안부전화와 위험 알림을 안전하게 운영하기 위한 현장 체크리스트입니다.</p>
+    <div class="meta"><span class="badge">기관 담당자용</span><span class="badge">개정 2026-09-17</span><span class="badge">전화·위험 알림·결제·개인정보</span></div>
+    <div class="actions"><button type="button" onclick="window.print()">인쇄·PDF 저장</button></div>
+  </header>
+
+  <section class="card"><h2>1. 운영 전 필수 준비</h2><ul class="check">
+    <li>기관 책임자, 실무 담당자, 야간·휴일 비상 연락망을 지정했다.</li><li>대상자의 서비스 동의와 연락처, 보호자 연락처를 확인했다.</li>
+    <li>예약 시간, 통화 금지 시간, 긴급 상황 연락 순서를 확인했다.</li><li>담당자 계정은 개인별로 발급했고 공동 계정을 사용하지 않는다.</li>
+    <li>시험 발신은 사전에 동의한 시험 대상에게만 수행하고 결과를 확인했다.</li><li>AI 전화 실패 시 사람이 직접 확인하는 대체 절차를 정했다.</li>
+  </ul></section>
+
+  <section class="card"><h2>2. 매일 업무 시작</h2><div class="grid">
+    <div class="box"><h3>미확인 위험 알림</h3><p>긴급·주의 알림과 담당자, 조치 상태를 확인합니다.</p></div>
+    <div class="box"><h3>오늘 예약</h3><p>대상자 수, 발신 시간, 중지 대상과 중복 예약을 확인합니다.</p></div>
+    <div class="box"><h3>전날 실패 건</h3><p>발신 실패·미연결·장시간 무음 건의 후속 조치를 확인합니다.</p></div>
+    <div class="box"><h3>서비스 경고</h3><p>결제 실패, 잔여 크레딧, 시스템 장애 공지를 확인합니다.</p></div>
+  </div></section>
+
+  <section class="card"><h2>3. 상황별 대응</h2><div class="table-wrap"><table>
+    <thead><tr><th>상황</th><th>즉시 조치</th><th>기록할 내용</th><th>금지 사항</th></tr></thead>
+    <tbody>
+      <tr><td>예약 발신 누락</td><td>대상 상태를 확인하고 담당자가 직접 안부 확인</td><td>대상, 예약 시각, 발견 시각, 수동 확인 결과</td><td>원인 확인 없이 일괄 재발신</td></tr>
+      <tr><td>통화 실패·장시간 무음</td><td>어르신·보호자에게 일반 전화로 확인 후 운영팀 통지</td><td>통화 ID, 발생 시각, 오류 문구, 대상 기관</td><td>같은 대상에게 반복 시험 발신</td></tr>
+      <tr><td>긴급 위험 알림</td><td>즉시 연락·방문 판단, 생명·신체 위험 시 기관 절차와 119 기준 적용</td><td>확인 시각, 담당자, 연락 결과, 조치 완료 시각</td><td>AI 결과만으로 의료 판단</td></tr>
+      <tr><td>결제·환불 오류</td><td>내부 결제와 PG 거래를 대조하고 운영 승인 요청</td><td>기관, 결제번호, PG 거래번호, 금액, 오류</td><td>상태를 임의로 paid/cancelled로 변경</td></tr>
+      <tr><td>개인정보 요청</td><td>요청자 권한과 범위를 확인하고 정식 내보내기·삭제 절차 이용</td><td>요청자, 사유, 승인자, 처리 범위와 시각</td><td>전화번호·대화 원문을 메신저로 전달</td></tr>
+    </tbody>
+  </table></div></section>
+
+  <section class="card"><h2>4. 위험 알림 처리 기준</h2>
+    <div class="danger"><strong>긴급</strong> — 즉시 확인합니다. 연락이 되지 않거나 생명·신체 위험이 의심되면 기관의 비상 연락 및 119 기준을 적용합니다.</div>
+    <div class="warn" style="margin-top:10px"><strong>주의</strong> — 통화 기록을 확인하고 담당자가 안부를 확인합니다. 조치 결과와 다음 확인 시각을 기록합니다.</div>
+    <div class="ok" style="margin-top:10px"><strong>완료 조건</strong> — 확인만 누르지 말고 연락·방문 결과, 담당자, 완료 시각을 남깁니다.</div>
+  </section>
+
+  <section class="card"><h2>5. 매일 업무 종료</h2><ul class="check">
+    <li>오늘 예약 건수와 실제 발신 건수를 대조했다.</li><li>실패·미연결·무음 통화의 수동 확인 여부를 점검했다.</li>
+    <li>미확인 긴급·주의 알림이 없거나 담당자와 다음 조치 시각이 지정됐다.</li><li>결제·크레딧 경고를 담당자에게 인계했다.</li>
+    <li>개인 메모나 다운로드 파일에 불필요한 개인정보가 남지 않았는지 확인했다.</li>
+  </ul></section>
+
+  <section class="card"><h2>6. 40분 담당자 교육</h2><ol>
+    <li><strong>10분:</strong> 대시보드 현황, 예약, 통화 기록 위치 확인</li><li><strong>10분:</strong> 긴급·주의 알림 확인과 조치 기록 실습</li>
+    <li><strong>10분:</strong> 발신 실패·무음 상황에서 통화 ID를 찾아 인계하는 실습</li><li><strong>5분:</strong> 결제 상태 임의 변경 금지와 개인정보 마스킹 원칙 확인</li>
+    <li><strong>5분:</strong> 업무 시작·종료 체크리스트 평가</li>
+  </ol><div class="grid"><div><strong>교육 담당자</strong><div class="sign"></div></div><div><strong>교육 이수자 / 일자</strong><div class="sign"></div></div></div></section>
+
+  <section class="card"><h2>7. 운영팀 전달 양식</h2><p>기관명 / 발생 시각 / 통화 ID 또는 결제번호 / 대상(마스킹) / 화면 오류 문구 / 이미 수행한 조치 / 회신 받을 담당자 연락처를 함께 전달합니다.</p><p class="lead">문의: kraft@krafte.net · 1877-1979</p></section>
+</main>
+</body>
+</html>
