@@ -317,6 +317,23 @@ export const OpsMetricsSchema = loose({
   }),
 });
 
+// GET /console/host-resources — 측정 실패한 호스트는 수치를 생성하지 않고 null로 둔다.
+export const HostResourcesSchema = loose({
+  hosts: z.array(loose({
+    id: z.enum(['ncp', 'aws']),
+    name: z.string(),
+    error: z.string().nullable(),
+    metrics: loose({
+      sampledAt: z.string(),
+      cpuPercent: z.number().min(0).max(100),
+      memoryTotalBytes: z.number().nonnegative(),
+      memoryUsedBytes: z.number().nonnegative(),
+      diskTotalBytes: z.number().nonnegative(),
+      diskUsedBytes: z.number().nonnegative(),
+    }).nullable(),
+  })),
+});
+
 // GET /console/pilot-metrics — 예약 안부전화만 분리한 기관 파일럿 지표.
 export const PilotMetricsSchema = loose({
   orgId: z.string(),

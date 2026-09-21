@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
-import { CallEngineProviderSchema, OpsMetricsSchema, PilotDailyEvidenceListSchema, PilotMetricsSchema, parseOr } from '../schemas';
+import { CallEngineProviderSchema, HostResourcesSchema, OpsMetricsSchema, PilotDailyEvidenceListSchema, PilotMetricsSchema, parseOr } from '../schemas';
 // App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적) —
 // 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
 // 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
@@ -479,6 +479,7 @@ export default function ConsoleApp() {
   };
 
   const [health, setHealth] = useState<any>(null);
+  const [hostResources, setHostResources] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [incidentsPage, setIncidentsPage] = useState(1);
   const [incidentLoading, setIncidentLoading] = useState(false);
@@ -670,17 +671,24 @@ export default function ConsoleApp() {
   const fetchHealth = async () => {
     setLoadingHealth(true);
     try {
-      const [hRes, cRes, mRes, providerRes, providerHistoryRes, privacyRes] = await Promise.all([
+      const [hRes, cRes, mRes, providerRes, providerHistoryRes, privacyRes, resourcesRes] = await Promise.all([
         authFetch(`${SERVER_URL}/console/health`),
         authFetch(`${SERVER_URL}/console/calls/active`),
         authFetch(`${SERVER_URL}/admin/metrics?hours=24`),
         authFetch(`${SERVER_URL}/admin/call-engine/provider`),
         authFetch(`${SERVER_URL}/admin/call-engine/provider-history`),
         authFetch(`${SERVER_URL}/console/privacy-purge-jobs`),
+        consoleRole === 'superadmin' ? authFetch(`${SERVER_URL}/console/host-resources`) : Promise.resolve(null),
       ]);
       const hData = await requireJson(hRes, '시스템 상태 조회 실패');
       const cData = await requireJson(cRes, '진행 중 통화 조회 실패');
       if (hData && Array.isArray(hData.components)) setHealth(hData);
+      if (resourcesRes) {
+        try {
+          const resources = parseOr(HostResourcesSchema, await requireJson(resourcesRes, '서버 자원 조회 실패'), null);
+          setHostResources(Array.isArray(resources?.hosts) ? resources.hosts : []);
+        } catch { setHostResources([]); }
+      }
       if (Array.isArray(cData)) { setActiveCalls(cData); setActiveCallsPage(1); }
       try {
         const privacyData = await requireJson(privacyRes, '개인정보 파기 작업 조회 실패');
@@ -798,13 +806,25 @@ export default function ConsoleApp() {
       body.actionNote=actionNote.trim();
       body.preventionNote=(window.prompt('재발 방지 메모를 입력하세요.',drill.preventionNote||'')||'').trim();
       if (status==='passed') {
-        const now=new Date();
-        const detected=window.prompt('탐지 시각(ISO)을 입력하세요.',new Date(now.getTime()-60_000).toISOString());
-        const recovered=window.prompt('복구 시각(ISO)을 입력하세요.',now.toISOString());
-        if (!detected||!recovered) return;
-        const detectedDate=new Date(detected),recoveredDate=new Date(recovered);
-        if (!Number.isFinite(detectedDate.getTime())||!Number.isFinite(recoveredDate.getTime())) { notify('탐지·복구 시각 형식을 확인하세요.'); return; }
-        Object.assign(body,{detectedAt:detectedDate.toISOString(),recoveredAt:recoveredDate.toISOString(),imageDigestVerified:true,freeswitchConnected:true,audioPlaybackVerified:true,noDuplicateDispatch:true,noMissingDispatch:true,resultStorageVerified:true});
+        const occurred=window.prompt('실제 장애 발생 시각(ISO)을 입력하세요. 예: 2026-09-21T09:00:00+09:00');
+        const detected=window.prompt('실제 탐지 시각(ISO)을 입력하세요.');
+        const recovered=window.prompt('실제 복구 시각(ISO)을 입력하세요.');
+        if (!occurred||!detected||!recovered) return;
+        const occurredDate=new Date(occurred),detectedDate=new Date(detected),recoveredDate=new Date(recovered);
+        if ([occurredDate,detectedDate,recoveredDate].some(date=>!Number.isFinite(date.getTime())) || occurredDate>detectedDate || detectedDate>recoveredDate) { notify('장애 발생·탐지·복구 시각과 순서를 확인하세요.'); return; }
+        const checks:[string,string][]=[
+          ['imageDigestVerified','승인 이미지 digest를 실제로 대조했습니까?'],
+          ['freeswitchConnected','FreeSWITCH 연결을 실제로 확인했습니까?'],
+          ['audioPlaybackVerified','음성 재생을 실제로 확인했습니까?'],
+          ['noDuplicateDispatch','예약 중복 발신이 없음을 확인했습니까?'],
+          ['noMissingDispatch','예약 누락이 없음을 확인했습니까?'],
+          ['resultStorageVerified','통화 결과 저장을 실제로 확인했습니까?'],
+        ];
+        for (const [key,question] of checks) {
+          if (!window.confirm(question)) { notify('확인하지 못한 점검이 있어 통과 처리하지 않았습니다.'); return; }
+          body[key]=true;
+        }
+        Object.assign(body,{occurredAt:occurredDate.toISOString(),detectedAt:detectedDate.toISOString(),recoveredAt:recoveredDate.toISOString()});
       }
     }
     setRecoveryBusy(drill.id);
@@ -2032,6 +2052,26 @@ export default function ConsoleApp() {
                 </div>
               )}
             </section>
+            {consoleRole === 'superadmin' && <section className="section" style={{marginTop:20}}>
+              <div className="section-title" style={{marginBottom:4}}>서버 자원 현황</div>
+              <div style={{fontSize:12,color:'#64748b',marginBottom:14}}>호스트 CPU 사용률, 사용 가능한 메모리를 제외한 메모리 사용량, 루트 볼륨 사용량입니다. 새로고침 시 측정합니다.</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(270px,1fr))',gap:12}}>
+                {hostResources.map((host:any) => {
+                  const metric=host.metrics;
+                  const gb=(bytes:number)=>`${(bytes/1024/1024/1024).toFixed(1)} GB`;
+                  return <div key={host.id} style={{border:'1px solid #e2e8f0',borderRadius:10,padding:16}}>
+                    <div style={{fontWeight:800,marginBottom:5}}>{host.name}</div>
+                    {!metric ? <div style={{color:'#c5221f',fontSize:13}}>{host.error||'측정값 없음'}</div> : <>
+                      <div style={{fontSize:13,lineHeight:2}}>CPU <strong>{metric.cpuPercent}%</strong></div>
+                      <div style={{fontSize:13,lineHeight:2}}>RAM <strong>{gb(metric.memoryUsedBytes)} / {gb(metric.memoryTotalBytes)}</strong></div>
+                      <div style={{fontSize:13,lineHeight:2}}>디스크 <strong>{gb(metric.diskUsedBytes)} / {gb(metric.diskTotalBytes)}</strong></div>
+                      <div style={{fontSize:11,color:'#64748b',marginTop:8}}>측정 {new Date(metric.sampledAt).toLocaleString()}</div>
+                    </>}
+                  </div>;
+                })}
+                {!hostResources.length && <div style={{color:'#64748b',fontSize:13}}>서버 자원 정보를 조회하지 못했습니다.</div>}
+              </div>
+            </section>}
             {!!privacyPurgeJobs.length && (
               <section className="section" style={{marginTop:20,borderColor:'#f6aea9'}}>
                 <div className="section-title" style={{marginBottom:4,color:'#c5221f'}}>개인정보 파기 확인 필요</div>
