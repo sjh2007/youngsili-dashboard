@@ -4,6 +4,7 @@ import { Plus, ArrowRight, CheckCircle2, Users, AlertCircle, AlertTriangle, Phon
 import { StatusBadge } from '../../components/ui';
 import { normalizeRegion } from '../dashboardConstants';
 import { STATUS_CONFIG } from '../../constants/app';
+import './DashboardHomePage.css';
 
 export default function DashboardHomePage(props: any) {
   const {
@@ -227,6 +228,7 @@ export default function DashboardHomePage(props: any) {
                     <div className="callrate-bar"><div className="callrate-fill" style={{width:`${rate}%`}}/></div>
                   </div>
 
+                  <div className="home-call-results">
                   <div className="callgroup">
                     <div className="callgroup-label">연결 결과 <span>오늘 발신 {dispatchTotal}건</span></div>
                     <div className="callgroup-items">
@@ -242,6 +244,7 @@ export default function DashboardHomePage(props: any) {
                       {stat(urgentCount, '주의', 'warning', ()=>drillCalls('urgent'), '주의 통화 보기')}
                       {stat(normalCount, '정상', null, ()=>drillCalls('normal'), '정상 통화 보기')}
                     </div>
+                  </div>
                   </div>
                 </>
               );
@@ -279,7 +282,7 @@ export default function DashboardHomePage(props: any) {
             );
           })()}
 
-          <div className="section">
+          <div className="section home-shortcuts">
             <div className="section-title">자주 찾는 업무</div>
             <div className="quick-actions">
               <button className="quick-btn quick-danger" onClick={()=>goPage('schedule')}><AlertCircle/><span>위험 어르신만 전화</span><span className="quick-count">{elders.filter(e=>e.status!=='normal').length}명</span></button>

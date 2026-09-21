@@ -1,0 +1,62 @@
+/* 기존 홈 디자인에서 업무 바로가기와 통화 결과만 가로로 배치한다. */
+.dashboard-page .home-call-results {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 20px;
+}
+.dashboard-page .home-call-results .callgroup { min-width: 0; margin-top: 16px; }
+.dashboard-page .home-call-results .callgroup-items { display: flex; gap: 12px; }
+.dashboard-page .home-call-results .callstat { flex: 1 1 0; min-width: 0; min-height: 92px; }
+.dashboard-page .home-call-results .callstat-label { white-space: normal; }
+.dashboard-page .home-shortcuts .quick-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.dashboard-page .home-shortcuts .quick-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 128px;
+  padding: 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #f7f9fc;
+  color: #263d5c;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+}
+.dashboard-page .home-shortcuts .quick-btn svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: #246beb;
+}
+.dashboard-page .home-shortcuts .quick-count {
+  margin: auto 0 0;
+  padding: 0;
+  background: transparent;
+  color: #65758b;
+  font-size: 13px;
+}
+.dashboard-page .home-shortcuts .quick-btn:hover {
+  background: #eef4ff;
+  border-color: #c9dbfa;
+  transform: none;
+}
+.dashboard-page .home-shortcuts .quick-btn:focus-visible {
+  outline: 3px solid #9bc0ff;
+  outline-offset: 2px;
+}
+@media (max-width: 760px) {
+  .dashboard-page .home-call-results { grid-template-columns: 1fr; gap: 0; }
+  .dashboard-page .home-shortcuts .quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1024px) {
+  .dashboard-design-preview > .sidebar { display: none !important; }
+  .dashboard-design-preview > .main { margin-left: 0; width: 100%; }
+}
