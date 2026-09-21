@@ -49,6 +49,35 @@ function localDateKey(value: string | Date): string | null {
   return `${y}-${m}-${d}`;
 }
 
+function RecoveryScheduleInput({ onChange }: { onChange: (value: string) => void }) {
+  const [parts, setParts] = useState({ year: '', month: '', day: '', hour: '', minute: '' });
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, index) => currentYear - 1 + index);
+  const dayCount = parts.year && parts.month ? new Date(Number(parts.year), Number(parts.month), 0).getDate() : 31;
+  const update = (key: keyof typeof parts, value: string) => {
+    const next = { ...parts, [key]: value };
+    if (next.day && next.year && next.month && Number(next.day) > new Date(Number(next.year), Number(next.month), 0).getDate()) next.day = '';
+    setParts(next);
+    onChange(Object.values(next).every(Boolean)
+      ? `${next.year}-${next.month}-${next.day}T${next.hour}:${next.minute}`
+      : '');
+  };
+  const field = (key: keyof typeof parts, label: string, values: Array<string | number>) => (
+    <select aria-label={`예정 ${label}`} className="form-input" style={{ width: '100%', minWidth: 0, padding: '8px 4px', fontSize: 13 }} value={parts[key]} onChange={event => update(key, event.target.value)}>
+      <option value="">{label}</option>
+      {values.map(value => <option key={value} value={String(value).padStart(2, '0')}>{String(value).padStart(2, '0')}</option>)}
+    </select>
+  );
+  return <div style={{ display: 'grid', gap: 6 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 4 }}>
+      {field('year', '연도', years)}{field('month', '월', Array.from({ length: 12 }, (_, index) => index + 1))}{field('day', '일', Array.from({ length: dayCount }, (_, index) => index + 1))}
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+      {field('hour', '시', Array.from({ length: 24 }, (_, index) => index))}{field('minute', '분', Array.from({ length: 60 }, (_, index) => index))}
+    </div>
+  </div>;
+}
+
 function PaymentCalendar({ month, payments, subscriptions, loading, onMonthChange, onRefresh }: any) {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(() => new Set());
   const year = month.getFullYear();
@@ -1889,7 +1918,7 @@ export default function ConsoleApp() {
                 <label style={{fontSize:12}}>환경<select className="form-input" value={recoveryForm.environment} onChange={e=>setRecoveryForm(v=>({...v,environment:e.target.value}))}><option value="non_production">비운영 검증</option><option value="production_maintenance">운영 유지보수</option></select></label>
                 <label style={{fontSize:12}}>기관(선택)<select className="form-input" value={recoveryForm.orgId} onChange={e=>setRecoveryForm(v=>({...v,orgId:e.target.value}))}><option value="">전체 시스템</option>{orgs.map((o:any)=><option key={o.orgId} value={o.orgId}>{o.name||o.orgId}</option>)}</select></label>
                 <label style={{fontSize:12}}>담당자<input className="form-input" maxLength={100} value={recoveryForm.owner} onChange={e=>setRecoveryForm(v=>({...v,owner:e.target.value}))}/></label>
-                <label style={{fontSize:12}}>예정 시각<input type="datetime-local" className="form-input" value={recoveryForm.plannedAt} onChange={e=>setRecoveryForm(v=>({...v,plannedAt:e.target.value}))}/></label>
+                <div style={{fontSize:12}}>예정 시각<RecoveryScheduleInput onChange={value=>setRecoveryForm(v=>({...v,plannedAt:value}))}/></div>
                 <label style={{fontSize:12}}>장애 시나리오<input className="form-input" maxLength={1000} value={recoveryForm.scenario} onChange={e=>setRecoveryForm(v=>({...v,scenario:e.target.value}))} placeholder="예: 콜엔진 연결 실패 주입"/></label>
                 <label style={{fontSize:12}}>롤백 계획<input className="form-input" maxLength={1000} value={recoveryForm.rollbackPlan} onChange={e=>setRecoveryForm(v=>({...v,rollbackPlan:e.target.value}))} placeholder="예: 승인 이미지로 즉시 복귀"/></label>
                 <div style={{display:'flex',alignItems:'flex-end'}}><button className="btn-primary" style={{width:'100%'}} disabled={recoveryBusy==='create'} onClick={createRecoveryDrill}>{recoveryBusy==='create'?'등록 중...':'훈련 계획 등록'}</button></div>
