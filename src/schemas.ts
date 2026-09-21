@@ -337,6 +337,25 @@ export const PilotMetricsSchema = loose({
   note: z.string().nullable(),
 });
 
+export const PilotDailyEvidenceSchema = loose({
+  id: z.string(),
+  pilotId: z.string(),
+  orgId: z.string(),
+  date: z.string(),
+  sampleCallIds: z.array(z.string()),
+  voiceQualityScore: z.number(),
+  operatorMinutes: z.number(),
+  urgentAckMinutes: z.number().nullable(),
+  resolutionMinutes: z.number().nullable(),
+  issueFlags: z.array(z.string()),
+  incidentNote: z.string().nullable(),
+  actionNote: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+  updatedBy: z.string(),
+});
+
+export const PilotDailyEvidenceListSchema = loose({ evidence: z.array(PilotDailyEvidenceSchema) });
+
 export const CallEngineProviderSchema = loose({
   provider: z.enum(['gemini', 'openai']),
   reason: z.string().default(''),

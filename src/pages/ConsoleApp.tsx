@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
-import { CallEngineProviderSchema, OpsMetricsSchema, PilotMetricsSchema, parseOr } from '../schemas';
+import { CallEngineProviderSchema, OpsMetricsSchema, PilotDailyEvidenceListSchema, PilotMetricsSchema, parseOr } from '../schemas';
 // App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적) —
 // 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
 // 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
@@ -201,6 +201,27 @@ function GcpStyle() {
         .gcp-console .gcp-nav-item.is-active svg { color: #1a73e8; }
         .gcp-console .gcp-topbar { background: #fff; border-bottom: 1px solid #dadce0; }
         .gcp-console .toast-viewport .toast { font-family: 'Roboto', sans-serif; }
+        .gcp-console .pilot-workspace { padding:0; overflow:hidden; border-radius:14px; }
+        .gcp-console .pilot-workflow-head { padding:24px 26px 20px; background:linear-gradient(135deg,#0b3558 0%,#0f5b74 62%,#1b7f78 100%); color:#fff; }
+        .gcp-console .pilot-workflow-kicker { display:inline-flex; align-items:center; gap:7px; padding:5px 10px; border:1px solid rgba(255,255,255,.28); border-radius:999px; background:rgba(255,255,255,.1); font-size:11px; font-weight:700; letter-spacing:.08em; }
+        .gcp-console .pilot-workflow-head h2 { margin:12px 0 5px; font-size:23px; font-weight:700; letter-spacing:-.02em; }
+        .gcp-console .pilot-workflow-head p { margin:0; color:rgba(255,255,255,.78); font-size:13px; line-height:1.6; }
+        .gcp-console .pilot-workflow-steps { display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid rgba(255,255,255,.16); margin-top:18px; padding-top:15px; gap:12px; }
+        .gcp-console .pilot-workflow-step { display:flex; gap:9px; align-items:center; color:rgba(255,255,255,.84); font-size:12px; }
+        .gcp-console .pilot-workflow-step b { display:grid; place-items:center; width:25px; height:25px; border-radius:8px; background:#fff; color:#0f5b74; font-size:12px; }
+        .gcp-console .pilot-workspace-body { padding:22px 24px 26px; }
+        .gcp-console .pilot-step-card { border:1px solid #dce5e8; border-radius:12px; padding:18px; margin-bottom:14px; background:#fff; box-shadow:0 1px 2px rgba(15,54,74,.04); }
+        .gcp-console .pilot-step-card.is-soft { background:#f6faf9; border-color:#d7e8e3; }
+        .gcp-console .pilot-section-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:14px; }
+        .gcp-console .pilot-section-heading h3 { margin:0; font-size:15px; color:#12364a; }
+        .gcp-console .pilot-section-heading p { margin:5px 0 0; color:#637780; font-size:12px; line-height:1.55; }
+        .gcp-console .pilot-step-number { display:inline-grid; place-items:center; min-width:27px; height:27px; border-radius:9px; background:#dff2ec; color:#126e62; font-weight:700; margin-right:9px; }
+        .gcp-console .pilot-form-grid { display:grid; grid-template-columns:repeat(3,minmax(150px,1fr)); gap:10px; }
+        .gcp-console .pilot-privacy-note { display:flex; align-items:flex-start; gap:8px; padding:10px 12px; margin-bottom:12px; border-radius:9px; background:#eef6ff; color:#35536c; font-size:12px; line-height:1.5; }
+        .gcp-console .pilot-evidence-table { border:1px solid #e2e8ea; border-radius:10px; overflow:hidden; }
+        .gcp-console .pilot-danger-options { display:flex; gap:8px; flex-wrap:wrap; margin-top:11px; }
+        .gcp-console .pilot-danger-options label { display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid #e3e8ea; border-radius:8px; background:#fafcfc; font-size:12px; }
+        @media (max-width:900px) { .gcp-console .pilot-workflow-steps,.gcp-console .pilot-form-grid { grid-template-columns:1fr; } .gcp-console .pilot-workspace-body { padding:16px; } }
         .gcp-console .skip-link { position:fixed; z-index:10000; top:8px; left:8px; padding:10px 14px; border-radius:6px; background:#202124; color:#fff; transform:translateY(-160%); }
         .gcp-console .skip-link:focus { transform:translateY(0); }
         .gcp-console .payment-calendar-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
@@ -554,6 +575,11 @@ export default function ConsoleApp() {
   const [pilotStatusDialog, setPilotStatusDialog] = useState<{program:any;status:'active'|'completed'|'stopped'}|null>(null);
   const [pilotStatusReason, setPilotStatusReason] = useState('');
   const [pilotReadinessConfirmed, setPilotReadinessConfirmed] = useState(false);
+  const [pilotReadinessChecks, setPilotReadinessChecks] = useState({consentConfirmed:false,emergencyContactsConfirmed:false,scheduleConfirmed:false,callEngineHealthy:false,approvedImageDigestConfirmed:false});
+  const [pilotEvidence, setPilotEvidence] = useState<any[]>([]);
+  const [pilotEvidenceProgramId, setPilotEvidenceProgramId] = useState('');
+  const [pilotEvidenceForm, setPilotEvidenceForm] = useState({date:localDateKey(new Date())||'',sampleCallIds:'',voiceQualityScore:'4',operatorMinutes:'0',urgentAckMinutes:'',resolutionMinutes:'',issueFlags:[] as string[],incidentNote:'',actionNote:''});
+  const [pilotEvidenceBusy, setPilotEvidenceBusy] = useState(false);
   const pilotDialogReturnFocus = useRef<HTMLElement|null>(null);
   const pilotDialogRef = useRef<HTMLDivElement|null>(null);
   const pilotReasonRef = useRef<HTMLTextAreaElement|null>(null);
@@ -1222,6 +1248,7 @@ export default function ConsoleApp() {
   const openPilotStatusDialog = (program:any, status:'active'|'completed'|'stopped') => {
     pilotDialogReturnFocus.current = document.activeElement as HTMLElement;
     setPilotStatusDialog({program,status}); setPilotStatusReason(''); setPilotReadinessConfirmed(status!=='active');
+    setPilotReadinessChecks({consentConfirmed:false,emergencyContactsConfirmed:false,scheduleConfirmed:false,callEngineHealthy:false,approvedImageDigestConfirmed:false});
     window.setTimeout(()=>pilotReasonRef.current?.focus(), 0);
   };
   const closePilotStatusDialog = () => {
@@ -1243,26 +1270,60 @@ export default function ConsoleApp() {
     const label = status==='active'?'시작':status==='completed'?'완료':'중단';
     const reason = pilotStatusReason.trim();
     if (reason.length<5) { notify(`${label} 사유를 5자 이상 입력하세요`); pilotReasonRef.current?.focus(); return; }
-    if (status==='active' && !pilotReadinessConfirmed) { notify('시작 전 필수 조건 확인이 필요합니다'); return; }
+    if (status==='active' && (!pilotReadinessConfirmed || Object.values(pilotReadinessChecks).some(value=>!value))) { notify('시작 전 필수 조건을 모두 확인해야 합니다'); return; }
     setPilotProgramBusy(true);
     try {
-      const r = await authFetch(`${SERVER_URL}/console/pilot-programs/${encodeURIComponent(p.id)}/status`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,reason,readinessConfirmed:pilotReadinessConfirmed})});
+      const r = await authFetch(`${SERVER_URL}/console/pilot-programs/${encodeURIComponent(p.id)}/status`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,reason,readinessConfirmed:pilotReadinessConfirmed,readinessChecks:status==='active'?pilotReadinessChecks:undefined})});
       await requireJson(r, `파일럿 ${label} 실패`); notify(`파일럿을 ${label} 처리했습니다`); closePilotStatusDialog(); await fetchPilotPrograms();
     } catch(e:any) { notify(e?.message || `파일럿 ${label} 실패`); }
     finally { setPilotProgramBusy(false); }
   };
 
+  const fetchPilotEvidence = async (pilotId=pilotEvidenceProgramId) => {
+    if (!pilotId) { setPilotEvidence([]); return; }
+    setPilotEvidenceBusy(true);
+    try {
+      const r=await authFetch(`${SERVER_URL}/console/pilot-programs/${encodeURIComponent(pilotId)}/daily-evidence`);
+      const raw=await requireJson(r,'파일럿 일일 증거 조회 실패');
+      setPilotEvidence(parseOr(PilotDailyEvidenceListSchema,raw,{evidence:[]}).evidence);
+    } catch(e:any) { notify(e?.message||'파일럿 일일 증거 조회 실패'); }
+    finally { setPilotEvidenceBusy(false); }
+  };
+  const savePilotEvidence = async () => {
+    if (!pilotEvidenceProgramId || !pilotEvidenceForm.date) { notify('파일럿과 날짜를 선택하세요'); return; }
+    const sampleCallIds=pilotEvidenceForm.sampleCallIds.split(/[\s,]+/).map(v=>v.trim()).filter(Boolean);
+    setPilotEvidenceBusy(true);
+    try {
+      const body={
+        sampleCallIds,voiceQualityScore:Number(pilotEvidenceForm.voiceQualityScore),operatorMinutes:Number(pilotEvidenceForm.operatorMinutes),
+        urgentAckMinutes:pilotEvidenceForm.urgentAckMinutes===''?null:Number(pilotEvidenceForm.urgentAckMinutes),
+        resolutionMinutes:pilotEvidenceForm.resolutionMinutes===''?null:Number(pilotEvidenceForm.resolutionMinutes),
+        issueFlags:pilotEvidenceForm.issueFlags,incidentNote:pilotEvidenceForm.incidentNote||undefined,actionNote:pilotEvidenceForm.actionNote||undefined,
+      };
+      const r=await authFetch(`${SERVER_URL}/console/pilot-programs/${encodeURIComponent(pilotEvidenceProgramId)}/daily-evidence/${pilotEvidenceForm.date}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const saved=await requireJson(r,'파일럿 일일 증거 저장 실패');
+      notify(saved.pilotStopped?'중단 조건이 감지되어 파일럿을 중단했습니다':'파일럿 일일 증거를 저장했습니다',saved.pilotStopped?'error':'success');
+      await Promise.all([fetchPilotEvidence(pilotEvidenceProgramId),fetchPilotPrograms()]);
+    } catch(e:any) { notify(e?.message||'파일럿 일일 증거 저장 실패'); setPilotEvidenceBusy(false); }
+  };
+
   const downloadPilotSlaCsv = () => {
     if (!pilotData || !statsOrg) { notify('먼저 기관 SLA 지표를 조회하세요'); return; }
+    const evidence=pilotEvidence.filter((e:any)=>e.orgId===statsOrg&&e.date>=pilotFrom&&e.date<=pilotTo);
     const terminal = pilotData.completed + pilotData.missed + pilotData.failed;
     const answeredBase = pilotData.completed + pilotData.missed;
     const connectionRate = answeredBase ? pilotData.completed / answeredBase : null;
     const targets = [
       { metric:'예약 발신률', value:pilotData.attemptRate, target:0.99, pass:pilotData.attemptRate != null && pilotData.attemptRate >= 0.99, unit:'%' },
       { metric:'연결률', value:connectionRate, target:0.8, pass:connectionRate != null && connectionRate >= 0.8, unit:'%' },
-      { metric:'기술 실패율', value:pilotData.technicalFailureRate, target:0.01, pass:pilotData.technicalFailureRate != null && pilotData.technicalFailureRate <= 0.01, unit:'%' },
+      { metric:'기술 실패율', value:pilotData.technicalFailureRate, target:0.01, pass:pilotData.technicalFailureRate != null && pilotData.technicalFailureRate < 0.01, unit:'%' },
       { metric:'결과 저장률', value:pilotData.resultCompletenessRate, target:1, pass:pilotData.resultCompletenessRate != null && pilotData.resultCompletenessRate >= 1, unit:'%' },
     ];
+    const ack = evidence.map((e:any)=>e.urgentAckMinutes).filter((v:any)=>v!=null);
+    const resolution = evidence.map((e:any)=>e.resolutionMinutes).filter((v:any)=>v!=null);
+    const voiceAverage = evidence.length ? evidence.reduce((sum:number,e:any)=>sum+Number(e.voiceQualityScore||0),0)/evidence.length : null;
+    const ackRate = ack.length ? ack.filter((v:number)=>v<=15).length/ack.length : null;
+    const resolutionRate = resolution.length ? resolution.filter((v:number)=>v<=60).length/resolution.length : null;
     const rows = [
       ['기관', orgName(statsOrg), '조회 기간', `${pilotFrom} ~ ${pilotTo}`],
       ['예정 발신', pilotData.scheduledExpected, '발신 시도', pilotData.scheduledAttempts],
@@ -1271,11 +1332,14 @@ export default function ConsoleApp() {
       [],
       ['지표', '측정값', '운영 목표', '판정'],
       ...targets.map(item => [item.metric, item.value == null ? '측정 전' : `${(item.value*100).toFixed(1)}${item.unit}`, `${(item.target*100).toFixed(1)}${item.unit}`, item.value == null ? '측정 전' : item.pass ? '충족' : '위반']),
-      ['위험 알림 확인 시간', '측정 전', '', '데이터 연동 필요'],
-      ['조치 완료 시간', '측정 전', '', '데이터 연동 필요'],
-      ['음성 품질 평가', '측정 전', '', '기관별 품질 데이터 필요'],
+      ['긴급 알림 15분 내 확인율', ackRate==null?'측정 전':`${(ackRate*100).toFixed(1)}%`, '95% 이상', ackRate==null?'측정 전':ackRate>=.95?'충족':'위반'],
+      ['60분 내 조치 완료율', resolutionRate==null?'측정 전':`${(resolutionRate*100).toFixed(1)}%`, '95% 이상', resolutionRate==null?'측정 전':resolutionRate>=.95?'충족':'위반'],
+      ['음성 품질 평가', voiceAverage==null?'측정 전':voiceAverage.toFixed(2), '평균 4.0 이상·2점 이하 없음', voiceAverage==null?'측정 전':voiceAverage>=4&&!evidence.some((e:any)=>e.voiceQualityScore<=2)?'충족':'위반'],
       ['요금제 초과량', '측정 전', '', '구독 사용량 연동 필요'],
-      ['담당자 처리 시간', '측정 전', '', '담당자 조치 이력 연동 필요'],
+      ['담당자 처리 시간', evidence.length?`${evidence.reduce((sum:number,e:any)=>sum+Number(e.operatorMinutes||0),0)}분`:'측정 전', '', evidence.length?'기록':'측정 전'],
+      [],
+      ['일일 증거 날짜','표본 통화 ID','음성 품질','운영자 처리시간(분)','중단 조건'],
+      ...evidence.map((e:any)=>[e.date,e.sampleCallIds.join(' '),e.voiceQualityScore,e.operatorMinutes,e.issueFlags.join(' ')||'없음']),
     ];
     const csv = `\uFEFF${rows.map(row => row.map(csvCell).join(',')).join('\r\n')}`;
     const url = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' }));
@@ -1290,6 +1354,7 @@ export default function ConsoleApp() {
 
   const printPilotSlaPdf = () => {
     if (!pilotData || !statsOrg) { notify('먼저 기관 SLA 지표를 조회하세요'); return; }
+    const evidence=pilotEvidence.filter((e:any)=>e.orgId===statsOrg&&e.date>=pilotFrom&&e.date<=pilotTo);
     const popup = window.open('', '_blank', 'noopener,noreferrer');
     if (!popup) { notify('PDF 출력을 위해 팝업을 허용해 주세요'); return; }
     const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c] || c));
@@ -1298,7 +1363,8 @@ export default function ConsoleApp() {
       ['기술 실패율', pilotData.technicalFailureRate],
       ['결과 저장률', pilotData.resultCompletenessRate],
     ];
-    popup.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>영실이 SLA 보고서</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#202124}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #dadce0;padding:10px;text-align:left}@media print{button{display:none}}</style></head><body><h1>기관별 SLA 보고서</h1><p>기관: ${esc(orgName(statsOrg))}</p><p>기간: ${esc(pilotFrom)} ~ ${esc(pilotTo)}</p><table><thead><tr><th>지표</th><th>측정값</th></tr></thead><tbody>${rows.map(([label,value])=>`<tr><td>${esc(label)}</td><td>${value==null?'측정 전':`${(Number(value)*100).toFixed(1)}%`}</td></tr>`).join('')}<tr><td>완료 / 미응답 / 기술 실패</td><td>${esc(pilotData.completed)} / ${esc(pilotData.missed)} / ${esc(pilotData.failed)}</td></tr></tbody></table><p style="margin-top:18px;color:#5f6368">측정되지 않은 지표는 정상으로 간주하지 않습니다.</p><button onclick="window.print()">PDF로 저장 / 인쇄</button></body></html>`);
+    const voiceAverage=evidence.length?evidence.reduce((sum:number,e:any)=>sum+Number(e.voiceQualityScore||0),0)/evidence.length:null;
+    popup.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>영실이 SLA 보고서</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#202124}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #dadce0;padding:10px;text-align:left}@media print{button{display:none}}</style></head><body><h1>기관별 SLA 보고서</h1><p>기관: ${esc(orgName(statsOrg))}</p><p>기간: ${esc(pilotFrom)} ~ ${esc(pilotTo)}</p><table><thead><tr><th>지표</th><th>측정값</th></tr></thead><tbody>${rows.map(([label,value])=>`<tr><td>${esc(label)}</td><td>${value==null?'측정 전':`${(Number(value)*100).toFixed(1)}%`}</td></tr>`).join('')}<tr><td>완료 / 미응답 / 기술 실패</td><td>${esc(pilotData.completed)} / ${esc(pilotData.missed)} / ${esc(pilotData.failed)}</td></tr><tr><td>음성 품질 평균</td><td>${voiceAverage==null?'측정 전':esc(voiceAverage.toFixed(2))}</td></tr><tr><td>일일 증거</td><td>${esc(evidence.length)}일</td></tr></tbody></table><p style="margin-top:18px;color:#5f6368">측정되지 않은 지표는 정상으로 간주하지 않습니다. 전화번호와 대화 원문은 보고서에 포함하지 않습니다.</p><button onclick="window.print()">PDF로 저장 / 인쇄</button></body></html>`);
     popup.document.close();
   };
 
@@ -1593,8 +1659,10 @@ export default function ConsoleApp() {
             <p id="pilot-status-description" style={{color:'#5f6368',fontSize:13}}>{orgName(pilotStatusDialog.program.orgId)} · {pilotStatusDialog.program.startDate} ~ {pilotStatusDialog.program.endDate}</p>
             <label htmlFor="pilot-status-reason" style={{display:'block',fontSize:13,fontWeight:600,marginTop:16}}>사유</label>
             <textarea ref={pilotReasonRef} id="pilot-status-reason" className="form-input" rows={4} maxLength={500} value={pilotStatusReason} onChange={e=>setPilotStatusReason(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginTop:6}} placeholder={`${label} 사유를 5자 이상 입력하세요`}/>
-            {pilotStatusDialog.status==='active'&&<label style={{display:'flex',gap:9,alignItems:'flex-start',marginTop:14,fontSize:13,lineHeight:1.55}}><input type="checkbox" checked={pilotReadinessConfirmed} onChange={e=>setPilotReadinessConfirmed(e.target.checked)} style={{marginTop:3}}/><span>비상 연락망, 개인정보 동의, 대상자 일정, 시험 통화, 운영 준비상태, 수동 안부 담당자를 모두 확인했습니다.</span></label>}
-            <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}><button className="btn-secondary" disabled={pilotProgramBusy} onClick={closePilotStatusDialog}>취소</button><button className="btn-primary" disabled={pilotProgramBusy||pilotStatusReason.trim().length<5||(pilotStatusDialog.status==='active'&&!pilotReadinessConfirmed)} onClick={changePilotStatus}>{pilotProgramBusy?'처리 중...':`${label} 확정`}</button></div>
+            {pilotStatusDialog.status==='active'&&<div style={{display:'grid',gap:7,marginTop:14,fontSize:13}}>{[
+              ['consentConfirmed','대상자 동의'],['emergencyContactsConfirmed','비상 연락망'],['scheduleConfirmed','예약 일정'],['callEngineHealthy','콜엔진 정상'],['approvedImageDigestConfirmed','승인 이미지 digest'],
+            ].map(([key,text])=><label key={key} style={{display:'flex',gap:8}}><input type="checkbox" checked={(pilotReadinessChecks as any)[key]} onChange={e=>setPilotReadinessChecks(v=>({...v,[key]:e.target.checked}))}/>{text} 확인</label>)}<label style={{display:'flex',gap:9,alignItems:'flex-start',marginTop:5,lineHeight:1.55}}><input type="checkbox" checked={pilotReadinessConfirmed} onChange={e=>setPilotReadinessConfirmed(e.target.checked)} style={{marginTop:3}}/><span>위 확인 결과를 근거로 070 파일럿 시작을 승인합니다.</span></label></div>}
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}><button className="btn-secondary" disabled={pilotProgramBusy} onClick={closePilotStatusDialog}>취소</button><button className="btn-primary" disabled={pilotProgramBusy||pilotStatusReason.trim().length<5||(pilotStatusDialog.status==='active'&&(!pilotReadinessConfirmed||Object.values(pilotReadinessChecks).some(value=>!value)))} onClick={changePilotStatus}>{pilotProgramBusy?'처리 중...':`${label} 확정`}</button></div>
           </div>
         </div>;
       })()}
@@ -1994,11 +2062,22 @@ export default function ConsoleApp() {
                 </div>
               </section>
             )}
-            <section className="section" style={{marginTop:16}}>
+            <section className="section pilot-workspace" style={{marginTop:16}}>
+              <div className="pilot-workflow-head">
+                <span className="pilot-workflow-kicker">기관 파일럿 운영</span>
+                <h2>14일 운영 검증</h2>
+                <p>기관 담당자가 시작 조건부터 매일의 통화 품질, 대응 기록, 최종 운영 기준까지 한 흐름으로 확인할 수 있습니다.</p>
+                <div className="pilot-workflow-steps" aria-label="파일럿 운영 절차">
+                  <div className="pilot-workflow-step"><b>1</b><span>기관·기간 설정</span></div>
+                  <div className="pilot-workflow-step"><b>2</b><span>일일 증거 기록</span></div>
+                  <div className="pilot-workflow-step"><b>3</b><span>운영 기준 판정</span></div>
+                </div>
+              </div>
+              <div className="pilot-workspace-body">
               <div className="script-editor-header" style={{marginBottom:10}}>
                 <div>
-                  <div className="section-title" style={{marginBottom:3}}>기관별 SLA 보고서</div>
-                  <div style={{fontSize:12,color:'#5f6368'}}>예약 안부전화만 집계하며 수동·경보·기능 테스트 발신은 제외합니다. 조회 결과는 CSV로 내려받을 수 있습니다.</div>
+                  <div className="section-title" style={{marginBottom:3}}>운영 품질 보고서 <span style={{fontSize:11,color:'#64748b',fontWeight:600}}>SLA</span></div>
+                  <div style={{fontSize:12,color:'#5f6368'}}>예약 안부전화만 집계합니다. 수동·경보·기능 테스트 발신은 제외되며 결과는 PDF와 CSV로 내려받을 수 있습니다.</div>
                 </div>
                 <div style={{display:'flex',gap:8}}>
                   <button className="btn-download" onClick={printPilotSlaPdf} disabled={!pilotData || pilotLoading}>PDF 출력</button>
@@ -2016,12 +2095,15 @@ export default function ConsoleApp() {
                 <label style={{fontSize:12,color:'#5f6368'}}>시작일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotFrom} onChange={e=>{setPilotFrom(e.target.value);setPilotData(null);}} /></label>
                 <label style={{fontSize:12,color:'#5f6368'}}>종료일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotTo} onChange={e=>{setPilotTo(e.target.value);setPilotData(null);}} /></label>
               </div>
-              <div style={{border:'1px solid #dadce0',borderRadius:8,padding:14,marginBottom:14,background:'#f8fafc'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:10}}>
-                  <strong style={{fontSize:14}}>14일 파일럿 운영 등록</strong>
+              <div className="pilot-step-card is-soft">
+                <div className="pilot-section-heading">
+                  <div>
+                    <h3><span className="pilot-step-number">1</span>파일럿 기본 설정</h3>
+                    <p>검증할 기관과 14일 운영 기간, 대상자와 담당자를 등록합니다.</p>
+                  </div>
                   <button className="btn-download" onClick={fetchPilotPrograms}>운영 목록 새로고침</button>
                 </div>
-                <div style={{fontSize:12,color:'#5f6368',marginBottom:10}}>위 기관·시작일·종료일을 사용합니다. 종료일은 시작일 포함 정확히 14일이어야 합니다.</div>
+                <div style={{fontSize:12,color:'#5f6368',marginBottom:10}}>위에서 선택한 기관과 기간을 사용합니다. 종료일은 시작일을 포함해 정확히 14일이어야 합니다.</div>
                 <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'end'}}>
                   <label style={{fontSize:12,color:'#5f6368'}}>대상자 수<input className="form-input" type="number" min="1" max="100" style={{width:110,margin:'4px 0 0'}} value={pilotSubjectCount} onChange={e=>setPilotSubjectCount(e.target.value)}/></label>
                   <label style={{fontSize:12,color:'#5f6368'}}>운영 담당자<input className="form-input" style={{width:190,margin:'4px 0 0'}} value={pilotOwner} onChange={e=>setPilotOwner(e.target.value)} placeholder="기관 담당자 이름"/></label>
@@ -2029,17 +2111,54 @@ export default function ConsoleApp() {
                 </div>
                 {pilotPrograms.length>0 && <div style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr style={{textAlign:'left',borderBottom:'1px solid #dadce0'}}><th style={{padding:7}}>기관</th><th>기간</th><th>대상</th><th>담당자</th><th>상태</th><th>조치</th></tr></thead><tbody>{pilotPrograms.map((p:any)=><tr key={p.id} style={{borderBottom:'1px solid #e2e8f0'}}><td style={{padding:7}}>{orgName(p.orgId)}</td><td>{p.startDate} ~ {p.endDate}</td><td>{p.subjectCount}명</td><td>{p.ownerName}</td><td>{({planned:'준비',active:'운영 중',completed:'완료',stopped:'중단'} as any)[p.status]||p.status}</td><td style={{display:'flex',gap:5,padding:'5px 0'}}>{p.status==='planned'&&<button className="btn-download" onClick={()=>openPilotStatusDialog(p,'active')}>시작</button>}{p.status==='active'&&<><button className="btn-download" onClick={()=>openPilotStatusDialog(p,'completed')}>완료</button><button className="btn-download" onClick={()=>openPilotStatusDialog(p,'stopped')}>중단</button></>}</td></tr>)}</tbody></table></div>}
               </div>
+              <div className="pilot-step-card">
+                <div className="pilot-section-heading">
+                  <div>
+                    <h3><span className="pilot-step-number">2</span>일일 운영 증거</h3>
+                    <p>표본 통화와 음성 품질, 담당자 대응 시간을 날짜별로 기록합니다.</p>
+                  </div>
+                </div>
+                <div className="pilot-privacy-note"><AlertTriangle size={15}/>전화번호와 대화 원문은 입력하지 마세요. 중단 조건이 기록되면 운영 중인 파일럿은 즉시 중단됩니다.</div>
+                <div className="pilot-form-grid">
+                  <label style={{fontSize:12}}>파일럿<select className="form-input" style={{margin:'4px 0 0'}} value={pilotEvidenceProgramId} onChange={e=>{setPilotEvidenceProgramId(e.target.value);fetchPilotEvidence(e.target.value);}}><option value="">선택</option>{pilotPrograms.map((p:any)=><option key={p.id} value={p.id}>{orgName(p.orgId)} · {p.startDate}</option>)}</select></label>
+                  <label style={{fontSize:12}}>측정일<input type="date" className="form-input" style={{margin:'4px 0 0'}} value={pilotEvidenceForm.date} onChange={e=>setPilotEvidenceForm(v=>({...v,date:e.target.value}))}/></label>
+                  <label style={{fontSize:12}}>음성 품질 1~5<input type="number" min="1" max="5" step="0.1" className="form-input" style={{margin:'4px 0 0'}} value={pilotEvidenceForm.voiceQualityScore} onChange={e=>setPilotEvidenceForm(v=>({...v,voiceQualityScore:e.target.value}))}/></label>
+                  <label style={{fontSize:12}}>운영자 처리시간(분)<input type="number" min="0" className="form-input" style={{margin:'4px 0 0'}} value={pilotEvidenceForm.operatorMinutes} onChange={e=>setPilotEvidenceForm(v=>({...v,operatorMinutes:e.target.value}))}/></label>
+                  <label style={{fontSize:12}}>긴급 확인시간(분)<input type="number" min="0" className="form-input" style={{margin:'4px 0 0'}} value={pilotEvidenceForm.urgentAckMinutes} onChange={e=>setPilotEvidenceForm(v=>({...v,urgentAckMinutes:e.target.value}))} placeholder="해당 없음"/></label>
+                  <label style={{fontSize:12}}>조치 완료시간(분)<input type="number" min="0" className="form-input" style={{margin:'4px 0 0'}} value={pilotEvidenceForm.resolutionMinutes} onChange={e=>setPilotEvidenceForm(v=>({...v,resolutionMinutes:e.target.value}))} placeholder="해당 없음"/></label>
+                </div>
+                <label style={{display:'block',fontSize:12,marginTop:9}}>표본 통화 ID(쉼표 또는 공백 구분)<input className="form-input" style={{margin:'4px 0 0'}} value={pilotEvidenceForm.sampleCallIds} onChange={e=>setPilotEvidenceForm(v=>({...v,sampleCallIds:e.target.value}))} placeholder="call-id-1, call-id-2"/></label>
+                <div className="pilot-danger-options">{[['long_silence','장시간 무음'],['missing_dispatch','예약 누락'],['missing_result','결과 미저장'],['unacknowledged_risk','위험 알림 미확인']].map(([value,label])=><label key={value}><input type="checkbox" checked={pilotEvidenceForm.issueFlags.includes(value)} onChange={e=>setPilotEvidenceForm(v=>({...v,issueFlags:e.target.checked?[...v.issueFlags,value]:v.issueFlags.filter(x=>x!==value)}))}/>{label}</label>)}</div>
+                <div className="pilot-form-grid" style={{marginTop:9}}><label style={{fontSize:12}}>장애 메모<textarea className="form-input" style={{margin:'4px 0 0',minHeight:66}} maxLength={500} value={pilotEvidenceForm.incidentNote} onChange={e=>setPilotEvidenceForm(v=>({...v,incidentNote:e.target.value}))}/></label><label style={{fontSize:12}}>조치 메모<textarea className="form-input" style={{margin:'4px 0 0',minHeight:66}} maxLength={500} value={pilotEvidenceForm.actionNote} onChange={e=>setPilotEvidenceForm(v=>({...v,actionNote:e.target.value}))}/></label></div>
+                <button className="btn-primary" style={{marginTop:10}} disabled={pilotEvidenceBusy||!pilotEvidenceProgramId} onClick={savePilotEvidence}>{pilotEvidenceBusy?'저장 중...':'일일 증거 저장'}</button>
+                {pilotEvidence.length>0&&<div className="pilot-evidence-table" style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr style={{textAlign:'left',borderBottom:'1px solid #dadce0'}}><th style={{padding:7}}>날짜</th><th>통화 ID</th><th>음성</th><th>처리</th><th>긴급 확인/완료</th><th>중단 조건</th><th>수정자</th></tr></thead><tbody>{pilotEvidence.map((e:any)=><tr key={e.id} style={{borderBottom:'1px solid #e2e8f0'}}><td style={{padding:7}}>{e.date}</td><td>{e.sampleCallIds.join(', ')||'-'}</td><td>{e.voiceQualityScore.toFixed(1)}</td><td>{e.operatorMinutes}분</td><td>{e.urgentAckMinutes??'-'} / {e.resolutionMinutes??'-'}</td><td style={{color:e.issueFlags.length?'#c5221f':'#188038'}}>{e.issueFlags.join(', ')||'없음'}</td><td>{e.updatedBy}</td></tr>)}</tbody></table></div>}
+              </div>
+              <div className="pilot-step-card">
+                <div className="pilot-section-heading">
+                  <div>
+                    <h3><span className="pilot-step-number">3</span>운영 기준 판정</h3>
+                    <p>등록한 일일 증거와 예약 발신 결과를 합쳐 납품 기준 충족 여부를 확인합니다.</p>
+                  </div>
+                </div>
               {!pilotData ? (
                 <div style={{color:'#5f6368',fontSize:14,padding:'12px 4px'}}>{statsOrg?'기간을 확인하고 파일럿 조회를 누르세요.':'기관을 선택해야 파일럿 지표를 조회할 수 있습니다.'}</div>
               ) : (
                 (() => {
                   const answeredBase = pilotData.completed + pilotData.missed;
                   const connectionRate = answeredBase ? pilotData.completed / answeredBase : null;
+                  const evidence=pilotEvidence.filter((e:any)=>e.orgId===statsOrg&&e.date>=pilotFrom&&e.date<=pilotTo);
+                  const voiceAverage=evidence.length?evidence.reduce((sum:number,e:any)=>sum+Number(e.voiceQualityScore||0),0)/evidence.length:null;
+                  const ackValues=evidence.map((e:any)=>e.urgentAckMinutes).filter((v:any)=>v!=null);
+                  const resolutionValues=evidence.map((e:any)=>e.resolutionMinutes).filter((v:any)=>v!=null);
+                  const ackRate=ackValues.length?ackValues.filter((v:number)=>v<=15).length/ackValues.length:null;
+                  const resolutionRate=resolutionValues.length?resolutionValues.filter((v:number)=>v<=60).length/resolutionValues.length:null;
                   const slaRows = [
                     {label:'예약 발신률',value:pilotData.attemptRate,target:'99% 이상',pass:pilotData.attemptRate!=null&&pilotData.attemptRate>=.99,invert:false},
                     {label:'연결률',value:connectionRate,target:'80% 이상',pass:connectionRate!=null&&connectionRate>=.8,invert:false},
-                    {label:'기술 실패율',value:pilotData.technicalFailureRate,target:'1% 이하',pass:pilotData.technicalFailureRate!=null&&pilotData.technicalFailureRate<=.01,invert:true},
+                    {label:'기술 실패율',value:pilotData.technicalFailureRate,target:'1% 미만',pass:pilotData.technicalFailureRate!=null&&pilotData.technicalFailureRate<.01,invert:true},
                     {label:'결과 저장률',value:pilotData.resultCompletenessRate,target:'100%',pass:pilotData.resultCompletenessRate!=null&&pilotData.resultCompletenessRate>=1,invert:false},
+                    {label:'긴급 알림 15분 내 확인율',value:ackRate,target:'95% 이상',pass:ackRate!=null&&ackRate>=.95,invert:false},
+                    {label:'60분 내 조치 완료율',value:resolutionRate,target:'95% 이상',pass:resolutionRate!=null&&resolutionRate>=.95,invert:false},
                   ];
                   const violations = slaRows.filter(row=>row.value!=null&&!row.pass).length;
                   return <>
@@ -2079,11 +2198,13 @@ export default function ConsoleApp() {
                     </div>)}
                   </div>
                   <div style={{marginTop:14,padding:'12px 14px',border:'1px solid #e2e8f0',borderRadius:8,background:'#f8fafc',fontSize:12,color:'#64748b',lineHeight:1.7}}>
-                    위험 알림 확인 시간·조치 완료 시간·음성 품질·요금제 초과량·담당자 처리 시간은 기관별 측정 데이터가 아직 없어 `측정 전`으로 CSV에 포함됩니다. 임의 수치로 정상 판정하지 않습니다.
+                    음성 품질: {voiceAverage==null?'측정 전':`${voiceAverage.toFixed(2)}점 (${evidence.length}일)`} · 2점 이하: {evidence.filter((e:any)=>e.voiceQualityScore<=2).length}건 · 운영자 처리시간: {evidence.length?`${evidence.reduce((sum:number,e:any)=>sum+Number(e.operatorMinutes||0),0)}분`:'측정 전'}<br/>요금제 초과량은 아직 자동 연동되지 않아 `측정 전`으로 내보냅니다. 임의 수치로 정상 판정하지 않습니다.
                   </div>
                 </>;
                 })()
               )}
+              </div>
+              </div>
             </section>
           </div>
         )}
