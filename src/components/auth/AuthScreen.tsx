@@ -8,26 +8,25 @@ import {
   setPersistence, browserLocalPersistence, browserSessionPersistence,
 } from 'firebase/auth';
 import { BusinessInfo } from '../BusinessInfo';
+import './AuthScreen.css';
 
 const NAVY = '#003675', BLUE = '#246beb', GREEN = '#1d7b38';
 const PW_RE = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,20}$/;
 
-const wrap = { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f7fa', padding: 24 };
-const card = { background: '#fff', borderRadius: 16, padding: 40, width: 440, maxWidth: '100%', border: 'none', boxShadow: '0 8px 24px rgba(0,54,117,0.08)' };
-const label = { fontSize: 15, fontWeight: 700, color: '#222', margin: '16px 0 8px' };
-const input: CSSProperties = { width: '100%', height: 56, padding: '0 16px', borderRadius: 8, border: '1px solid #767676', boxSizing: 'border-box', fontSize: 17, color: '#333', outlineColor: BLUE };
-const primaryBtn = { width: '100%', height: 52, padding: '0 16px', borderRadius: 8, border: `1px solid ${BLUE}`, background: BLUE, color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', marginTop: 24 };
-const linkBtn = { background: 'none', border: 'none', color: '#164fba', fontWeight: 700, cursor: 'pointer', fontSize: 13, padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 };
-const errBox = { color: '#b42318', fontSize: 13, marginTop: 10, background: '#fff3f2', padding: '10px 12px', borderRadius: 4, borderLeft: '3px solid #d92d20' };
+const label = { fontSize: 16, fontWeight: 700, color: '#334155', margin: '22px 0 10px' };
+const input: CSSProperties = { width: '100%', height: 60, padding: '0 18px', borderRadius: 12, border: '1px solid #d8e0eb', boxSizing: 'border-box', fontSize: 17, color: '#0f172a', outlineColor: BLUE, background: '#fff' };
+const primaryBtn = { width: '100%', height: 60, padding: '0 18px', borderRadius: 12, border: `1px solid ${BLUE}`, background: BLUE, color: '#fff', fontWeight: 700, fontSize: 18, cursor: 'pointer', marginTop: 30 };
+const linkBtn = { background: 'none', border: 'none', color: '#246beb', fontWeight: 700, cursor: 'pointer', fontSize: 15, padding: 0 };
+const errBox = { color: '#b42318', fontSize: 14, marginTop: 16, background: '#fff3f2', padding: '12px 14px', borderRadius: 10, border: '1px solid #ffd9d5' };
 
 /** 비밀번호 입력 + 표시 토글 — 로그인·회원가입·초대가입 공용 */
-function PwInput({ value, onChange, placeholder, autoComplete, onKeyDown }: any) {
+function PwInput({ value, onChange, placeholder, autoComplete, onKeyDown, ariaLabel = '비밀번호' }: any) {
   const [show, setShow] = useState(false);
   return (
     <div style={{ position: 'relative' }}>
-      <input style={{ ...input, paddingRight: 52 }} type={show ? 'text' : 'password'} value={value}
+      <input style={{ ...input, paddingRight: 52 }} aria-label={ariaLabel} type={show ? 'text' : 'password'} value={value}
              onChange={onChange} onKeyDown={onKeyDown} placeholder={placeholder} autoComplete={autoComplete} />
-      <button type="button" onClick={() => setShow(s => !s)} tabIndex={-1}
+      <button type="button" onClick={() => setShow(s => !s)}
               aria-label={show ? '비밀번호 숨기기' : '비밀번호 표시'} title={show ? '비밀번호 숨기기' : '비밀번호 표시'}
               style={{ position: 'absolute', right: 6, top: 0, height: '100%', width: 42, background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#767676', padding: 0 }}>
         {show ? '숨김' : '표시'}
@@ -118,10 +117,9 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   };
 
   const Header = () => (
-    <div style={{ textAlign: 'center', marginBottom: 22 }}>
-      <img src="/youngsili.png" alt="영실이" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover' }} />
-      <div style={{ fontSize: 22, fontWeight: 900, color: NAVY, marginTop: 8 }}>AI 영실이 관제</div>
-      <div style={{ fontSize: 13, color: '#64748b' }}>기관 전용 돌봄 대시보드</div>
+    <div className="ys-auth-brand">
+      <img src="/youngsili.png" alt="" />
+      <div><strong>AI 영실이</strong><span>기관 전용 돌봄 대시보드</span></div>
     </div>
   );
 
@@ -135,7 +133,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
       setBusy(false);
     };
     return (
-      <div style={wrap}><div style={card}>
+      <main className="ys-auth-shell"><section className="ys-auth-card">
         <Header />
         <div style={{ fontSize: 18, fontWeight: 800, color: NAVY, textAlign: 'center' }}>✉️ {inviteInfo.orgName || '기관'} 초대</div>
         <div style={{ fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8 }}>{ROLE_KO[inviteInfo.role] || '구성원'} 역할로 초대되었어요. 이름을 입력하고 합류하세요.</div>
@@ -144,8 +142,8 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
         <div style={label}>휴대폰 번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택)</span></div>
         <input style={input} value={iv.phone} onChange={e => setIv(s => ({ ...s, phone: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="숫자만 입력" inputMode="numeric" />
         {err && <div style={errBox}>{err}</div>}
-        <button style={{ ...primaryBtn, background: GREEN }} disabled={busy || !iv.name.trim()} onClick={accept}>{busy ? '합류 중…' : '초대 수락하고 시작하기 →'}</button>
-      </div></div>
+        <button style={primaryBtn} disabled={busy || !iv.name.trim()} onClick={accept}>{busy ? '합류 중…' : '초대 수락하고 시작하기 →'}</button>
+      </section></main>
     );
   }
 
@@ -163,15 +161,15 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
       setBusy(false);
     };
     return (
-      <div style={wrap}><div style={card}>
+      <main className="ys-auth-shell"><section className="ys-auth-card">
         <Header />
         <div style={{ fontSize: 18, fontWeight: 800, color: NAVY, textAlign: 'center' }}>🏢 기관 정보 설정</div>
         <div style={{ fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8 }}>마지막 단계예요. 기관·단체명을 입력하면 바로 시작합니다.</div>
         <div style={label}>기관 · 단체명</div>
         <input style={input} value={orgName} onChange={e => setOrgName(e.target.value)} placeholder="예) ○○구 노인복지관" onKeyDown={e => e.key === 'Enter' && provision()} />
         {err && <div style={errBox}>{err}</div>}
-        <button style={{ ...primaryBtn, background: GREEN }} disabled={busy} onClick={provision}>{busy ? '설정 중…' : '시작하기 →'}</button>
-      </div></div>
+        <button style={primaryBtn} disabled={busy} onClick={provision}>{busy ? '설정 중…' : '시작하기 →'}</button>
+      </section></main>
     );
   }
 
@@ -250,7 +248,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   // ── 초대 링크 가입 (#invite=…) — 기관 생성 없이 초대된 기관·역할로 합류 ──
   if (inviteCode) {
     return (
-      <div style={wrap}><div style={card}>
+      <main className="ys-auth-shell"><section className="ys-auth-card">
         <Header />
         {!inviteInfo ? (
           <div style={{ textAlign: 'center', color: '#64748b', padding: 20 }}>초대 정보를 확인하는 중…</div>
@@ -277,14 +275,14 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
             <div style={label}>비밀번호 확인</div>
             <PwInput value={iv.pw2} onChange={e => setIv(s => ({ ...s, pw2: e.target.value }))} onKeyDown={e => e.key === 'Enter' && doInviteSignup()} autoComplete="new-password" placeholder="비밀번호 재입력" />
             {err && <div style={errBox}>{err}</div>}
-            <button style={{ ...primaryBtn, background: GREEN }} disabled={busy} onClick={doInviteSignup}>{busy ? '합류 중…' : '가입하고 합류하기 →'}</button>
+            <button style={primaryBtn} disabled={busy} onClick={doInviteSignup}>{busy ? '합류 중…' : '가입하고 합류하기 →'}</button>
             <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#64748b' }}>
               이미 계정이 있으면 이메일·기존 비밀번호를 입력하면 바로 합류됩니다.
             </div>
           </div>
         )}
         <BusinessInfo />
-      </div></div>
+      </section></main>
     );
   }
 
@@ -298,7 +296,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
       </div>
     );
     return (
-      <div style={wrap}><div style={card}>
+      <main className="ys-auth-shell"><section className="ys-auth-card">
         {mode === 'findId' && (
           <div>
             <FindHeader title="아이디 찾기" sub="가입 시 등록한 담당자 정보로 확인합니다" />
@@ -352,29 +350,25 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
             {backLink}
           </div>
         )}
-      </div></div>
+      </section></main>
     );
   }
 
   return (
-    <div style={wrap}><div style={card}>
+    <main className="ys-auth-shell"><section className="ys-auth-card">
       <Header />
-      {/* 탭 — P2-2: 로그인 화면에서는 회원가입 진입을 하단 링크 1곳으로 (상·하단 중복 제거) */}
-      {tab === 'signup' && (
-        <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 12, padding: 4, marginBottom: 8 }}>
-          {[['login', '로그인'], ['signup', '회원가입']].map(([k, t]) => (
-            <button key={k} onClick={() => { setTab(k); setErr(''); setMsg(''); }}
-              style={{ flex: 1, padding: 10, borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 15, background: tab === k ? BLUE : 'transparent', color: tab === k ? '#fff' : '#64748b' }}>{t}</button>
-          ))}
-        </div>
-      )}
+      <div className="ys-auth-heading">
+        <span className="ys-auth-eyebrow">기관 관리자 계정</span>
+        <h1>{tab === 'login' ? '안녕하세요, 다시 만나 반가워요' : '기관 계정을 만들어요'}</h1>
+        <p>{tab === 'login' ? '담당자 계정으로 로그인하고 오늘의 돌봄 현황을 확인하세요.' : '계정과 기관 정보를 입력하면 대시보드를 시작할 수 있어요.'}</p>
+      </div>
 
       {tab === 'login' ? (
         <div>
-          <div style={label}>아이디 (이메일)</div>
-          <input style={input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@example.com" autoComplete="username" />
+          <label style={label} htmlFor="ys-login-email">이메일</label>
+          <input id="ys-login-email" style={input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@example.com" autoComplete="username" />
           <div style={label}>비밀번호</div>
-          <PwInput value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} placeholder="비밀번호 입력" autoComplete="current-password" />
+          <PwInput ariaLabel="로그인 비밀번호" value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} placeholder="비밀번호 입력" autoComplete="current-password" />
           {/* 2026-09-09: 좁은 화면(375px)에서 "로그인 상태 유지"가 '로그인 상태'/'유지'로 쪼개지고
               오른쪽 링크와 붙어 답답했다. 줄바꿈을 허용하고 각 덩어리는 통째로 유지한다. */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -387,24 +381,27 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
               <button style={linkBtn} onClick={() => { setErr(''); setMsg(''); setFpEmail(email); setMode('findPw'); }}>비밀번호 찾기</button>
             </span>
           </div>
-          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>공용 PC에서는 사용하지 마세요. 미사용 시 브라우저 종료로 세션이 만료됩니다.</div>
+          <p className="ys-auth-hint">공용 PC에서는 로그인 상태 유지를 선택하지 마세요.</p>
           {err && <div style={errBox}>{err}</div>}
           {msg && <div style={{ ...errBox, color: GREEN, background: '#f0fdf4' }}>{msg}</div>}
           <button style={primaryBtn} disabled={busy} onClick={doLogin}>{busy ? '로그인 중…' : '로그인'}</button>
-          <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#64748b' }}>
-            기관 계정이 없으신가요? <button style={linkBtn} onClick={() => setTab('signup')}>기관 회원가입</button>
+          <div className="ys-auth-switch">
+            아직 기관 계정이 없으신가요? <button style={linkBtn} onClick={() => setTab('signup')}>기관 회원가입</button>
           </div>
         </div>
       ) : (
         <div>
-          <div style={label}>아이디 <span style={{ color: BLUE, fontWeight: 600 }}>*실제 사용하는 이메일을 입력하세요(인증 메일 발송)</span></div>
-          <input style={input} type="email" value={su.email} onChange={e => setSu(s => ({ ...s, email: e.target.value }))} placeholder="example@example.com" autoComplete="off" />
+          <div className="ys-auth-section"><span>01</span><h2>계정 정보</h2></div>
+          <label style={label} htmlFor="ys-signup-email">이메일</label>
+          <input id="ys-signup-email" style={input} type="email" value={su.email} onChange={e => setSu(s => ({ ...s, email: e.target.value }))} placeholder="example@example.com" autoComplete="email" />
+          <p className="ys-auth-hint">입력한 이메일로 인증 메일을 보내드려요.</p>
           <div style={label}>비밀번호 <span style={{ color: '#94a3b8', fontWeight: 500 }}>*영문+숫자+특수문자 8~20자</span></div>
-          <PwInput value={su.pw} onChange={e => setSu(s => ({ ...s, pw: e.target.value }))} placeholder="비밀번호 입력" autoComplete="new-password" />
+          <PwInput ariaLabel="가입 비밀번호" value={su.pw} onChange={e => setSu(s => ({ ...s, pw: e.target.value }))} placeholder="비밀번호 입력" autoComplete="new-password" />
           <div style={label}>비밀번호 확인</div>
-          <PwInput value={su.pw2} onChange={e => setSu(s => ({ ...s, pw2: e.target.value }))} placeholder="비밀번호 재입력" autoComplete="new-password" />
-          <div style={label}>기관 · 단체명</div>
-          <input style={input} value={su.org} onChange={e => setSu(s => ({ ...s, org: e.target.value }))} placeholder="예) ○○구 노인복지관 / ○○장애인자립센터" />
+          <PwInput ariaLabel="가입 비밀번호 확인" value={su.pw2} onChange={e => setSu(s => ({ ...s, pw2: e.target.value }))} placeholder="비밀번호 재입력" autoComplete="new-password" />
+          <div className="ys-auth-section"><span>02</span><h2>기관 정보</h2></div>
+          <label style={label} htmlFor="ys-signup-org">기관 · 단체명</label>
+          <input id="ys-signup-org" style={input} value={su.org} onChange={e => setSu(s => ({ ...s, org: e.target.value }))} placeholder="예) ○○구 노인복지관 / ○○장애인자립센터" />
           <div style={label}>기관 주소 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택 · 관할 지역 기상특보 연동에 사용)</span></div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input style={{ ...input, flex: 1, background: '#f8fafc' }} value={su.address} readOnly placeholder="주소 검색을 눌러 선택" />
@@ -428,8 +425,8 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
           <input style={input} value={su.phone} onChange={e => setSu(s => ({ ...s, phone: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="숫자만 입력" inputMode="numeric" />
           <div style={label}>추천인 코드 <span style={{ color: '#94a3b8', fontWeight: 500 }}>(선택)</span></div>
           <input style={input} value={su.referral} onChange={e => setSu(s => ({ ...s, referral: e.target.value }))} placeholder="추천인 코드 입력" />
-          {/* 약관 */}
-          <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12, marginTop: 16 }}>
+          <div className="ys-auth-section"><span>03</span><h2>약관 동의</h2></div>
+          <div className="ys-auth-agreements">
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, cursor: 'pointer', color: NAVY }}>
               <input type="checkbox" checked={allAgree} onChange={toggleAll} /> 약관 전체 동의
             </label>
@@ -441,13 +438,13 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
             ))}
           </div>
           {err && <div style={errBox}>{err}</div>}
-          <button style={{ ...primaryBtn, background: GREEN }} disabled={busy} onClick={doSignup}>{busy ? '가입 중…' : '가입하기'}</button>
-          <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#64748b' }}>
+          <button style={primaryBtn} disabled={busy} onClick={doSignup}>{busy ? '가입 중…' : '가입하기'}</button>
+          <div className="ys-auth-switch">
             이미 계정이 있으신가요? <button style={linkBtn} onClick={() => setTab('login')}>로그인</button>
           </div>
         </div>
       )}
       <BusinessInfo />
-    </div></div>
+    </section></main>
   );
 }

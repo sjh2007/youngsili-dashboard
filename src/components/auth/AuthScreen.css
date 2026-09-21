@@ -1,0 +1,73 @@
+.ys-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  background:
+    radial-gradient(circle at 13% 8%, rgba(36, 107, 235, .10), transparent 31%),
+    radial-gradient(circle at 90% 86%, rgba(36, 107, 235, .06), transparent 28%),
+    #f7f9fc;
+}
+
+.ys-auth-card {
+  width: min(100%, 600px);
+  padding: 52px 54px 42px;
+  background: #fff;
+  border: 1px solid #e5eaf2;
+  border-radius: 24px;
+  box-shadow: 0 22px 60px rgba(16, 41, 82, .075);
+}
+
+.ys-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 40px;
+}
+
+.ys-auth-brand img {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+.ys-auth-brand strong,
+.ys-auth-brand span { display: block; }
+.ys-auth-brand strong { color: #123767; font-size: 19px; font-weight: 800; line-height: 1.25; }
+.ys-auth-brand span { color: #78879b; font-size: 14px; margin-top: 3px; }
+
+.ys-auth-heading { margin-bottom: 36px; }
+.ys-auth-eyebrow { color: #246beb; font-size: 15px; font-weight: 800; letter-spacing: .01em; }
+.ys-auth-heading h1 { color: #12213a; font-size: clamp(27px, 5vw, 34px); font-weight: 800; line-height: 1.3; letter-spacing: -.035em; margin: 12px 0 10px; }
+.ys-auth-heading p { color: #64748b; font-size: 17px; line-height: 1.6; }
+
+.ys-auth-card label[for] { display: block; }
+.ys-auth-card input:not([type='checkbox'])::placeholder { color: #9aa7b8; }
+.ys-auth-card input:not([type='checkbox']):focus-visible,
+.ys-auth-card button:focus-visible {
+  outline: 3px solid rgba(36, 107, 235, .28);
+  outline-offset: 2px;
+}
+.ys-auth-card input[type='checkbox'] { width: 19px; height: 19px; accent-color: #246beb; flex: 0 0 auto; }
+.ys-auth-card button { font-family: inherit; transition: background-color .16s, border-color .16s, transform .16s; }
+.ys-auth-card button:disabled { cursor: not-allowed !important; opacity: .55; }
+.ys-auth-card button:not(:disabled):hover { filter: brightness(.96); }
+.ys-auth-card button:not(:disabled):active { transform: translateY(1px); }
+
+.ys-auth-hint { color: #8793a4; font-size: 14px; line-height: 1.5; margin-top: 8px; }
+.ys-auth-switch { text-align: center; margin-top: 24px; color: #64748b; font-size: 16px; }
+.ys-auth-switch button { margin-left: 4px; }
+.ys-auth-section { display: flex; align-items: center; gap: 10px; margin-top: 34px; padding-top: 24px; border-top: 1px solid #edf0f5; }
+.ys-auth-section:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+.ys-auth-section span { color: #246beb; font-size: 12px; font-weight: 800; background: #edf4ff; border-radius: 7px; padding: 5px 7px; }
+.ys-auth-section h2 { color: #172b49; font-size: 19px; font-weight: 800; }
+.ys-auth-agreements { background: #f8faff; border: 1px solid #e8edf5; border-radius: 14px; padding: 18px; margin-top: 18px; }
+
+@media (max-width: 560px) {
+  .ys-auth-shell { align-items: flex-start; padding: 0; background: #fff; }
+  .ys-auth-card { width: 100%; min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; padding: 32px 22px 40px; }
+  .ys-auth-brand { margin-bottom: 36px; }
+  .ys-auth-heading { margin-bottom: 28px; }
+}
