@@ -816,15 +816,23 @@ export default function ConsoleApp() {
     if (nextCallEngineProvider === 'openai' && callEngineProvider?.runtime?.openaiReady !== true) {
       notify('OpenAI Live가 통화 가능한 상태가 아니어서 전환할 수 없습니다.'); return;
     }
+    const confirmation = window.prompt(`신규 070 통화의 AI 엔진을 ${nextCallEngineProvider === 'gemini' ? 'Gemini Live' : 'OpenAI Live'}로 전환합니다.\n계속하려면 ENGINE CHANGE를 입력하세요.`);
+    if (confirmation !== 'ENGINE CHANGE') {
+      if (confirmation !== null) notify('확인 문구가 일치하지 않아 전환하지 않았습니다.');
+      return;
+    }
     setCallEngineBusy(true);
     try {
-      const response = await authFetch(`${SERVER_URL}/console/approvals`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'engine_change', targetId:'call-engine', reason, payload:{ provider:nextCallEngineProvider } }),
+      const response = await authFetch(`${SERVER_URL}/admin/call-engine/provider`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ provider:nextCallEngineProvider, reason }),
       });
-      await requireJson(response, 'AI 엔진 전환 승인 요청 실패');
+      const updated = await requireJson(response, 'AI 엔진 전환 실패');
+      setCallEngineProvider(updated);
+      setNextCallEngineProvider(updated.provider);
       setCallEngineReason('');
-      notify('AI 엔진 전환 승인 요청을 등록했습니다.', 'success');
+      notify('신규 070 통화의 AI 엔진을 전환했습니다.', 'success');
+      await fetchHealth();
     } catch (error:any) { notify(error?.message || 'AI 엔진 전환 실패'); }
     finally { setCallEngineBusy(false); }
   };
@@ -1727,7 +1735,7 @@ export default function ConsoleApp() {
         {page === 'approvals' && (
           <div className="fade-in">
             <section className="section">
-              <div className="script-editor-header" style={{marginBottom:12}}><div><div className="section-title" style={{marginBottom:3}}>승인 대기열</div><div style={{fontSize:12,color:'#5f6368'}}>요청자와 승인자를 분리해 재청구·환불·크레딧·기관 정지·엔진 전환·파기 재시도를 실행합니다.</div></div><button className={`btn-download ${approvalLoading?'btn-calling':''}`} onClick={fetchApprovals} disabled={approvalLoading}>{approvalLoading?'조회 중...':'새로고침'}</button></div>
+              <div className="script-editor-header" style={{marginBottom:12}}><div><div className="section-title" style={{marginBottom:3}}>승인 대기열</div><div style={{fontSize:12,color:'#5f6368'}}>요청자와 승인자를 분리해 재청구·환불·크레딧·기관 정지·파기 재시도를 실행합니다.</div></div><button className={`btn-download ${approvalLoading?'btn-calling':''}`} onClick={fetchApprovals} disabled={approvalLoading}>{approvalLoading?'조회 중...':'새로고침'}</button></div>
               <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:900}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>요청 시각</th><th style={{padding:8}}>작업</th><th style={{padding:8}}>대상</th><th style={{padding:8}}>사유</th><th style={{padding:8}}>요청자</th><th style={{padding:8}}>상태</th><th style={{padding:8}}>처리</th></tr></thead><tbody>{approvals.slice((approvalsPage-1)*PAGE_SIZE,approvalsPage*PAGE_SIZE).map((item:any)=>{const ownRequest=String(item.requesterEmail||'').toLowerCase()===String(authUser?.email||'').toLowerCase();return <tr key={item.id} style={{borderBottom:'1px solid #f1f3f4'}}><td style={{padding:8,whiteSpace:'nowrap'}}>{item.requestedAt?new Date(item.requestedAt).toLocaleString():'-'}</td><td style={{padding:8,fontWeight:700}}>{item.action}</td><td style={{padding:8}}>{item.targetId}</td><td style={{padding:8}}>{item.reason}</td><td style={{padding:8}}>{item.requesterEmail||'-'}</td><td style={{padding:8}}>{item.status}</td><td style={{padding:8}}>{item.status==='pending'?(ownRequest?<span style={{fontSize:12,color:'#b45309',fontWeight:700}}>다른 총괄 관리자의 승인 필요</span>:<div style={{display:'flex',gap:6}}><button className="btn-primary" disabled={approvalBusy===item.id} onClick={()=>decideApproval(item,true)}>승인</button><button className="btn-secondary" disabled={approvalBusy===item.id} onClick={()=>decideApproval(item,false)}>반려</button></div>):'-'}</td></tr>})}</tbody></table><Pager page={approvalsPage} setPage={setApprovalsPage} total={approvals.length}/>{!approvals.length&&!approvalLoading&&<div style={{padding:20,color:'#5f6368'}}>승인 요청이 없습니다.</div>}</div>
             </section>
             <section className="section" style={{marginTop:16}}><div className="section-title">개인정보 보존·파기 현황</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10}}>{[['보존기간',`${privacySummary?.retentionMonths??'-'}개월`],['파기 예정',`${privacySummary?.preview?.total??0}건`],['대기',`${privacySummary?.counts?.pending??0}건`],['진행 중',`${privacySummary?.counts?.running??0}건`],['실패',`${privacySummary?.counts?.failed??0}건`]].map(([label,value])=><div key={label} style={{border:'1px solid #dadce0',borderRadius:8,padding:14}}><div style={{fontSize:12,color:'#5f6368'}}>{label}</div><div style={{fontSize:22,fontWeight:700,marginTop:4}}>{value}</div></div>)}</div></section>
