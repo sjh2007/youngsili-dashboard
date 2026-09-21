@@ -843,7 +843,7 @@ export default function ConsoleApp() {
         if (!occurred||!detected||!recovered) return;
         const occurredDate=new Date(occurred),detectedDate=new Date(detected),recoveredDate=new Date(recovered);
         if ([occurredDate,detectedDate,recoveredDate].some(date=>!Number.isFinite(date.getTime())) || occurredDate>detectedDate || detectedDate>recoveredDate) { notify('장애 발생·탐지·복구 시각과 순서를 확인하세요.'); return; }
-        const checks:[string,string][]=[
+        const callChecks:[string,string][]=[
           ['imageDigestVerified','승인 이미지 digest를 실제로 대조했습니까?'],
           ['freeswitchConnected','FreeSWITCH 연결을 실제로 확인했습니까?'],
           ['audioPlaybackVerified','음성 재생을 실제로 확인했습니까?'],
@@ -851,6 +851,10 @@ export default function ConsoleApp() {
           ['noMissingDispatch','예약 누락이 없음을 확인했습니까?'],
           ['resultStorageVerified','통화 결과 저장을 실제로 확인했습니까?'],
         ];
+        const checks:[string,string][]=drill.component==='api'
+          ? [['apiReadinessVerified','복구 후 비운영 API 준비상태가 정상인지 직접 확인했습니까?'],
+             ['firestoreConnected','복구 후 비운영 API의 Firestore 연결이 정상인지 직접 확인했습니까?']]
+          : callChecks;
         for (const [key,question] of checks) {
           if (!window.confirm(question)) { notify('확인하지 못한 점검이 있어 통과 처리하지 않았습니다.'); return; }
           body[key]=true;
