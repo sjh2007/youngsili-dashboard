@@ -5733,53 +5733,6 @@ textarea, select {
 
 body, .app, .main { background: var(--ys-canvas); color: var(--ys-ink); }
 
-/* 왼쪽은 어두운 고정 레일, 본문은 밝은 작업면으로 역할을 분리한다. */
-.sidebar {
-  background:
-    radial-gradient(circle at 16% 0%, rgba(71,118,214,.20), transparent 28%),
-    var(--ys-navy);
-  border-right: 0;
-  box-shadow: 10px 0 35px rgba(15,23,42,.08);
-}
-.logo { border-bottom-color: rgba(255,255,255,.08); }
-.logo-title { color: #fff; letter-spacing: -.025em; }
-.logo-sub { color: #8fa0bc; }
-.logo-icon {
-  background: linear-gradient(145deg,#4c83f3,#285dcc);
-  box-shadow: 0 8px 20px rgba(47,111,236,.28);
-}
-.nav-cta { background: #fff; color: var(--ys-navy); box-shadow: 0 8px 20px rgba(0,0,0,.14); }
-.nav-cta:hover { background: #edf3ff; color: #174aab; }
-.nav-quick { background: rgba(255,255,255,.055); }
-.nav-quick-item { color: #c3cde0; }
-.nav-quick-item:hover { background: rgba(255,255,255,.08); box-shadow: none; }
-.nav-quick-num, .nav-quick-num svg { color: #fff; }
-.nav-quick-label { color: #8494ae; }
-.nav-search { background: rgba(255,255,255,.07); color: #9cabc1; }
-.nav-search:focus-within { background: rgba(255,255,255,.11); border-color: #789ef1; box-shadow: 0 0 0 3px rgba(88,137,240,.16); }
-.nav-search > svg, .nav-search button { color: #8fa0bc; }
-.nav-search input { color: #f8fafc; }
-.nav-search input::placeholder { color: #8391a8; }
-.nav-group-label { color: #75869f; }
-.nav-group-label:hover { color: #cbd5e1; background: rgba(255,255,255,.04); }
-.nav-chevron { color: #687a96; }
-.nav-item { color: #aebbd0; }
-.nav-item:hover { color: #fff; background: rgba(255,255,255,.065); }
-.nav-item.active { color: #fff; background: linear-gradient(90deg,rgba(67,116,221,.36),rgba(67,116,221,.18)); }
-.nav-icon, .nav-item.active .nav-icon { color: currentColor; }
-.nav-badge { background: rgba(255,255,255,.10); color: #dbe5f6; }
-.nav-group--bottom { border-top-color: rgba(255,255,255,.08); }
-.sidebar-footer { background: rgba(0,0,0,.12); border-top-color: rgba(255,255,255,.08); }
-.worker-name { color: #f8fafc; }
-.worker-region { color: #8797af; }
-.worker-avatar { color: #a9c2ff; }
-.sidebar-org-code { background: rgba(255,255,255,.06); }
-.sidebar-org-label { color: #7f90aa; }
-.sidebar-org-value { color: #e6edf8; }
-.sidebar-org-copy { color: #93b4ff; }
-.sidebar-logout { color: #9eadc2; }
-.sidebar-logout:hover { color: #fff; background: rgba(255,255,255,.07); }
-
 /* 헤더는 떠 있는 카드처럼 보이지 않는 얇은 관제 바이다. */
 .header {
   min-height: 80px;
@@ -5859,7 +5812,6 @@ body, .app, .main { background: var(--ys-canvas); color: var(--ys-ink); }
   .content { padding: 26px 26px 48px; }
 }
 @media (max-width: 1024px) {
-  .sidebar { box-shadow: 16px 0 40px rgba(15,23,42,.22); }
   .content { padding: 22px 20px 44px; }
 }
 @media (max-width: 640px) {
