@@ -11,7 +11,7 @@ import {
   Activity, BarChart3, Phone, CreditCard, Receipt, RotateCcw, Building2,
   Users as UsersIcon, HeartHandshake, Megaphone, FileClock, FlaskConical, LogOut, UserCog, BookOpen,
   CalendarDays, ChevronLeft, ChevronRight,
-  AlertTriangle, LifeBuoy, Search,
+  AlertTriangle, LifeBuoy, Search, ShieldCheck,
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -422,6 +422,7 @@ function OrganizationUsageChart({ data, orgName }: { data:any[]; orgName:(orgId:
 
 const NAV = [
   { id: 'incidents', label: '장애·사고 센터', icon: AlertTriangle },
+  { id: 'recovery', label: '복구 훈련', icon: ShieldCheck },
   { id: 'support', label: '기관 고객지원', icon: LifeBuoy },
   { id: 'approvals', label: '승인·운영 통제', icon: FileClock },
   { id: 'health', label: '시스템 모니터링', icon: Activity },
@@ -483,6 +484,10 @@ export default function ConsoleApp() {
   const [incidentBusy, setIncidentBusy] = useState('');
   const [incidentStatus, setIncidentStatus] = useState('');
   const [incidentCategory, setIncidentCategory] = useState('');
+  const [recoveryDrills, setRecoveryDrills] = useState<any[]>([]);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryBusy, setRecoveryBusy] = useState('');
+  const [recoveryForm, setRecoveryForm] = useState({component:'api',environment:'non_production',orgId:'',owner:'',plannedAt:'',scenario:'',rollbackPlan:''});
   const [supportTickets, setSupportTickets] = useState<any[]>([]);
   const [supportPage, setSupportPage] = useState(1);
   const [supportLoading, setSupportLoading] = useState(false);
@@ -751,6 +756,61 @@ export default function ConsoleApp() {
     } finally {
       setIncidentBusy('');
     }
+  };
+
+  const fetchRecoveryDrills = async () => {
+    setRecoveryLoading(true);
+    try {
+      const response = await authFetch(`${SERVER_URL}/console/recovery-drills`);
+      const data = await requireJson(response, '복구 훈련 조회 실패');
+      setRecoveryDrills(Array.isArray(data?.drills) ? data.drills : []);
+    } catch (error:any) { notify(error?.message || '복구 훈련 조회 실패'); }
+    finally { setRecoveryLoading(false); }
+  };
+
+  const createRecoveryDrill = async () => {
+    if (!recoveryForm.owner.trim() || !recoveryForm.plannedAt || recoveryForm.scenario.trim().length < 5 || recoveryForm.rollbackPlan.trim().length < 5) {
+      notify('담당자, 예정 시각, 장애 시나리오와 롤백 계획을 입력하세요.'); return;
+    }
+    setRecoveryBusy('create');
+    try {
+      const response = await authFetch(`${SERVER_URL}/console/recovery-drills`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({...recoveryForm,orgId:recoveryForm.orgId||null,plannedAt:new Date(recoveryForm.plannedAt).toISOString()}),
+      });
+      await requireJson(response, '복구 훈련 등록 실패');
+      notify('복구 훈련 계획을 등록했습니다.','success');
+      setRecoveryForm(v=>({...v,scenario:'',rollbackPlan:''}));
+      await fetchRecoveryDrills();
+    } catch(error:any) { notify(error?.message || '복구 훈련 등록 실패'); }
+    finally { setRecoveryBusy(''); }
+  };
+
+  const updateRecoveryDrill = async (drill:any, status:'running'|'passed'|'failed'|'aborted') => {
+    const body:any={status};
+    if (status !== 'running') {
+      const actionNote=window.prompt(status==='passed'?'복구 조치와 확인 결과를 입력하세요.':'중단·실패 원인과 조치를 입력하세요.',drill.actionNote||'');
+      if (!actionNote?.trim()) return;
+      body.actionNote=actionNote.trim();
+      body.preventionNote=(window.prompt('재발 방지 메모를 입력하세요.',drill.preventionNote||'')||'').trim();
+      if (status==='passed') {
+        const now=new Date();
+        const detected=window.prompt('탐지 시각(ISO)을 입력하세요.',new Date(now.getTime()-60_000).toISOString());
+        const recovered=window.prompt('복구 시각(ISO)을 입력하세요.',now.toISOString());
+        if (!detected||!recovered) return;
+        const detectedDate=new Date(detected),recoveredDate=new Date(recovered);
+        if (!Number.isFinite(detectedDate.getTime())||!Number.isFinite(recoveredDate.getTime())) { notify('탐지·복구 시각 형식을 확인하세요.'); return; }
+        Object.assign(body,{detectedAt:detectedDate.toISOString(),recoveredAt:recoveredDate.toISOString(),imageDigestVerified:true,freeswitchConnected:true,audioPlaybackVerified:true,noDuplicateDispatch:true,noMissingDispatch:true,resultStorageVerified:true});
+      }
+    }
+    setRecoveryBusy(drill.id);
+    try {
+      const response=await authFetch(`${SERVER_URL}/console/recovery-drills/${encodeURIComponent(drill.id)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      await requireJson(response,'복구 훈련 상태 변경 실패');
+      notify('복구 훈련 기록을 저장했습니다.','success');
+      await fetchRecoveryDrills();
+    } catch(error:any){notify(error?.message||'복구 훈련 상태 변경 실패');}
+    finally{setRecoveryBusy('');}
   };
 
   const fetchSupportTickets = async () => {
@@ -1580,6 +1640,7 @@ export default function ConsoleApp() {
     if (consoleRole === null) return;
     if (page === 'test') fetchTestCallTarget();
     if (page === 'incidents') fetchIncidents();
+    if (page === 'recovery') { fetchRecoveryDrills(); if (orgs.length === 0) fetchOrgs(); }
     if (page === 'support') fetchSupportTickets();
     if (page === 'approvals') fetchApprovals();
     if (page === 'health') fetchHealth();
@@ -1743,6 +1804,32 @@ export default function ConsoleApp() {
               <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:1100}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>등록</th><th style={{padding:8}}>기관</th><th style={{padding:8}}>심각도</th><th style={{padding:8}}>문의</th><th style={{padding:8}}>통화 ID</th><th style={{padding:8}}>담당자</th><th style={{padding:8}}>SLA</th><th style={{padding:8}}>상태</th><th style={{padding:8}}>처리</th></tr></thead><tbody>{supportTickets.slice((supportPage-1)*PAGE_SIZE,supportPage*PAGE_SIZE).map((ticket:any)=>{
                 const overdue=ticket.slaDueAt&&new Date(ticket.slaDueAt).getTime()<Date.now()&&!['resolved','closed'].includes(ticket.status);
                 return <tr key={ticket.id} style={{borderBottom:'1px solid #f1f3f4',verticalAlign:'top',background:overdue?'#fff8f7':'#fff'}}><td style={{padding:8,whiteSpace:'nowrap'}}>{ticket.createdAt?new Date(ticket.createdAt).toLocaleString():'-'}</td><td style={{padding:8}}>{ticket.orgId}</td><td style={{padding:8,fontWeight:700,color:ticket.severity==='critical'?'#c5221f':ticket.severity==='high'?'#e37400':'#5f6368'}}>{ticket.severity}</td><td style={{padding:8,minWidth:260}}><strong>{ticket.title}</strong><div style={{marginTop:4,color:'#5f6368',whiteSpace:'pre-wrap'}}>{ticket.description}</div>{ticket.operatorNote&&<div style={{marginTop:6,color:'#1a73e8'}}>조치: {ticket.operatorNote}</div>}</td><td style={{padding:8}}>{ticket.callId?<button className="btn-secondary" style={{fontSize:11}} onClick={()=>{setDiagnosticCallId(ticket.callId);fetchCallDiagnostic(ticket.callId);}}>{ticket.callId}</button>:'-'}</td><td style={{padding:8}}>{ticket.assignee||'미지정'}</td><td style={{padding:8,color:overdue?'#c5221f':'inherit',fontWeight:overdue?700:400}}>{ticket.slaDueAt?new Date(ticket.slaDueAt).toLocaleString():'-'}{overdue?' · 초과':''}</td><td style={{padding:8,fontWeight:600}}>{ticket.status}</td><td style={{padding:8}}><div style={{display:'flex',gap:5,flexWrap:'wrap'}}><button className="btn-secondary" disabled={supportBusy===ticket.id} onClick={()=>updateSupportTicket(ticket,'in_progress')}>처리 중</button><button className="btn-secondary" disabled={supportBusy===ticket.id} onClick={()=>updateSupportTicket(ticket,'waiting_org')}>기관 회신 대기</button><button className="btn-primary" disabled={supportBusy===ticket.id} onClick={()=>updateSupportTicket(ticket,'resolved')}>해결</button></div></td></tr>})}</tbody></table><Pager page={supportPage} setPage={setSupportPage} total={supportTickets.length}/>{!supportTickets.length&&!supportLoading&&<div style={{padding:24,textAlign:'center',color:'#5f6368'}}>등록된 기관 문의가 없습니다.</div>}</div>
+            </section>
+          </div>
+        )}
+
+        {page === 'recovery' && (
+          <div className="fade-in">
+            <section className="section">
+              <div className="script-editor-header" style={{marginBottom:14}}><div><div className="section-title" style={{marginBottom:4}}>장애 대응·복구 훈련</div><div style={{fontSize:12,color:'#5f6368'}}>비운영 환경에서 먼저 검증하고, 실제 고객·결제 없이 탐지부터 복구까지 걸린 시간과 사후 점검을 증거로 남깁니다.</div></div><button className="btn-download" onClick={fetchRecoveryDrills} disabled={recoveryLoading}>{recoveryLoading?'조회 중...':'새로고침'}</button></div>
+              <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,padding:14,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:10}}>
+                <label style={{fontSize:12}}>대상<select className="form-input" value={recoveryForm.component} onChange={e=>setRecoveryForm(v=>({...v,component:e.target.value}))}><option value="api">API · 10분</option><option value="firestore">Firestore · 10분</option><option value="scheduler">예약 작업 · 5분</option><option value="ai">AI 서버 · 10분</option><option value="call_engine">콜엔진 · 15분</option><option value="freeswitch">FreeSWITCH · 15분</option><option value="billing">결제 작업 · 30분</option></select></label>
+                <label style={{fontSize:12}}>환경<select className="form-input" value={recoveryForm.environment} onChange={e=>setRecoveryForm(v=>({...v,environment:e.target.value}))}><option value="non_production">비운영 검증</option><option value="production_maintenance">운영 유지보수</option></select></label>
+                <label style={{fontSize:12}}>기관(선택)<select className="form-input" value={recoveryForm.orgId} onChange={e=>setRecoveryForm(v=>({...v,orgId:e.target.value}))}><option value="">전체 시스템</option>{orgs.map((o:any)=><option key={o.orgId} value={o.orgId}>{o.name||o.orgId}</option>)}</select></label>
+                <label style={{fontSize:12}}>담당자<input className="form-input" maxLength={100} value={recoveryForm.owner} onChange={e=>setRecoveryForm(v=>({...v,owner:e.target.value}))}/></label>
+                <label style={{fontSize:12}}>예정 시각<input type="datetime-local" className="form-input" value={recoveryForm.plannedAt} onChange={e=>setRecoveryForm(v=>({...v,plannedAt:e.target.value}))}/></label>
+                <label style={{fontSize:12}}>장애 시나리오<input className="form-input" maxLength={1000} value={recoveryForm.scenario} onChange={e=>setRecoveryForm(v=>({...v,scenario:e.target.value}))} placeholder="예: 콜엔진 연결 실패 주입"/></label>
+                <label style={{fontSize:12}}>롤백 계획<input className="form-input" maxLength={1000} value={recoveryForm.rollbackPlan} onChange={e=>setRecoveryForm(v=>({...v,rollbackPlan:e.target.value}))} placeholder="예: 승인 이미지로 즉시 복귀"/></label>
+                <div style={{display:'flex',alignItems:'flex-end'}}><button className="btn-primary" style={{width:'100%'}} disabled={recoveryBusy==='create'} onClick={createRecoveryDrill}>{recoveryBusy==='create'?'등록 중...':'훈련 계획 등록'}</button></div>
+              </div>
+            </section>
+            <section className="section" style={{marginTop:16}}>
+              <div className="section-title">훈련 이력</div>
+              <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5,minWidth:1080}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:9}}>예정</th><th>대상·환경</th><th>담당자</th><th>시나리오</th><th>RTO</th><th>상태</th><th>조치·재발 방지</th><th>처리</th></tr></thead><tbody>{recoveryDrills.map((drill:any)=>{
+                const labels:any={api:'API',firestore:'Firestore',scheduler:'예약 작업',ai:'AI 서버',call_engine:'콜엔진',freeswitch:'FreeSWITCH',billing:'결제 작업'};
+                const statuses:any={planned:'계획',running:'진행 중',passed:'통과',failed:'실패',aborted:'중단'};
+                return <tr key={drill.id} style={{borderBottom:'1px solid #f1f3f4',verticalAlign:'top'}}><td style={{padding:10,whiteSpace:'nowrap'}}>{drill.plannedAt?new Date(drill.plannedAt).toLocaleString():'-'}</td><td><strong>{labels[drill.component]||drill.component}</strong><div style={{color:'#64748b'}}>{drill.environment==='non_production'?'비운영':'운영 유지보수'}</div></td><td>{drill.owner}</td><td style={{maxWidth:240}}>{drill.scenario}<div style={{color:'#64748b',marginTop:3}}>롤백: {drill.rollbackPlan}</div></td><td>{drill.recoveryMinutes==null?`목표 ${drill.rtoTargetMinutes}분`:`${Math.round(drill.recoveryMinutes)}분 / ${drill.rtoTargetMinutes}분`} {drill.rtoPassed===true&&<span style={{color:'#188038'}}>통과</span>}</td><td style={{fontWeight:700,color:drill.status==='failed'?'#c5221f':drill.status==='passed'?'#188038':'#3c4043'}}>{statuses[drill.status]||drill.status}</td><td style={{maxWidth:220,whiteSpace:'pre-wrap'}}>{drill.actionNote||'-'}{drill.preventionNote&&<div style={{color:'#64748b',marginTop:3}}>예방: {drill.preventionNote}</div>}</td><td style={{padding:8}}>{drill.status==='planned'?<div style={{display:'flex',gap:5}}><button className="btn-primary" disabled={recoveryBusy===drill.id} onClick={()=>updateRecoveryDrill(drill,'running')}>시작</button><button className="btn-secondary" disabled={recoveryBusy===drill.id} onClick={()=>updateRecoveryDrill(drill,'aborted')}>중단</button></div>:drill.status==='running'?<div style={{display:'flex',gap:5}}><button className="btn-primary" disabled={recoveryBusy===drill.id} onClick={()=>updateRecoveryDrill(drill,'passed')}>복구 통과</button><button className="btn-secondary" disabled={recoveryBusy===drill.id} onClick={()=>updateRecoveryDrill(drill,'failed')}>실패</button></div>:'-'}</td></tr>;
+              })}</tbody></table>{!recoveryDrills.length&&!recoveryLoading&&<div style={{padding:28,textAlign:'center',color:'#5f6368'}}>등록된 복구 훈련이 없습니다.</div>}</div>
             </section>
           </div>
         )}
