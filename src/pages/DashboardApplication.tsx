@@ -3322,7 +3322,7 @@ export default function App() {
               alertSeverity={alertSeverity} calling={calling} setCallModal={setCallModal}
               popDoneOpen={popDoneOpen} setPopDoneOpen={setPopDoneOpen} fetchPopulation={fetchPopulation}
               fetchWeather={fetchWeather} getNoResponseDays={getNoResponseDays} weatherStale={weatherStale}
-              weatherTime={weatherTime} T={T}
+              weatherTime={weatherTime} T={T} orgRegion={me?.orgRegion}
             />
           )}
 
