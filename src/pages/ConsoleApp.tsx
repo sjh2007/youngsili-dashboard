@@ -11,7 +11,7 @@ import {
   Activity, BarChart3, Phone, CreditCard, Receipt, RotateCcw, Building2,
   Users as UsersIcon, HeartHandshake, Megaphone, FileClock, FlaskConical, LogOut, UserCog, BookOpen,
   CalendarDays, ChevronLeft, ChevronRight,
-  AlertTriangle, LifeBuoy, Search, ShieldCheck,
+  AlertTriangle, LifeBuoy, Search, ShieldCheck, Terminal,
 } from 'lucide-react';
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
@@ -423,6 +423,7 @@ function OrganizationUsageChart({ data, orgName }: { data:any[]; orgName:(orgId:
 const NAV = [
   { id: 'incidents', label: '장애·사고 센터', icon: AlertTriangle },
   { id: 'recovery', label: '복구 훈련', icon: ShieldCheck },
+  { id: 'commands', label: '운영 명령 센터', icon: Terminal },
   { id: 'support', label: '기관 고객지원', icon: LifeBuoy },
   { id: 'approvals', label: '승인·운영 통제', icon: FileClock },
   { id: 'health', label: '시스템 모니터링', icon: Activity },
@@ -488,6 +489,9 @@ export default function ConsoleApp() {
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryBusy, setRecoveryBusy] = useState('');
   const [recoveryForm, setRecoveryForm] = useState({component:'api',environment:'non_production',orgId:'',owner:'',plannedAt:'',scenario:'',rollbackPlan:''});
+  const [operatorCommands, setOperatorCommands] = useState<any[]>([]);
+  const [operatorCommandBusy, setOperatorCommandBusy] = useState('');
+  const [operatorCommandReason, setOperatorCommandReason] = useState('');
   const [supportTickets, setSupportTickets] = useState<any[]>([]);
   const [supportPage, setSupportPage] = useState(1);
   const [supportLoading, setSupportLoading] = useState(false);
@@ -811,6 +815,26 @@ export default function ConsoleApp() {
       await fetchRecoveryDrills();
     } catch(error:any){notify(error?.message||'복구 훈련 상태 변경 실패');}
     finally{setRecoveryBusy('');}
+  };
+
+  const fetchOperatorCommands = async () => {
+    try {
+      const response=await authFetch(`${SERVER_URL}/console/operator-commands`);
+      const data=await requireJson(response,'운영 명령 이력 조회 실패');
+      setOperatorCommands(Array.isArray(data?.commands)?data.commands:[]);
+    } catch(error:any){notify(error?.message||'운영 명령 이력 조회 실패');}
+  };
+
+  const runOperatorCommand = async (command:string) => {
+    if (operatorCommandReason.trim().length<5){notify('실행 사유를 5자 이상 입력하세요.');return;}
+    setOperatorCommandBusy(command);
+    try{
+      const response=await authFetch(`${SERVER_URL}/console/operator-commands`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command,reason:operatorCommandReason.trim()})});
+      const result=await requireJson(response,'운영 점검 실행 실패');
+      notify(result.status==='succeeded'?'운영 점검을 완료했습니다.':'운영 점검이 실패했습니다.',result.status==='succeeded'?'success':'error');
+      await fetchOperatorCommands();
+    }catch(error:any){notify(error?.message||'운영 점검 실행 실패');}
+    finally{setOperatorCommandBusy('');}
   };
 
   const fetchSupportTickets = async () => {
@@ -1641,6 +1665,7 @@ export default function ConsoleApp() {
     if (page === 'test') fetchTestCallTarget();
     if (page === 'incidents') fetchIncidents();
     if (page === 'recovery') { fetchRecoveryDrills(); if (orgs.length === 0) fetchOrgs(); }
+    if (page === 'commands') fetchOperatorCommands();
     if (page === 'support') fetchSupportTickets();
     if (page === 'approvals') fetchApprovals();
     if (page === 'health') fetchHealth();
@@ -1804,6 +1829,26 @@ export default function ConsoleApp() {
               <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:1100}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>등록</th><th style={{padding:8}}>기관</th><th style={{padding:8}}>심각도</th><th style={{padding:8}}>문의</th><th style={{padding:8}}>통화 ID</th><th style={{padding:8}}>담당자</th><th style={{padding:8}}>SLA</th><th style={{padding:8}}>상태</th><th style={{padding:8}}>처리</th></tr></thead><tbody>{supportTickets.slice((supportPage-1)*PAGE_SIZE,supportPage*PAGE_SIZE).map((ticket:any)=>{
                 const overdue=ticket.slaDueAt&&new Date(ticket.slaDueAt).getTime()<Date.now()&&!['resolved','closed'].includes(ticket.status);
                 return <tr key={ticket.id} style={{borderBottom:'1px solid #f1f3f4',verticalAlign:'top',background:overdue?'#fff8f7':'#fff'}}><td style={{padding:8,whiteSpace:'nowrap'}}>{ticket.createdAt?new Date(ticket.createdAt).toLocaleString():'-'}</td><td style={{padding:8}}>{ticket.orgId}</td><td style={{padding:8,fontWeight:700,color:ticket.severity==='critical'?'#c5221f':ticket.severity==='high'?'#e37400':'#5f6368'}}>{ticket.severity}</td><td style={{padding:8,minWidth:260}}><strong>{ticket.title}</strong><div style={{marginTop:4,color:'#5f6368',whiteSpace:'pre-wrap'}}>{ticket.description}</div>{ticket.operatorNote&&<div style={{marginTop:6,color:'#1a73e8'}}>조치: {ticket.operatorNote}</div>}</td><td style={{padding:8}}>{ticket.callId?<button className="btn-secondary" style={{fontSize:11}} onClick={()=>{setDiagnosticCallId(ticket.callId);fetchCallDiagnostic(ticket.callId);}}>{ticket.callId}</button>:'-'}</td><td style={{padding:8}}>{ticket.assignee||'미지정'}</td><td style={{padding:8,color:overdue?'#c5221f':'inherit',fontWeight:overdue?700:400}}>{ticket.slaDueAt?new Date(ticket.slaDueAt).toLocaleString():'-'}{overdue?' · 초과':''}</td><td style={{padding:8,fontWeight:600}}>{ticket.status}</td><td style={{padding:8}}><div style={{display:'flex',gap:5,flexWrap:'wrap'}}><button className="btn-secondary" disabled={supportBusy===ticket.id} onClick={()=>updateSupportTicket(ticket,'in_progress')}>처리 중</button><button className="btn-secondary" disabled={supportBusy===ticket.id} onClick={()=>updateSupportTicket(ticket,'waiting_org')}>기관 회신 대기</button><button className="btn-primary" disabled={supportBusy===ticket.id} onClick={()=>updateSupportTicket(ticket,'resolved')}>해결</button></div></td></tr>})}</tbody></table><Pager page={supportPage} setPage={setSupportPage} total={supportTickets.length}/>{!supportTickets.length&&!supportLoading&&<div style={{padding:24,textAlign:'center',color:'#5f6368'}}>등록된 기관 문의가 없습니다.</div>}</div>
+            </section>
+          </div>
+        )}
+
+        {page === 'commands' && (
+          <div className="fade-in">
+            <section className="section">
+              <div className="script-editor-header" style={{marginBottom:14}}><div><div className="section-title" style={{marginBottom:4}}>운영 명령 센터</div><div style={{fontSize:12,color:'#5f6368'}}>등록된 읽기 전용 점검만 실행합니다. 임의 셸, sudo, 파일 변경과 비밀키 조회는 지원하지 않습니다.</div></div><button className="btn-download" onClick={fetchOperatorCommands}>이력 새로고침</button></div>
+              <div style={{background:'#fef7e0',border:'1px solid #f9ab00',borderRadius:9,padding:'10px 12px',fontSize:12,color:'#754d00',marginBottom:14}}>실행 사유와 결과는 감사 로그에 남습니다. 서비스 재시작은 제한형 호스트 관리 에이전트가 구축되기 전까지 사용할 수 없습니다.</div>
+              <label style={{display:'block',fontSize:12,fontWeight:700,marginBottom:14}}>실행 사유<input className="form-input" style={{marginTop:5,width:'100%',boxSizing:'border-box'}} maxLength={300} value={operatorCommandReason} onChange={e=>setOperatorCommandReason(e.target.value)} placeholder="예: 파일럿 시작 전 시스템 준비상태 확인"/></label>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:10}}>{[
+                ['api_readiness','API 준비상태','Firestore 연결과 예약 작업 주기를 확인합니다.'],
+                ['service_health','전체 서비스 상태','API·AI·070 콜엔진·개인정보 파기 상태를 확인합니다.'],
+                ['call_engine_status','콜엔진·FreeSWITCH','AI 엔진, 연결 상태, 승인 이미지와 모듈 상태를 확인합니다.'],
+                ['scheduler_status','예약 작업 상태','링 스윕과 자동발신 스캔의 최근 실행 시각을 확인합니다.'],
+              ].map(([command,label,description])=><div key={command} style={{border:'1px solid #dadce0',borderRadius:10,padding:14,background:'#fff'}}><div style={{fontWeight:800,fontSize:14}}>{label}</div><div style={{fontSize:12,color:'#64748b',lineHeight:1.55,minHeight:38,margin:'6px 0 12px'}}>{description}</div><button className="btn-primary" style={{width:'100%'}} disabled={!!operatorCommandBusy||operatorCommandReason.trim().length<5} onClick={()=>runOperatorCommand(command)}>{operatorCommandBusy===command?'실행 중...':'점검 실행'}</button></div>)}</div>
+            </section>
+            <section className="section" style={{marginTop:16}}>
+              <div className="section-title">최근 실행 이력</div>
+              <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5,minWidth:940}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:9}}>실행 시각</th><th>점검</th><th>실행자</th><th>사유</th><th>상태</th><th>결과</th></tr></thead><tbody>{operatorCommands.map((run:any)=><tr key={run.id} style={{borderBottom:'1px solid #f1f3f4',verticalAlign:'top'}}><td style={{padding:10,whiteSpace:'nowrap'}}>{run.startedAt?new Date(run.startedAt).toLocaleString():'-'}</td><td style={{fontWeight:700}}>{run.command}</td><td>{run.actorEmail}</td><td>{run.reason}</td><td style={{fontWeight:700,color:run.status==='succeeded'?'#188038':run.status==='failed'?'#c5221f':'#b06000'}}>{run.status}</td><td style={{maxWidth:420}}>{run.error?<span style={{color:'#c5221f'}}>{run.error}</span>:<pre style={{margin:0,whiteSpace:'pre-wrap',wordBreak:'break-word',fontSize:11,color:'#475569'}}>{run.result?JSON.stringify(run.result,null,2):'-'}</pre>}</td></tr>)}</tbody></table>{!operatorCommands.length&&<div style={{padding:28,textAlign:'center',color:'#5f6368'}}>실행 이력이 없습니다.</div>}</div>
             </section>
           </div>
         )}
