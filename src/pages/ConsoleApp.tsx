@@ -814,7 +814,7 @@ export default function ConsoleApp() {
     const reason = callEngineReason.trim();
     if (reason.length < 3) { notify('전환 사유를 3자 이상 입력해 주세요.'); return; }
     if (nextCallEngineProvider === 'openai' && callEngineProvider?.runtime?.openaiReady !== true) {
-      notify('OpenAI Realtime이 통화 가능한 상태가 아니어서 전환할 수 없습니다.'); return;
+      notify('OpenAI Live가 통화 가능한 상태가 아니어서 전환할 수 없습니다.'); return;
     }
     setCallEngineBusy(true);
     try {
@@ -1616,13 +1616,13 @@ export default function ConsoleApp() {
         </div>;
       })()}
       <nav className="gcp-sidebar" aria-label="운영 콘솔 메뉴" style={{width:232,padding:'16px 0',display:'flex',flexDirection:'column',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:9,padding:'6px 20px 18px'}}>
+        <button type="button" onClick={()=>setPage('stats')} aria-label="운영 콘솔 메인 통계로 이동" style={{display:'flex',alignItems:'center',gap:9,padding:'6px 20px 18px',border:0,background:'transparent',width:'100%',textAlign:'left',cursor:'pointer'}}>
           <div style={{width:28,height:28,borderRadius:7,background:'#1a73e8',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>영</div>
           <div>
             <div style={{fontSize:14.5,fontWeight:500,color:'#202124',lineHeight:1.2}}>AI영실이</div>
             <div style={{fontSize:11,color:'#5f6368',lineHeight:1.2}}>운영 콘솔</div>
           </div>
-        </div>
+        </button>
         {(consoleRole==='cs' ? NAV.filter(n=>CS_ALLOWED_PAGES.includes(n.id)) : NAV).map(item => {
           const Icon = item.icon;
           const active = page === item.id;
@@ -1728,7 +1728,7 @@ export default function ConsoleApp() {
           <div className="fade-in">
             <section className="section">
               <div className="script-editor-header" style={{marginBottom:12}}><div><div className="section-title" style={{marginBottom:3}}>승인 대기열</div><div style={{fontSize:12,color:'#5f6368'}}>요청자와 승인자를 분리해 재청구·환불·크레딧·기관 정지·엔진 전환·파기 재시도를 실행합니다.</div></div><button className={`btn-download ${approvalLoading?'btn-calling':''}`} onClick={fetchApprovals} disabled={approvalLoading}>{approvalLoading?'조회 중...':'새로고침'}</button></div>
-              <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:900}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>요청 시각</th><th style={{padding:8}}>작업</th><th style={{padding:8}}>대상</th><th style={{padding:8}}>사유</th><th style={{padding:8}}>요청자</th><th style={{padding:8}}>상태</th><th style={{padding:8}}>처리</th></tr></thead><tbody>{approvals.slice((approvalsPage-1)*PAGE_SIZE,approvalsPage*PAGE_SIZE).map((item:any)=><tr key={item.id} style={{borderBottom:'1px solid #f1f3f4'}}><td style={{padding:8,whiteSpace:'nowrap'}}>{item.requestedAt?new Date(item.requestedAt).toLocaleString():'-'}</td><td style={{padding:8,fontWeight:700}}>{item.action}</td><td style={{padding:8}}>{item.targetId}</td><td style={{padding:8}}>{item.reason}</td><td style={{padding:8}}>{item.requesterEmail||'-'}</td><td style={{padding:8}}>{item.status}</td><td style={{padding:8}}>{item.status==='pending'?<div style={{display:'flex',gap:6}}><button className="btn-primary" disabled={approvalBusy===item.id} onClick={()=>decideApproval(item,true)}>승인</button><button className="btn-secondary" disabled={approvalBusy===item.id} onClick={()=>decideApproval(item,false)}>반려</button></div>:'-'}</td></tr>)}</tbody></table><Pager page={approvalsPage} setPage={setApprovalsPage} total={approvals.length}/>{!approvals.length&&!approvalLoading&&<div style={{padding:20,color:'#5f6368'}}>승인 요청이 없습니다.</div>}</div>
+              <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:900}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>요청 시각</th><th style={{padding:8}}>작업</th><th style={{padding:8}}>대상</th><th style={{padding:8}}>사유</th><th style={{padding:8}}>요청자</th><th style={{padding:8}}>상태</th><th style={{padding:8}}>처리</th></tr></thead><tbody>{approvals.slice((approvalsPage-1)*PAGE_SIZE,approvalsPage*PAGE_SIZE).map((item:any)=>{const ownRequest=String(item.requesterEmail||'').toLowerCase()===String(authUser?.email||'').toLowerCase();return <tr key={item.id} style={{borderBottom:'1px solid #f1f3f4'}}><td style={{padding:8,whiteSpace:'nowrap'}}>{item.requestedAt?new Date(item.requestedAt).toLocaleString():'-'}</td><td style={{padding:8,fontWeight:700}}>{item.action}</td><td style={{padding:8}}>{item.targetId}</td><td style={{padding:8}}>{item.reason}</td><td style={{padding:8}}>{item.requesterEmail||'-'}</td><td style={{padding:8}}>{item.status}</td><td style={{padding:8}}>{item.status==='pending'?(ownRequest?<span style={{fontSize:12,color:'#b45309',fontWeight:700}}>다른 총괄 관리자의 승인 필요</span>:<div style={{display:'flex',gap:6}}><button className="btn-primary" disabled={approvalBusy===item.id} onClick={()=>decideApproval(item,true)}>승인</button><button className="btn-secondary" disabled={approvalBusy===item.id} onClick={()=>decideApproval(item,false)}>반려</button></div>):'-'}</td></tr>})}</tbody></table><Pager page={approvalsPage} setPage={setApprovalsPage} total={approvals.length}/>{!approvals.length&&!approvalLoading&&<div style={{padding:20,color:'#5f6368'}}>승인 요청이 없습니다.</div>}</div>
             </section>
             <section className="section" style={{marginTop:16}}><div className="section-title">개인정보 보존·파기 현황</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10}}>{[['보존기간',`${privacySummary?.retentionMonths??'-'}개월`],['파기 예정',`${privacySummary?.preview?.total??0}건`],['대기',`${privacySummary?.counts?.pending??0}건`],['진행 중',`${privacySummary?.counts?.running??0}건`],['실패',`${privacySummary?.counts?.failed??0}건`]].map(([label,value])=><div key={label} style={{border:'1px solid #dadce0',borderRadius:8,padding:14}}><div style={{fontSize:12,color:'#5f6368'}}>{label}</div><div style={{fontSize:22,fontWeight:700,marginTop:4}}>{value}</div></div>)}</div></section>
             <section className="section" style={{marginTop:16}}><div className="section-title">외부 운영 알림 전달 내역</div><div style={{fontSize:12,color:'#5f6368',marginBottom:10}}>웹훅에는 심각도·제목·기관 ID만 전송하며 전화번호와 대화 원문은 포함하지 않습니다.</div><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}><thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}><th style={{padding:8}}>시각</th><th style={{padding:8}}>심각도</th><th style={{padding:8}}>내용</th><th style={{padding:8}}>기관</th><th style={{padding:8}}>상태</th></tr></thead><tbody>{notificationDeliveries.slice(0,50).map((item:any)=><tr key={item.id} style={{borderBottom:'1px solid #f1f3f4'}}><td style={{padding:8}}>{item.createdAt?new Date(item.createdAt).toLocaleString():'-'}</td><td style={{padding:8}}>{item.severity}</td><td style={{padding:8}}>{item.title}</td><td style={{padding:8}}>{item.orgId||'전체'}</td><td style={{padding:8}}>{item.status}</td></tr>)}</tbody></table>{!notificationDeliveries.length&&<div style={{padding:20,color:'#5f6368'}}>전달 기록이 없습니다.</div>}</div></section>
@@ -1746,7 +1746,7 @@ export default function ConsoleApp() {
                     const selected = nextCallEngineProvider === provider;
                     const unavailable = provider === 'openai' && callEngineProvider.runtime?.openaiReady !== true;
                     return <button key={provider} type="button" disabled={callEngineBusy || unavailable} onClick={()=>setNextCallEngineProvider(provider)} style={{textAlign:'left',minWidth:230,flex:'1 1 230px',padding:'14px 16px',borderRadius:10,border:`2px solid ${selected?'#246beb':'#e2e8f0'}`,background:selected?'#f4f7ff':'#fff',cursor:unavailable?'not-allowed':'pointer',opacity:unavailable ? .55 : 1}}>
-                      <div style={{fontSize:15,fontWeight:800,color:'#0f172a'}}>{provider === 'gemini' ? 'Gemini Live' : 'OpenAI Realtime'}</div>
+                      <div style={{fontSize:15,fontWeight:800,color:'#0f172a'}}>{provider === 'gemini' ? 'Gemini Live' : 'OpenAI Live'}</div>
                       <div style={{fontSize:12,color:'#64748b',marginTop:4}}>{provider === callEngineProvider.provider ? '현재 신규 통화에 적용 중' : unavailable ? '사용 준비 필요' : '선택 가능'}</div>
                     </button>;
                   })}
@@ -1756,10 +1756,10 @@ export default function ConsoleApp() {
                   <button className={`btn-download ${callEngineBusy?'btn-calling':''}`} disabled={callEngineBusy || nextCallEngineProvider===callEngineProvider.provider} onClick={updateCallEngineProvider}>{callEngineBusy?'변경 중...':'선택한 엔진 적용'}</button>
                 </div>
                 <div style={{fontSize:12,color:callEngineProvider.runtime?.reachable?'#188038':'#c5221f',marginTop:10}}>
-                  콜엔진 {callEngineProvider.runtime?.reachable?'연결됨':'상태 확인 실패'} · OpenAI Realtime {callEngineProvider.runtime?.openaiReady===true?'통화 가능':callEngineProvider.runtime?.openaiConfigured===true?'사용 불가':'키 미설정 또는 확인 불가'}
+                  콜엔진 {callEngineProvider.runtime?.reachable?'연결됨':'상태 확인 실패'} · OpenAI Live {callEngineProvider.runtime?.openaiReady===true?'통화 가능':callEngineProvider.runtime?.openaiConfigured===true?'사용 불가':'키 미설정 또는 확인 불가'}
                   {callEngineProvider.changedAt && ` · 마지막 변경 ${new Date(callEngineProvider.changedAt).toLocaleString()} ${callEngineProvider.changedByEmail || ''}`}
                 </div>
-                {callEngineProvider.runtime?.openaiConfigured===true && callEngineProvider.runtime?.openaiReady!==true && <div style={{fontSize:12,color:'#b45309',marginTop:6}}>OpenAI 계정의 API 크레딧과 Realtime 사용 권한을 확인해 주세요.</div>}
+                {callEngineProvider.runtime?.openaiConfigured===true && callEngineProvider.runtime?.openaiReady!==true && <div style={{fontSize:12,color:'#b45309',marginTop:6}}>OpenAI 계정의 API 크레딧과 Live 사용 권한을 확인해 주세요.</div>}
                 <div style={{marginTop:16,borderTop:'1px solid #e8eaed',paddingTop:14}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:10}}>
                     <strong style={{fontSize:13}}>070 런타임 무결성·음성 품질</strong>
