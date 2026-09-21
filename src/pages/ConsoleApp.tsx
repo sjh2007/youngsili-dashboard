@@ -581,6 +581,8 @@ export default function ConsoleApp() {
   const [pilotPrograms, setPilotPrograms] = useState<any[]>([]);
   const [pilotOwner, setPilotOwner] = useState('');
   const [pilotSubjectCount, setPilotSubjectCount] = useState('10');
+  const [pilotParticipantPhones, setPilotParticipantPhones] = useState('');
+  const [pilotReportId, setPilotReportId] = useState('');
   const [pilotProgramBusy, setPilotProgramBusy] = useState(false);
   const [pilotStatusDialog, setPilotStatusDialog] = useState<{program:any;status:'active'|'completed'|'stopped'}|null>(null);
   const [pilotStatusReason, setPilotStatusReason] = useState('');
@@ -1323,9 +1325,11 @@ export default function ConsoleApp() {
   const orgName = (orgId: string) => orgs.find((o: any) => o.orgId === orgId)?.name || orgId;
   const fetchPilotMetrics = async () => {
     if (!statsOrg) { notify('파일럿 기관을 먼저 선택하세요'); return; }
+    if (!pilotReportId) { notify('대상자가 지정된 파일럿을 선택하세요'); return; }
     setPilotLoading(true);
     try {
       const params = new URLSearchParams({ org: statsOrg, from: pilotFrom, to: pilotTo });
+      params.set('pilotId', pilotReportId);
       const r = await authFetch(`${SERVER_URL}/console/pilot-metrics?${params.toString()}`);
       const raw = await requireJson(r, '파일럿 지표 조회 실패');
       setPilotData(parseOr(PilotMetricsSchema, raw, null));
@@ -1340,11 +1344,14 @@ export default function ConsoleApp() {
   };
   const createPilotProgram = async () => {
     if (!statsOrg || !pilotOwner.trim()) { notify('기관과 운영 담당자를 입력하세요'); return; }
+    const participantPhones = pilotParticipantPhones.split(/[\s,]+/).map(v=>v.replace(/-/g,'')).filter(Boolean);
+    if (participantPhones.length !== Number(pilotSubjectCount)) { notify('대상자 번호를 대상자 수만큼 입력하세요'); return; }
     setPilotProgramBusy(true);
     try {
-      const r = await authFetch(`${SERVER_URL}/console/pilot-programs`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orgId:statsOrg,startDate:pilotFrom,endDate:pilotTo,subjectCount:Number(pilotSubjectCount),ownerName:pilotOwner.trim(),callMode:'pstn070'})});
+      const r = await authFetch(`${SERVER_URL}/console/pilot-programs`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orgId:statsOrg,startDate:pilotFrom,endDate:pilotTo,subjectCount:Number(pilotSubjectCount),participantPhones,ownerName:pilotOwner.trim(),callMode:'pstn070'})});
       await requireJson(r, '파일럿 운영 등록 실패');
       notify('14일 파일럿 계획을 등록했습니다');
+      setPilotParticipantPhones('');
       await fetchPilotPrograms();
     } catch (e:any) { notify(e?.message || '파일럿 운영 등록 실패'); }
     finally { setPilotProgramBusy(false); }
@@ -1413,7 +1420,7 @@ export default function ConsoleApp() {
 
   const downloadPilotSlaCsv = () => {
     if (!pilotData || !statsOrg) { notify('먼저 기관 SLA 지표를 조회하세요'); return; }
-    const evidence=pilotEvidence.filter((e:any)=>e.orgId===statsOrg&&e.date>=pilotFrom&&e.date<=pilotTo);
+    const evidence=pilotEvidence.filter((e:any)=>e.pilotId===pilotReportId&&e.date>=pilotFrom&&e.date<=pilotTo);
     const terminal = pilotData.completed + pilotData.missed + pilotData.failed;
     const answeredBase = pilotData.completed + pilotData.missed;
     const connectionRate = answeredBase ? pilotData.completed / answeredBase : null;
@@ -1458,7 +1465,7 @@ export default function ConsoleApp() {
 
   const printPilotSlaPdf = () => {
     if (!pilotData || !statsOrg) { notify('먼저 기관 SLA 지표를 조회하세요'); return; }
-    const evidence=pilotEvidence.filter((e:any)=>e.orgId===statsOrg&&e.date>=pilotFrom&&e.date<=pilotTo);
+    const evidence=pilotEvidence.filter((e:any)=>e.pilotId===pilotReportId&&e.date>=pilotFrom&&e.date<=pilotTo);
     const popup = window.open('', '_blank', 'noopener,noreferrer');
     if (!popup) { notify('PDF 출력을 위해 팝업을 허용해 주세요'); return; }
     const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c] || c));
@@ -2254,18 +2261,22 @@ export default function ConsoleApp() {
                 <div style={{display:'flex',gap:8}}>
                   <button className="btn-download" onClick={printPilotSlaPdf} disabled={!pilotData || pilotLoading}>PDF 출력</button>
                   <button className="btn-download" onClick={downloadPilotSlaCsv} disabled={!pilotData || pilotLoading}>CSV 다운로드</button>
-                  <button className={`btn-download ${pilotLoading?'btn-calling':''}`} onClick={fetchPilotMetrics} disabled={pilotLoading || !statsOrg}>
+                  <button className={`btn-download ${pilotLoading?'btn-calling':''}`} onClick={fetchPilotMetrics} disabled={pilotLoading || !statsOrg || !pilotReportId}>
                     {pilotLoading?'조회 중...':'SLA 조회'}
                   </button>
                 </div>
               </div>
               <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
-                <select aria-label="파일럿 보고서 기관" className="form-input" style={{width:240,margin:0}} value={statsOrg} onChange={e=>{setStatsOrg(e.target.value);setPilotData(null);}}>
+                <select aria-label="파일럿 보고서 기관" className="form-input" style={{width:240,margin:0}} value={statsOrg} onChange={e=>{setStatsOrg(e.target.value);setPilotReportId('');setPilotData(null);setPilotEvidence([]);}}>
                   <option value="">보고서 기관 선택</option>
                   {orgs.map((o:any)=>(<option key={o.orgId} value={o.orgId}>{o.name} ({o.code})</option>))}
                 </select>
                 <label style={{fontSize:12,color:'#5f6368'}}>시작일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotFrom} onChange={e=>{setPilotFrom(e.target.value);setPilotData(null);}} /></label>
                 <label style={{fontSize:12,color:'#5f6368'}}>종료일 <input type="date" className="form-input" style={{width:150,margin:'4px 0 0'}} value={pilotTo} onChange={e=>{setPilotTo(e.target.value);setPilotData(null);}} /></label>
+                <select aria-label="파일럿 대상 보고서" className="form-input" style={{width:260,margin:0}} value={pilotReportId} onChange={e=>{const id=e.target.value;const selected=pilotPrograms.find((p:any)=>p.id===id);setPilotReportId(id);setPilotData(null);if(selected){setPilotFrom(selected.startDate);setPilotTo(selected.endDate);}fetchPilotEvidence(id);}}>
+                  <option value="">대상자가 지정된 파일럿 선택</option>
+                  {pilotPrograms.filter((p:any)=>p.orgId===statsOrg&&p.participantCount>0).map((p:any)=><option key={p.id} value={p.id}>{p.startDate} · {p.participantCount}명</option>)}
+                </select>
               </div>
               <div className="pilot-step-card is-soft">
                 <div className="pilot-section-heading">
@@ -2278,6 +2289,7 @@ export default function ConsoleApp() {
                 <div style={{fontSize:12,color:'#5f6368',marginBottom:10}}>위에서 선택한 기관과 기간을 사용합니다. 종료일은 시작일을 포함해 정확히 14일이어야 합니다.</div>
                 <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'end'}}>
                   <label style={{fontSize:12,color:'#5f6368'}}>대상자 수<input className="form-input" type="number" min="1" max="100" style={{width:110,margin:'4px 0 0'}} value={pilotSubjectCount} onChange={e=>setPilotSubjectCount(e.target.value)}/></label>
+                  <label style={{fontSize:12,color:'#5f6368'}}>대상자 번호<input className="form-input" type="text" inputMode="tel" autoComplete="off" style={{width:230,margin:'4px 0 0'}} value={pilotParticipantPhones} onChange={e=>setPilotParticipantPhones(e.target.value)} placeholder="쉼표로 구분"/></label>
                   <label style={{fontSize:12,color:'#5f6368'}}>운영 담당자<input className="form-input" style={{width:190,margin:'4px 0 0'}} value={pilotOwner} onChange={e=>setPilotOwner(e.target.value)} placeholder="기관 담당자 이름"/></label>
                   <button className="btn-primary" disabled={pilotProgramBusy||!statsOrg} onClick={createPilotProgram}>{pilotProgramBusy?'등록 중...':'계획 등록'}</button>
                 </div>
@@ -2318,7 +2330,7 @@ export default function ConsoleApp() {
                 (() => {
                   const answeredBase = pilotData.completed + pilotData.missed;
                   const connectionRate = answeredBase ? pilotData.completed / answeredBase : null;
-                  const evidence=pilotEvidence.filter((e:any)=>e.orgId===statsOrg&&e.date>=pilotFrom&&e.date<=pilotTo);
+                  const evidence=pilotEvidence.filter((e:any)=>e.pilotId===pilotReportId&&e.date>=pilotFrom&&e.date<=pilotTo);
                   const voiceAverage=evidence.length?evidence.reduce((sum:number,e:any)=>sum+Number(e.voiceQualityScore||0),0)/evidence.length:null;
                   const ackValues=evidence.map((e:any)=>e.urgentAckMinutes).filter((v:any)=>v!=null);
                   const resolutionValues=evidence.map((e:any)=>e.resolutionMinutes).filter((v:any)=>v!=null);
