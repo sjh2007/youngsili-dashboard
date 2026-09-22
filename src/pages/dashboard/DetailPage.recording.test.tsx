@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import DetailPage from './DetailPage';
 import { authFetch } from '../../utils/api';
+import { recordingWavFixture } from '../../test/fixtures/recordingWav';
 
 jest.mock('../../utils/api', () => ({ authFetch: jest.fn(), SERVER_URL: 'https://api.fixture.invalid' }));
 const fetchMock = authFetch as jest.Mock;
@@ -18,7 +19,8 @@ beforeEach(() => {
   fetchMock.mockReset().mockImplementation(async (url: string) => {
     if (url.endsWith('/config')) return response(config);
     if (url.endsWith('/consent/status')) return response({ enabled: false, version: 'recording-v1', retentionMonths: 12 });
-    if (url.includes('/audio?')) return { ok: true, blob: async () => new Blob(['audio'], { type: 'audio/mpeg' }) };
+    if (url.includes('/audio?format=wav&purpose=play')) return { ok: true, blob: async () => recordingWavFixture() };
+    if (url.includes('/audio?')) return { ok: true, blob: async () => new Blob(['audio'], { type: url.includes('format=mp3') ? 'audio/mpeg' : 'audio/wav' }) };
     return response({ state: 'ready', channel: url.endsWith('dispatch_app') ? 'app' : 'pstn', durationSec: 20, formats: ['mp3', 'wav'], retentionMonths: 12 });
   });
   URL.createObjectURL = jest.fn().mockReturnValue('blob:detail-recording');
@@ -40,15 +42,17 @@ it('shows consent and separate recordings for this elder’s app and PSTN calls'
   const checks = await screen.findAllByRole('button', { name: '녹음 확인' });
   expect(checks).toHaveLength(2);
   fireEvent.click(checks[0]);
-  fireEvent.click(await screen.findByRole('button', { name: '다시 듣기' }));
+  await screen.findByRole('button', { name: '다시 듣기' });
   await waitFor(() => expect(screen.getByLabelText('통화 녹음 재생')).toHaveAttribute('src', 'blob:detail-recording'));
-  expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/dispatch_app/audio?format=mp3&purpose=play'), expect.anything());
+  expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/dispatch_app/audio?format=wav&purpose=play'), expect.anything());
   fireEvent.click(checks[1]);
-  await waitFor(() => expect(screen.getAllByRole('button', { name: 'MP3 다운로드' })).toHaveLength(2));
-  expect(screen.getAllByRole('button', { name: 'WAV 다운로드' })).toHaveLength(2);
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/dispatch_pstn/audio?format=wav&purpose=play'), expect.anything()));
+  await waitFor(() => expect(screen.getAllByRole('button', { name: 'MP3 다운로드' })).toHaveLength(1));
+  expect(screen.getAllByRole('button', { name: 'WAV 다운로드' })).toHaveLength(1);
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:detail-recording');
   expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/dispatch_pstn$/), expect.anything());
   const download = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-  fireEvent.click(screen.getAllByRole('button', { name: 'WAV 다운로드' })[1]);
+  fireEvent.click(screen.getByRole('button', { name: 'WAV 다운로드' }));
   await waitFor(() => expect(download).toHaveBeenCalled());
   expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/dispatch_pstn/audio?format=wav&purpose=download'), expect.anything());
   page.rerender(view({ ...selected, id: 'other', phone: '01000000001' }));

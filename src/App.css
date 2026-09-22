@@ -5820,3 +5820,57 @@ body, .app, .main { background: var(--ys-canvas); color: var(--ys-ink); }
   .dashboard-welcome h1 { font-size: 23px; }
   .dashboard-page .stat-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
+
+/* 통화 녹음 — 대화의 두 채널을 실제 파형으로 보여 주는 기록 카드 */
+.recording-entry { width: 100%; margin: 10px 0 3px; font-size: 14px; }
+.recording-entry button { font: inherit; cursor: pointer; }
+.recording-entry button:disabled { cursor: wait; opacity: .65; }
+.recording-entry button:focus-visible, .recording-wave input:focus-visible { outline: 3px solid #246beb; outline-offset: 3px; }
+.recording-open { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 13px; color: #2059b8; background: #edf4ff; border: 1px solid #cbdcfb; border-radius: 10px; font-weight: 750 !important; transition: background .15s, border-color .15s; }
+.recording-open:hover { background: #e3eeff; border-color: #9abaf2; }
+.recording-card { overflow: hidden; max-width: 760px; background: #fff; border: 1px solid #dfe7f1; border-radius: 16px; box-shadow: 0 6px 26px rgba(20,44,85,.06); }
+.recording-card-head { display: flex; align-items: center; gap: 12px; min-height: 74px; padding: 15px 20px; background: linear-gradient(110deg,#f5f8ff,#fff 75%); border-bottom: 1px solid #e8edf5; }
+.recording-card-mark { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 11px; color: #2767d6; background: #e7f0ff; }
+.recording-card-titles { display: flex; flex-direction: column; min-width: 0; gap: 3px; }
+.recording-card-titles strong { color: #172033; font-size: 16px; line-height: 1.2; letter-spacing: -.02em; }
+.recording-card-titles span { color: #596a84; font-size: 12px; }
+.recording-ready { flex: none; margin-left: auto; padding: 5px 9px; border-radius: 99px; color: #126d3f; background: #e8f8ef; font-size: 12px; font-weight: 750; }
+.recording-wave { position: relative; height: 153px; margin: 17px 20px 0; padding: 20px 14px 14px 60px; background: #fbfcff; border: 1px solid #e4eaf3; border-radius: 12px; }
+.recording-wave::before { content: ''; position: absolute; top: 20px; bottom: 14px; left: 59px; width: 1px; background: #e5e9f0; }
+.recording-wave-labels { position: absolute; top: 20px; bottom: 14px; left: 11px; display: flex; flex-direction: column; justify-content: space-around; width: 42px; color: #697386; font-size: 11px; font-weight: 750; text-align: center; }
+.recording-wave-labels span:first-child { color: #7357d9; }
+.recording-wave-labels span:last-child { color: #9a4d0c; }
+.recording-wave svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.recording-wave input[type='range'] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.recording-wave:focus-within { outline: 3px solid #246beb; outline-offset: 3px; }
+.recording-wave-unavailable { display: grid; place-items: center; height: 100%; color: #66758c; font-size: 13px; }
+.recording-time { display: flex; justify-content: space-between; margin: 7px 22px 0; color: #596a84; font-size: 12px; font-variant-numeric: tabular-nums; }
+.recording-transport { display: flex; align-items: center; gap: 8px; min-height: 69px; padding: 10px 20px 16px; }
+.recording-play { display: grid; place-items: center; flex: none; width: 44px; height: 44px; color: #fff; background: #246beb; border: 1px solid #246beb; border-radius: 12px; }
+.recording-play:hover { background: #1759d7; }
+.recording-skip { display: flex; align-items: center; justify-content: center; gap: 1px; min-width: 44px; height: 44px; color: #475467; background: #fff; border: 1px solid transparent; border-radius: 10px; }
+.recording-skip:hover, .recording-speed:hover { color: #2059b8; background: #eef4ff; }
+.recording-skip small { font-size: 10px; font-weight: 750; }
+.recording-speed { min-width: 48px; height: 44px; margin-left: 3px; color: #475467; background: #f3f6fb; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px !important; font-weight: 800 !important; }
+.recording-transport-note { margin-left: auto; color: #66758c; font-size: 12px; }
+.recording-card-hint { margin: 18px 20px; color: #697386; }
+.recording-card-hint button { margin-left: 5px; color: #2059b8; background: transparent; border: 0; font-weight: 750; text-decoration: underline; }
+.recording-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 20px; background: #f8faff; border-top: 1px solid #e8edf5; }
+.recording-card-footer > span { color: #596a84; font-size: 11px; }
+.recording-downloads { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.recording-downloads button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 44px; padding: 7px 11px; color: #285aab; background: #fff; border: 1px solid #cfdcf0; border-radius: 9px; font-size: 12px; font-weight: 750; }
+.recording-downloads button:hover { background: #edf4ff; border-color: #9bb9ed; }
+.recording-downloads .recording-refresh { color: #66758c; border-color: transparent; background: transparent; }
+.recording-state, .recording-message { max-width: 760px; padding: 12px 14px; color: #915a15; background: #fff8ea; border: 1px solid #f5dfb8; border-radius: 10px; line-height: 1.5; }
+.recording-state button { margin-left: 10px; color: #2059b8; background: transparent; border: 0; font-weight: 750; text-decoration: underline; }
+.recording-message { margin: 8px 0 0; }
+@media (max-width: 640px) {
+  .recording-card-head { padding: 14px; }
+  .recording-wave { margin: 12px 12px 0; padding-left: 49px; }
+  .recording-wave::before { left: 48px; }
+  .recording-wave-labels { left: 5px; width: 40px; }
+  .recording-transport { padding: 9px 13px 14px; }
+  .recording-transport-note { display: none; }
+  .recording-card-footer { align-items: flex-start; flex-direction: column; padding: 13px; }
+  .recording-downloads { justify-content: flex-start; }
+}
