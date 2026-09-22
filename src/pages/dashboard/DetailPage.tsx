@@ -1,6 +1,7 @@
 // DashboardApplication.tsx의 page==='detail'(어르신 상세 정보) 블록을 그대로 옮긴 것 —
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-08).
 import { CallTranscript } from '../../components/common';
+import { CallRecording, RecordingConsent, RecordingProvider } from '../../components/common/CallRecording';
 import { StatusBadge } from '../../components/ui';
 import { STATUS_CONFIG, RISK_CONFIG } from '../../constants/app';
 import { CARE_GROUPS } from '../dashboardConstants';
@@ -12,8 +13,10 @@ export default function DetailPage(props: any) {
     caseNotes, CASE_TYPE_META, CASE_CAT_META, isAutoDraft, AutoDraftBadge, copyNote, copiedNoteId,
     openEditNote, deleteNote, openNewNote,
   } = props;
+  const phone = String(selected.phone || '').replace(/\D/g, '');
 
   return (
+    <RecordingProvider key={phone || selected.id}>
     <div className="fade-in detail-page">
       <div className="detail-topbar">
         <button className="back-btn" onClick={()=>{setPage('elders');setSelected(null);}}>← 목록으로</button>
@@ -54,9 +57,14 @@ export default function DetailPage(props: any) {
             <div className="script-editor-header" style={{marginBottom:12}}>
               <div className="section-title" style={{marginBottom:0}}>통화 기록</div>
             </div>
+            <RecordingConsent phone={phone} />
+            <p style={{color:'#64748b',fontSize:15,lineHeight:1.5}}>동의 등록 후 새 앱·070 통화의 녹음을 각각 확인하고 재생하거나 MP3/WAV로 다운로드할 수 있습니다.</p>
             {(()=>{
-              // 통화기록 메뉴와 동일한 서버 데이터(callsHistory)에서 이 어르신만 필터 (이름 또는 전화번호 매칭)
-              const mine = callsHistory.filter(c=>c.elderName===selected.name||(c.phone&&selected.phone&&String(c.phone).replace(/\D/g,'')===String(selected.phone).replace(/\D/g,'')));
+              // 전화번호가 있으면 동명이인의 통화를 제외한다. 번호 없는 과거 기록은 텍스트만 제공한다.
+              const mine = callsHistory.filter(c=>{
+                const callPhone = String(c.phone || '').replace(/\D/g, '');
+                return callPhone && phone ? callPhone === phone : !!selected.name && c.elderName === selected.name;
+              });
               if(mine.length===0) return <div style={{color:'#9ca3af',fontSize:17,padding:'16px 0'}}>통화 기록 없음</div>;
               return mine.map(c=>{
                 const R=RISK_CONFIG[c.riskLevel]||{};
@@ -74,6 +82,9 @@ export default function DetailPage(props: any) {
                       {draftingCallId===c.id?'초안 생성 중…':'일지 작성'}
                     </button>
                     <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
+                    {phone && String(c.phone || '').replace(/\D/g, '') === phone && (
+                      <div style={{flexBasis:'100%'}}><CallRecording callId={String(c.callId || c.id || '')} /></div>
+                    )}
                   </div>
                 );
               });
@@ -114,5 +125,6 @@ export default function DetailPage(props: any) {
         </div>
       </div>
     </div>
+    </RecordingProvider>
   );
 }
