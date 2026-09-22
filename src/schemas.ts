@@ -334,6 +334,16 @@ export const HostResourcesSchema = loose({
   })),
 });
 
+// GET /console/ai-credential-status — never includes the raw API key or balance.
+export const AiCredentialStatusSchema = z.discriminatedUnion('available', [
+  loose({ available: z.literal(false), error: z.string() }),
+  loose({
+    available: z.literal(true), configured: z.boolean(), keySuffix: z.string().nullable(),
+    fingerprint: z.string().nullable(), model: z.string(),
+    lastLive: loose({ state: z.enum(['unknown', 'connected', 'connection_error', 'credits_depleted']), observedAt: z.string().nullable() }),
+  }),
+]);
+
 // GET /console/pilot-metrics — 예약 안부전화만 분리한 기관 파일럿 지표.
 export const PilotMetricsSchema = loose({
   orgId: z.string(),

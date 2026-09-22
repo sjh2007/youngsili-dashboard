@@ -16,6 +16,7 @@ import {
 import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
 import { CallEngineProviderSchema, HostResourcesSchema, OpsMetricsSchema, PilotDailyEvidenceListSchema, PilotMetricsSchema, parseOr } from '../schemas';
+import { fetchAiCredentialStatus } from '../utils/aiCredentialStatus';
 // App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적) —
 // 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
 // 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
@@ -509,6 +510,7 @@ export default function ConsoleApp() {
 
   const [health, setHealth] = useState<any>(null);
   const [hostResources, setHostResources] = useState<any[]>([]);
+  const [aiCredentialStatus, setAiCredentialStatus] = useState<any>(null);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [incidentsPage, setIncidentsPage] = useState(1);
   const [incidentLoading, setIncidentLoading] = useState(false);
@@ -701,6 +703,7 @@ export default function ConsoleApp() {
 
   const fetchHealth = async () => {
     setLoadingHealth(true);
+    setAiCredentialStatus(null);
     try {
       const [hRes, cRes, mRes, providerRes, providerHistoryRes, privacyRes, resourcesRes] = await Promise.all([
         authFetch(`${SERVER_URL}/console/health`),
@@ -710,6 +713,7 @@ export default function ConsoleApp() {
         authFetch(`${SERVER_URL}/admin/call-engine/provider-history`),
         authFetch(`${SERVER_URL}/console/privacy-purge-jobs`),
         consoleRole === 'superadmin' ? authFetch(`${SERVER_URL}/console/host-resources`) : Promise.resolve(null),
+        consoleRole === 'superadmin' ? fetchAiCredentialStatus().then(setAiCredentialStatus) : Promise.resolve(),
       ]);
       const hData = await requireJson(hRes, '시스템 상태 조회 실패');
       const cData = await requireJson(cRes, '진행 중 통화 조회 실패');
@@ -2092,6 +2096,17 @@ export default function ConsoleApp() {
                 </div>
               )}
             </section>
+            {consoleRole === 'superadmin' && <section className="section" style={{marginTop:20}}>
+              <div className="section-title" style={{marginBottom:6}}>Google AI · 앱 전화</div>
+              {!aiCredentialStatus ? <div style={{color:'#64748b'}}>상태를 조회하는 중입니다.</div> : !aiCredentialStatus.available ?
+                <div style={{color:'#c5221f'}}>{aiCredentialStatus.error}</div> : <div style={{fontSize:13,lineHeight:1.9}}>
+                  <div>적용 키: <strong>{aiCredentialStatus.configured ? `••••${aiCredentialStatus.keySuffix} (지문 ${aiCredentialStatus.fingerprint})` : '미설정'}</strong></div>
+                  <div>모델: <strong>{aiCredentialStatus.model}</strong></div>
+                  <div>최근 Live 연결: <strong style={{color:aiCredentialStatus.lastLive.state==='credits_depleted'?'#c5221f':'#202124'}}>{({unknown:'확인 이력 없음',connected:'연결 확인',connection_error:'연결 오류',credits_depleted:'선불 크레딧 소진'})[aiCredentialStatus.lastLive.state as 'unknown'|'connected'|'connection_error'|'credits_depleted']}</strong>
+                    {aiCredentialStatus.lastLive.observedAt && ` · ${new Date(aiCredentialStatus.lastLive.observedAt).toLocaleString()}`}</div>
+                  <div style={{color:'#64748b',fontSize:12}}>실제 잔여 토큰·금액은 Google AI 계정에서 확인하세요. 최근 앱 통화에서 관측한 연결 결과이며 070 전화는 별도입니다. AI 서버 재시작 후에는 확인 이력이 초기화됩니다.</div>
+                </div>}
+            </section>}
             {consoleRole === 'superadmin' && <section className="section" style={{marginTop:20}}>
               <div className="section-title" style={{marginBottom:4}}>서버 자원 현황</div>
               <div style={{fontSize:12,color:'#64748b',marginBottom:14}}>호스트 CPU 사용률, 사용 가능한 메모리를 제외한 메모리 사용량, 루트 볼륨 사용량입니다. 새로고침 시 측정합니다.</div>
