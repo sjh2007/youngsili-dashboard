@@ -17,6 +17,7 @@ import { auth, authEnabled } from '../firebase';
 import { SERVER_URL, authFetch, errMsg } from '../utils/api';
 import { CallEngineProviderSchema, HostResourcesSchema, OpsMetricsSchema, PilotDailyEvidenceListSchema, PilotMetricsSchema, parseOr } from '../schemas';
 import { fetchAiCredentialStatus } from '../utils/aiCredentialStatus';
+import { CallRecording, RecordingConsentToggle, RecordingProvider } from '../components/common/CallRecording';
 // App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적) —
 // 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
 // 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
@@ -2442,7 +2443,7 @@ export default function ConsoleApp() {
         )}
 
         {page === 'calls' && (
-          <section className="section fade-in">
+          <RecordingProvider enabled={consoleRole === 'superadmin'}><section className="section fade-in">
             <div className="script-editor-header" style={{marginBottom:10}}>
               <div className="section-title" style={{marginBottom:0}}>통화 이력 ({history.length}건)</div>
               <button className={`btn-download ${historyLoading?'btn-calling':''}`} onClick={fetchHistory} disabled={historyLoading}>{historyLoading?'조회 중...':'조회'}</button>
@@ -2456,19 +2457,21 @@ export default function ConsoleApp() {
                   <thead><tr style={{textAlign:'left',color:'#5f6368',borderBottom:'1px solid #dadce0'}}>
                     <th style={{padding:'8px 10px'}}>시각</th><th style={{padding:'8px 10px'}}>기관</th><th style={{padding:'8px 10px'}}>어르신</th>
                     <th style={{padding:'8px 10px'}}>위험도</th><th style={{padding:'8px 10px'}}>통화시간</th>
+                    {consoleRole === 'superadmin' && <th style={{padding:'8px 10px'}}>통화 녹음</th>}
                   </tr></thead>
                   <tbody>{history.slice((historyPage-1)*PAGE_SIZE, historyPage*PAGE_SIZE).map((c:any) => (
                     <tr key={c.id} style={{borderBottom:'1px solid #f1f3f4'}}>
                       <td style={{padding:'10px',color:'#5f6368'}}>{c.at ? new Date(c.at).toLocaleString('ko-KR') : '-'}</td>
                       <td style={{padding:'10px'}}>{c.orgId}</td><td style={{padding:'10px'}}>{c.elderName}</td>
                       <td style={{padding:'10px'}}>{c.riskLevel}</td><td style={{padding:'10px'}}>{c.durationSec}초</td>
+                      {consoleRole === 'superadmin' && <td style={{padding:'10px'}}><CallRecording callId={c.callId || c.id} /></td>}
                     </tr>
                   ))}</tbody>
                 </table>
                 <Pager page={historyPage} setPage={setHistoryPage} total={history.length} />
               </div>
             )}
-          </section>
+          </section></RecordingProvider>
         )}
 
         {page === 'subscriptions' && (
@@ -2702,7 +2705,7 @@ export default function ConsoleApp() {
         )}
 
         {page === 'elders' && (
-          <section className="section fade-in">
+          <RecordingProvider enabled={consoleRole === 'superadmin'}><section className="section fade-in">
             <div className="script-editor-header" style={{marginBottom:10}}>
               <div className="section-title" style={{marginBottom:0}}>어르신 마스터 데이터 ({elders.length}명)</div>
               <button className={`btn-download ${eldersLoading?'btn-calling':''}`} onClick={fetchElders} disabled={eldersLoading}>{eldersLoading?'조회 중...':'조회'}</button>
@@ -2734,6 +2737,7 @@ export default function ConsoleApp() {
                         <td style={{padding:'10px'}}>{e.callActive===false ? <span style={{color:'#94a3b8'}}>꺼짐</span> : <span style={{color:'#1e8e3e'}}>켜짐</span>}</td>
                         <td style={{padding:'10px'}}>
                           <button className="btn-secondary" style={{fontSize:12,padding:'4px 8px'}} disabled={elderBusy===e.phone} onClick={()=>transferElder(e)}>{elderBusy===e.phone?'처리 중...':'기관 이관'}</button>
+                          {consoleRole === 'superadmin' && <RecordingConsentToggle phone={e.phone} />}
                         </td>
                       </tr>
                     ))}</tbody>
@@ -2742,7 +2746,7 @@ export default function ConsoleApp() {
                 </div>
               );
             })()}
-          </section>
+          </section></RecordingProvider>
         )}
 
         {page === 'elders' && consoleRole !== 'cs' && (

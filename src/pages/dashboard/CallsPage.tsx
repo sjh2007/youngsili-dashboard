@@ -4,6 +4,7 @@ import { ShieldCheck } from 'lucide-react';
 import { CallTranscript, GroupHeader } from '../../components/common';
 import { localDayKey } from '../../utils/date';
 import { RISK_CONFIG } from '../../constants/app';
+import { CallRecording, RecordingConsent, RecordingProvider } from '../../components/common/CallRecording';
 
 export default function CallsPage(props: any) {
   const {
@@ -20,7 +21,7 @@ export default function CallsPage(props: any) {
   const filteredCalls = callsHistory.filter(c=>(!callsPhone||String(c.phone||'').replace(/\D/g,'')===callsPhone)&&(!callsSearch||(nameByPhone(c.phone,c.elderName)||'').includes(callsSearch))&&callsRiskMatch(c));
 
   return (
-    <div className="fade-in calls-page">
+    <RecordingProvider><div className="fade-in calls-page">
       {/* 기간 선택 (일/월별 조회) — 서버 calls 컬렉션 실데이터 */}
       <div className="calls-toolbar">
         <div className="calls-toolbar-main">
@@ -51,8 +52,9 @@ export default function CallsPage(props: any) {
         {callsRisk!=='all' && <span style={{fontSize:15,color:'#94a3b8'}}>· 대시보드에서 이동됨</span>}
       </div>
       <div className="calls-privacy-note">
-        <ShieldCheck size={18} aria-hidden="true"/><span><b>개인정보 보호</b> · 원본 음성은 실시간 텍스트 변환 직후 삭제되며 텍스트 기록만 보관됩니다. 녹음 재생 기능은 제공하지 않습니다.</span>
+        <ShieldCheck size={18} aria-hidden="true"/><span><b>개인정보 보호</b> · 녹음은 기능 활성화 후 동의가 확인된 통화부터 제공됩니다. 보관 기간은 12개월이며 동의 철회 시 삭제됩니다. 이전 통화의 음성은 복원할 수 없습니다.</span>
       </div>
+      <RecordingConsent phone={callsPhone} />
       {callsHistory.length===0 ? (
         <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
       ) : (()=>{
@@ -95,6 +97,7 @@ export default function CallsPage(props: any) {
                     </button>
                   )}
                   <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
+                  <div style={{flexBasis:'100%'}}><CallRecording callId={c.callId || c.id} /></div>
                 </div>
               );
             })}
@@ -106,6 +109,6 @@ export default function CallsPage(props: any) {
           </div>
         );});
       })()}
-    </div>
+    </div></RecordingProvider>
   );
 }
