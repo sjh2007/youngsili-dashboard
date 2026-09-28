@@ -1096,14 +1096,16 @@ export default function App() {
   const [popLoading, setPopLoading] = useState(false);
   const [popError, setPopError]     = useState(null);
 
-  const fetchPopulation = async (retry = 0) => {
+  const fetchPopulation = async (region = '', retry = 0) => {
     setPopLoading(true); setPopError(null);
     try {
-      const res = await authFetch(`${SERVER_URL}/population`);
+      const params = new URLSearchParams();
+      if (region) params.set('region', region);
+      const res = await authFetch(`${SERVER_URL}/population${params.size ? `?${params}` : ''}`);
       const data = await res.json();
       setPopData(data);
       // 타 시도 첫 조회는 서버가 백그라운드 수집 → 잠시 후 자동 재조회 (최대 6회)
-      if (data && data.collecting && retry < 6) setTimeout(() => fetchPopulation(retry + 1), 12000);
+      if (data && data.collecting && retry < 6) setTimeout(() => fetchPopulation(region, retry + 1), 12000);
     } catch { setPopError('데이터를 불러오지 못했습니다.'); }
     finally { setPopLoading(false); }
   };

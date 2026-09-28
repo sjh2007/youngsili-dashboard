@@ -8,12 +8,16 @@ export default function DataPage(props: any) {
     elders, alertSeverity, calling, setCallModal, popDoneOpen, setPopDoneOpen,
     fetchPopulation, fetchWeather, getNoResponseDays, weatherStale, weatherTime, T,
   } = props;
+  const areaName = popData?.areaName || popData?.sidoName || '대구광역시';
+  const regionHeading = popData?.areaLevel === 'district' ? '읍면동별' : popData?.areaLevel === 'city' ? '하위 행정구역별' : '시군구별';
+  const districtName = popData?.areaLevel === 'district' ? popData.areaPath?.split(/\s+/)[1] : '';
+  const managedElders = districtName ? elders.filter(e => (e.region || '').includes(districtName)) : elders;
 
   return (
     <div className="fade-in">
       <div className="data-banner">
-        <div><div className="data-banner-title">{popData?.sidoName || '대구광역시'} 독거노인 현황</div><div className="data-banner-sub">기관 주소 기준 자동 연동 · 출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && !popData.collecting && popData.year && popData.month && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
-        <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={() => { fetchPopulation(); fetchWeather(); }} disabled={popLoading}>{popLoading ? '불러오는 중...' : '데이터 갱신'}</button>
+        <div><div className="data-banner-title">{areaName} 독거노인 현황</div><div className="data-banner-sub">기관 주소 기준 자동 연동 · 출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && !popData.collecting && popData.year && popData.month && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
+        <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={() => { fetchPopulation(popData?.areaPath || ''); fetchWeather(); }} disabled={popLoading}>{popLoading ? '불러오는 중...' : '데이터 갱신'}</button>
       </div>
       {/* 발효 중 특보 배너 — "{특보명} 발효 중 · {지역} 외 N개 지역", 경보급=레드/주의보급=앰버 */}
       {(() => {
@@ -70,30 +74,42 @@ export default function DataPage(props: any) {
         );
       })()}
       {popError && <div className="call-result-banner error">{popError}</div>}
+      {popData?.breadcrumbs?.length > 1 && (
+        <nav aria-label="인구 현황 지역 경로" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',margin:'0 0 16px',fontSize:15,color:'#64748b'}}>
+          {popData.breadcrumbs.map((crumb, index) => <span key={`${crumb.label}-${index}`} style={{display:'flex',alignItems:'center',gap:8}}>
+            {index > 0 && <span aria-hidden="true">›</span>}
+            {crumb.region && crumb.region !== popData.areaPath
+              ? <button type="button" onClick={() => fetchPopulation(crumb.region)} style={{border:0,background:'none',padding:0,color:'#246BEB',fontWeight:700,cursor:'pointer',fontSize:'inherit'}}>{crumb.label}</button>
+              : <strong style={{color:crumb.region ? '#1f2937' : '#64748b'}}>{crumb.label}</strong>}
+          </span>)}
+        </nav>
+      )}
       {popLoading && <div style={{textAlign:'center',padding:'40px',color:'#64748b',fontSize:18}}>행정안전부 공공데이터 불러오는 중...</div>}
       {popData?.collecting && !popLoading && (
         <div className="data-collecting-notice">
-          {popData.sidoName} 인구 통계를 처음 수집하고 있습니다 — 잠시 후 자동으로 표시됩니다 (수십 초 소요)
+          {areaName} 하위 지역 인구 통계를 수집하고 있습니다. 상위 지역 수치로 대신 표시하지 않으며, 자료 연동 후 자동으로 표시됩니다.
         </div>
       )}
       {popData && !popData.collecting && popData.total && (
         <>
           <div className="data-total-row">
-            {[{num:popData.total.population.toLocaleString()+'명',label:(popData.sidoName||'대구광역시')+' 전체 인구'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인'},{num:elders.length+'명',label:'영실이 현재 관리'},{num:(elders.length/popData.total.solitary*100).toFixed(2)+'%',label:'관리 비율'},{num:popData.total.elderlyRatio+'%',label:'고령화율'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num">{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
+            {[{num:popData.total.population.toLocaleString()+'명',label:areaName+' 전체 인구'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인'},{num:managedElders.length+'명',label:'영실이 현재 관리'},{num:(popData.total.solitary>0?managedElders.length/popData.total.solitary*100:0).toFixed(2)+'%',label:'관리 비율'},{num:popData.total.elderlyRatio+'%',label:'고령화율'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num">{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
           </div>
-          {popData.total.elderlyRatio >= 20 && <div className="data-aging-notice">{popData.sidoName||'대구광역시'} 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
+          {popData.total.elderlyRatio >= 20 && <div className="data-aging-notice">{areaName} 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
           <div className="section">
-            <div className="section-title">시군구별 독거노인 현황</div>
+            <div className="section-title">{regionHeading} 독거노인 현황</div>
             <table className="table">
-              <thead><tr><th>시군구</th><th>전체 인구</th><th>65세 이상</th><th>고령화율</th><th>추정 독거노인</th><th>영실이 관리</th><th>관리 비율</th><th>커버리지</th></tr></thead>
+              <thead><tr><th>행정구역</th><th>전체 인구</th><th>65세 이상</th><th>고령화율</th><th>추정 독거노인</th><th>영실이 관리</th><th>관리 비율</th><th>커버리지</th></tr></thead>
               <tbody>
-                {popData.regions.sort((a,b)=>b.solitary-a.solitary).map((d,i)=>{
+                {[...popData.regions].sort((a,b)=>b.solitary-a.solitary).map((d,i)=>{
                   const managed=elders.filter(e=>(e.region||'').includes(d.region)).length;
                   const managedRatio=d.solitary>0?(managed/d.solitary*100).toFixed(2):0;
                   const isHighAge=d.elderlyRatio>=20;
                   return (
                     <tr key={i} style={{background:isHighAge?'#fffbeb':'inherit'}}>
-                      <td><div style={{display:'flex',alignItems:'center',gap:8}}><strong>{d.region}</strong>{isHighAge&&<span style={{fontSize:14,background:'#f59e0b',color:'#fff',padding:'2px 6px',borderRadius:4,fontWeight:700}}>초고령</span>}</div></td>
+                      <td><div style={{display:'flex',alignItems:'center',gap:8}}>{d.hasChildren
+                        ? <button type="button" onClick={() => fetchPopulation(d.regionPath)} aria-label={`${d.region} 하위 지역 보기`} style={{border:0,background:'none',padding:0,color:'#246BEB',fontWeight:800,cursor:'pointer',fontSize:'inherit',textDecoration:'underline',textUnderlineOffset:3}}>{d.region} <span aria-hidden="true">›</span></button>
+                        : <strong>{d.region}</strong>}{isHighAge&&<span style={{fontSize:14,background:'#f59e0b',color:'#fff',padding:'2px 6px',borderRadius:4,fontWeight:700}}>초고령</span>}</div></td>
                       <td>{d.total.toLocaleString()}명</td><td>{d.elderly.toLocaleString()}명</td>
                       <td><span style={{color:d.elderlyRatio>=20?'#b42318':'#344054',fontWeight:700}}>{d.elderlyRatio}%</span></td>
                       <td><strong>{d.solitary.toLocaleString()}명</strong></td>
@@ -103,6 +119,7 @@ export default function DataPage(props: any) {
                     </tr>
                   );
                 })}
+                {popData.regions.length === 0 && <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'#64748b'}}>이 지역의 하위 행정구역 자료가 없습니다.</td></tr>}
               </tbody>
             </table>
           </div>
