@@ -3,6 +3,15 @@ import { SERVER_URL, authFetch } from '../../utils/api';
 
 const EMPTY = { name: '', phone: '' };
 
+const toEditableSettings = (value: any = {}) => ({
+  primary: { name: value.primary?.name || '', phone: value.primary?.phone || '' },
+  secondary: { name: value.secondary?.name || '', phone: value.secondary?.phone || '' },
+  afterHours: { name: value.afterHours?.name || '', phone: value.afterHours?.phone || '' },
+  afterHoursInstructions: value.afterHoursInstructions || '',
+  acknowledgeWithinMinutes: value.acknowledgeWithinMinutes ?? 15,
+  completeWithinMinutes: value.completeWithinMinutes ?? 60,
+});
+
 export default function SafetyEscalationSettings({ me, notify }: any) {
   const [form, setForm] = useState<any>({
     primary: EMPTY, secondary: EMPTY, afterHours: EMPTY, afterHoursInstructions: '',
@@ -12,7 +21,7 @@ export default function SafetyEscalationSettings({ me, notify }: any) {
 
   useEffect(() => {
     if (!me?.safetyEscalation) return;
-    setForm((current: any) => ({ ...current, ...me.safetyEscalation }));
+    setForm(toEditableSettings(me.safetyEscalation));
   }, [me?.safetyEscalation]);
 
   const setContact = (key: string, field: string, value: string) => {
@@ -21,8 +30,11 @@ export default function SafetyEscalationSettings({ me, notify }: any) {
   const save = async () => {
     setSaving(true);
     try {
+      // /me 응답에는 updatedAt/updatedBy 같은 읽기 전용 메타데이터가 포함될 수 있다.
+      // 서버 요청 스키마는 strict이므로 편집 가능한 필드만 전송한다.
+      const payload = toEditableSettings(form);
       const response = await authFetch(`${SERVER_URL}/org/safety-escalation-settings`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) { notify?.(data?.error?.message || '안전 대응 연락망을 저장하지 못했습니다'); return; }
