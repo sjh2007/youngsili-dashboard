@@ -6,13 +6,16 @@ export default function DataPage(props: any) {
   const {
     popData, weatherData, disasterMsgConfigured, disasterMsgs, popError, popLoading,
     elders, alertSeverity, calling, setCallModal, popDoneOpen, setPopDoneOpen,
-    fetchPopulation, fetchWeather, getNoResponseDays, weatherStale, weatherTime, T,
+    fetchPopulation, fetchWeather, getNoResponseDays, weatherStale, weatherTime, T, orgRegion,
   } = props;
+  // 인구 데이터를 불러오는 중이거나 실패해도 다른 지역명이 뜨지 않도록 기관 주소의 시도명으로 대체.
+  // (이전에는 '대구광역시'로 고정돼 서울 등 타 지역 기관에도 대구가 표시됐다)
+  const regionLabel = popData?.sidoName || (orgRegion || '').split(' ')[0] || '기관 관할 지역';
 
   return (
     <div className="fade-in">
       <div className="data-banner">
-        <div><div className="data-banner-title">{popData?.sidoName || '대구광역시'} 독거노인 현황</div><div className="data-banner-sub">기관 주소 기준 자동 연동 · 출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && !popData.collecting && popData.year && popData.month && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
+        <div><div className="data-banner-title">{regionLabel} 독거노인 현황</div><div className="data-banner-sub">기관 주소 기준 자동 연동 · 출처: {popData?.source || '행정안전부 주민등록인구통계'}{popData && !popData.collecting && popData.year && popData.month && ` · ${popData.year}년 ${popData.month}월 기준`}</div></div>
         <button className={`btn-download ${popLoading?'btn-calling':''}`} onClick={() => { fetchPopulation(); fetchWeather(); }} disabled={popLoading}>{popLoading ? '불러오는 중...' : '데이터 갱신'}</button>
       </div>
       {/* 발효 중 특보 배너 — "{특보명} 발효 중 · {지역} 외 N개 지역", 경보급=레드/주의보급=앰버 */}
@@ -79,9 +82,9 @@ export default function DataPage(props: any) {
       {popData && !popData.collecting && popData.total && (
         <>
           <div className="data-total-row">
-            {[{num:popData.total.population.toLocaleString()+'명',label:(popData.sidoName||'대구광역시')+' 전체 인구'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인'},{num:elders.length+'명',label:'영실이 현재 관리'},{num:(elders.length/popData.total.solitary*100).toFixed(2)+'%',label:'관리 비율'},{num:popData.total.elderlyRatio+'%',label:'고령화율'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num">{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
+            {[{num:popData.total.population.toLocaleString()+'명',label:regionLabel+' 전체 인구'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 노인'},{num:popData.total.solitary.toLocaleString()+'명',label:'추정 독거노인'},{num:elders.length+'명',label:'영실이 현재 관리'},{num:(elders.length/popData.total.solitary*100).toFixed(2)+'%',label:'관리 비율'},{num:popData.total.elderlyRatio+'%',label:'고령화율'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num">{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
           </div>
-          {popData.total.elderlyRatio >= 20 && <div className="data-aging-notice">{popData.sidoName||'대구광역시'} 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
+          {popData.total.elderlyRatio >= 20 && <div className="data-aging-notice">{regionLabel} 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
           <div className="section">
             <div className="section-title">시군구별 독거노인 현황</div>
             <table className="table">
