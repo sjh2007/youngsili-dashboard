@@ -1,13 +1,14 @@
 // 복지사용 도움말 센터 (대시보드 '도움말 보기' 페이지) — 검색 가능
 // ⚙️ 계속 업데이트: 아래 HELP_ITEMS 배열에 항목을 추가/수정하면 바로 반영됩니다.
 //    업데이트 소식을 추가하면 ANNOUNCEMENTS 맨 앞에 넣고 App.js의 LATEST_NOTICE도 같은 id로 올리세요.
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { BookOpen, Search, X, ExternalLink, Megaphone, ChevronDown, FileText, ClipboardCheck } from 'lucide-react';
 
 export const LATEST_NOTICE = 5;
 
 const SETUP_GUIDE_URL = 'https://www.krafte.net/youngsili-setup-guide.html';  // 그림 설치 매뉴얼(별도 배포)
 const OPERATIONS_RUNBOOK_URL = '/help/institution-operations-runbook.html';
+const FULL_GUIDE_URL = '/help/ai-youngsili-guide.html';
 
 const ANNOUNCEMENTS = [
   { id: 5, date: '2026-09-17', tag: '신규', text: '기관 운영 인수인계 문서가 추가됐어요. 업무 시작·종료 점검과 장애·위험 알림 대응 절차를 확인하세요.' },
@@ -68,6 +69,29 @@ export default function HelpGuide(_props: any) {
   // 네비게이션·목차·테마전환을 갖춘 자체완결형 HTML이라 React로 재구현하지 않고 정적 파일로
   // 두고 iframe으로 그대로 띄운다(기능 유지 + 약 1MB라 JS 번들에 직접 넣지 않고 필요할 때만 로드).
   const [tab, setTab] = useState('staff'); // staff | guide
+  const [guideHtml, setGuideHtml] = useState('');
+  const [guideError, setGuideError] = useState('');
+  const [guideLoading, setGuideLoading] = useState(false);
+  const [guideRetry, setGuideRetry] = useState(0);
+  // 운영 사이트는 모든 HTML에 X-Frame-Options: DENY를 적용한다. 동일 출처의 정적 가이드도
+  // URL로 iframe에 넣으면 차단되므로, 운영 콘솔 도움말처럼 읽어서 srcDoc으로 표시한다.
+  useEffect(() => {
+    if (tab !== 'guide' || guideHtml) return;
+    const controller = new AbortController();
+    setGuideLoading(true);
+    setGuideError('');
+    fetch(FULL_GUIDE_URL, { credentials: 'same-origin', signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error(`전체 가이드 응답 오류(${response.status})`);
+        const html = await response.text();
+        if (!html.includes('<title>AI영실이 문서</title>')) throw new Error('전체 가이드 파일을 찾지 못했습니다.');
+        return html;
+      })
+      .then(html => { if (!controller.signal.aborted) setGuideHtml(html); })
+      .catch(error => { if (!controller.signal.aborted) setGuideError(error?.message || '전체 가이드를 불러오지 못했습니다.'); })
+      .finally(() => { if (!controller.signal.aborted) setGuideLoading(false); });
+    return () => controller.abort();
+  }, [tab, guideHtml, guideRetry]);
   // 전체 가이드는 iframe 자체 스크롤 없이, 실제 콘텐츠 높이만큼 늘어나서 페이지 스크롤 하나로만
   // 보이게 한다(같은 출처라 contentDocument 접근 가능) — 페이지 전환(사이드바 클릭)마다
   // 보이는 article이 바뀌어 높이도 바뀌므로 ResizeObserver로 계속 맞춘다.
@@ -78,8 +102,10 @@ export default function HelpGuide(_props: any) {
     if (!doc) return;
     const sync = () => setGuideHeight(doc.documentElement.scrollHeight);
     sync();
-    const ro = new (iframe.contentWindow.ResizeObserver)(sync);
-    ro.observe(doc.body);
+    if (iframe.contentWindow?.ResizeObserver && doc.body) {
+      const ro = new iframe.contentWindow.ResizeObserver(sync);
+      ro.observe(doc.body);
+    }
   }, []);
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -140,13 +166,17 @@ export default function HelpGuide(_props: any) {
 
       {tab === 'guide' ? (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <iframe
+          {guideLoading && <div role="status" style={{ padding: 24 }}>전체 가이드를 불러오는 중입니다.</div>}
+          {guideError && <div role="alert" style={{ padding: 24 }}>
+            {guideError} <button className="btn-secondary" onClick={() => setGuideRetry(value => value + 1)}>다시 시도</button>
+          </div>}
+          {guideHtml && <iframe
             title="AI영실이 문서"
-            src="/help/ai-youngsili-guide.html"
+            srcDoc={guideHtml}
             onLoad={onGuideLoad}
             scrolling="no"
             style={{ width: '100%', height: guideHeight, border: 0, display: 'block' }}
-          />
+          />}
         </Card>
       ) : (<>
       <a href={OPERATIONS_RUNBOOK_URL} target="_blank" rel="noopener noreferrer" className="help-setup-link">
