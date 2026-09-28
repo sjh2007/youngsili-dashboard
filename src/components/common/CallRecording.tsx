@@ -109,6 +109,7 @@ export function CallRecording({ callId }: { callId: string }) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
   const urlRef = useRef('');
   const controllerRef = useRef<AbortController | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -116,7 +117,7 @@ export function CallRecording({ callId }: { callId: string }) {
     const reset = () => {
       controllerRef.current?.abort(); audioRef.current?.pause();
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-      urlRef.current = ''; setAudioUrl(''); setWaveform(null); setPosition(0); setPlaying(false); setSpeed(1); setMuted(false);
+      urlRef.current = ''; setAudioUrl(''); setWaveform(null); setPosition(0); setPlaying(false); setSpeed(1); setMuted(false); setVolume(1);
       setMeta(null); setMessage(''); setBusy(false);
     };
     const closeOther = (event: Event) => {
@@ -134,7 +135,7 @@ export function CallRecording({ callId }: { callId: string }) {
   function clearAudio() {
     audioRef.current?.pause();
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    urlRef.current = ''; setAudioUrl(''); setWaveform(null); setPosition(0); setPlaying(false); setSpeed(1); setMuted(false); setMeta(null);
+    urlRef.current = ''; setAudioUrl(''); setWaveform(null); setPosition(0); setPlaying(false); setSpeed(1); setMuted(false); setVolume(1); setMeta(null);
   }
   async function run(action: (signal: AbortSignal) => Promise<void>) {
     controllerRef.current?.abort();
@@ -216,6 +217,12 @@ export function CallRecording({ callId }: { callId: string }) {
     setMuted(next);
     if (audioRef.current) audioRef.current.muted = next;
   }
+  function changeVolume(next: number) {
+    const value = Math.max(0, Math.min(1, next));
+    const nextMuted = value === 0;
+    setVolume(value); setMuted(nextMuted);
+    if (audioRef.current) { audioRef.current.volume = value; audioRef.current.muted = nextMuted; }
+  }
   return <div className="recording-entry">
     {!meta && <button className="recording-open" onClick={inspect} disabled={busy} aria-label={busy ? '녹음 확인 중' : '녹음 확인'}>
       <AudioLines size={17} aria-hidden="true" />{busy ? '녹음 확인 중…' : '녹음 확인'}
@@ -254,6 +261,13 @@ export function CallRecording({ callId }: { callId: string }) {
           <button className="recording-skip" onClick={toggleMute} aria-label={muted ? '음소거 해제' : '음소거'}>
             {muted ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
           </button>
+          <label className="recording-volume">
+            <span className="sr-only">재생 볼륨</span>
+            <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume}
+              onChange={event => changeVolume(Number(event.target.value))}
+              aria-label="재생 볼륨" aria-valuetext={`${Math.round((muted ? 0 : volume) * 100)}%`} />
+            <output aria-hidden="true">{Math.round((muted ? 0 : volume) * 100)}%</output>
+          </label>
           <span className="recording-transport-note">파형을 눌러 원하는 위치로 이동</span>
         </div>
         <audio ref={audioRef} src={audioUrl} aria-label="통화 녹음 재생" preload="metadata" hidden

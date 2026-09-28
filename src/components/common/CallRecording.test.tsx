@@ -62,6 +62,15 @@ it('loads actual stereo waveform on demand and supports authenticated playback a
   expect((audio as HTMLAudioElement).playbackRate).toBe(1.25);
   fireEvent.click(screen.getByRole('button', { name: '음소거' }));
   expect((audio as HTMLAudioElement).muted).toBe(true);
+  const volume = screen.getByRole('slider', { name: '재생 볼륨' });
+  expect(volume).toHaveAttribute('aria-valuetext', '0%');
+  fireEvent.change(volume, { target: { value: '0.35' } });
+  expect((audio as HTMLAudioElement).volume).toBeCloseTo(0.35);
+  expect((audio as HTMLAudioElement).muted).toBe(false);
+  expect(volume).toHaveAttribute('aria-valuetext', '35%');
+  fireEvent.change(volume, { target: { value: '0' } });
+  expect((audio as HTMLAudioElement).muted).toBe(true);
+  expect(volume).toHaveAttribute('aria-valuetext', '0%');
   expect(audio).toHaveAttribute('src', 'blob:recording-fixture');
   expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('format=wav&purpose=play'), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   page.unmount();
