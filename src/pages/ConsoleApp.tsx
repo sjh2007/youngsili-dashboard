@@ -18,6 +18,7 @@ import { SERVER_URL, authFetch, errMsg } from '../utils/api';
 import { CallEngineProviderSchema, HostResourcesSchema, OpsMetricsSchema, PilotDailyEvidenceListSchema, PilotMetricsSchema, parseOr } from '../schemas';
 import { fetchAiCredentialStatus } from '../utils/aiCredentialStatus';
 import { CallRecording, RecordingConsentToggle, RecordingProvider } from '../components/common/CallRecording';
+import DemoCallsPanel from './console/DemoCallsPanel';
 // App.css는 src/index.tsx에서 정적으로 이미 import됨(동적 import로 인한 FOUC 방지 목적) —
 // 이 콘솔은 별도 빌드 타겟(build-console)이라, 아래 <GcpStyle>은 App.css를 건드리지 않고
 // 이 페이지 안에서만 스코프된 스타일을 얹는다(기관 대시보드 쪽엔 영향 없음).
@@ -460,6 +461,7 @@ const NAV = [
   { id: 'health', label: '시스템 모니터링', icon: Activity },
   { id: 'stats', label: '통계', icon: BarChart3 },
   { id: 'calls', label: '통화 이력', icon: Phone },
+  { id: 'demo-calls', label: '체험 통화', icon: FlaskConical },
   { id: 'subscriptions', label: '정기결제 현황', icon: CreditCard },
   { id: 'payment-calendar', label: '결제 달력', icon: CalendarDays },
   { id: 'payments', label: '결제 내역', icon: Receipt },
@@ -1850,7 +1852,7 @@ export default function ConsoleApp() {
             <div style={{fontSize:11,color:'#5f6368',lineHeight:1.2}}>운영 콘솔</div>
           </div>
         </button>
-        {(consoleRole==='cs' ? NAV.filter(n=>CS_ALLOWED_PAGES.includes(n.id)) : NAV).map(item => {
+        {(consoleRole==='cs' ? NAV.filter(n=>CS_ALLOWED_PAGES.includes(n.id)) : NAV).filter(n => n.id !== 'demo-calls' || consoleRole === 'superadmin').map(item => {
           const Icon = item.icon;
           const active = page === item.id;
           return (
@@ -2441,6 +2443,8 @@ export default function ConsoleApp() {
             </section>
           </div>
         )}
+
+        {page === 'demo-calls' && consoleRole === 'superadmin' && <DemoCallsPanel />}
 
         {page === 'calls' && (
           <RecordingProvider enabled={consoleRole === 'superadmin'}><section className="section fade-in">

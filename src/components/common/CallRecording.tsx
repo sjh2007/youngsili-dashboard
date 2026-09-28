@@ -12,6 +12,7 @@ function clock(seconds: number) {
 
 const Context = createContext<z.infer<typeof RecordingConfigSchema> | null>(null);
 class RecordingAccessError extends Error {}
+class RecordingExpiredError extends RecordingAccessError {}
 async function readJson<T>(response: Response, schema: z.ZodType<T>): Promise<T> {
   if (!response.ok) throw new Error('녹음 정보를 불러오지 못했습니다.');
   const result = schema.safeParse(await response.json());
@@ -140,7 +141,8 @@ export function CallRecording({ callId }: { callId: string }) {
     const controller = new AbortController(); controllerRef.current = controller;
     setBusy(true); setMessage('');
     try { await action(controller.signal); }
-    catch { if (!controller.signal.aborted) { clearAudio(); setMessage('녹음 조회·다운로드에 실패했습니다. 다시 시도해 주세요.'); } }
+    catch (error) { if (!controller.signal.aborted) { clearAudio(); setMessage(error instanceof RecordingExpiredError
+      ? '보관 기간이 만료되어 녹음을 확인할 수 없습니다.' : '녹음 조회·다운로드에 실패했습니다. 다시 시도해 주세요.'); } }
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
   function inspect() {
@@ -149,6 +151,7 @@ export function CallRecording({ callId }: { callId: string }) {
       const response = await authFetch(base, { signal });
       if (signal.aborted) return;
       if (response.status === 404) { setMessage('저장된 녹음을 찾을 수 없습니다. 수집되지 않은 통화, 기능 적용 전 통화, 동의 미확인 또는 파기된 녹음은 제공되지 않습니다.'); return; }
+      if (response.status === 410) { setMessage('보관 기간이 만료되어 녹음을 확인할 수 없습니다.'); return; }
       const data = await readJson(response, RecordingMetadataSchema);
       if (!signal.aborted) setMeta(data);
       if (data.state === 'ready') await prepareAudio(signal);
@@ -163,6 +166,7 @@ export function CallRecording({ callId }: { callId: string }) {
   }
   async function loadAudio(signal: AbortSignal) {
     const response = await authFetch(`${base}/audio?format=wav&purpose=play`, { signal });
+    if (response.status === 410) throw new RecordingExpiredError();
     if ([401, 403, 404].includes(response.status)) throw new RecordingAccessError();
     if (!response.ok) throw new Error();
     const blob = await response.blob();
@@ -179,6 +183,7 @@ export function CallRecording({ callId }: { callId: string }) {
   function file(format: 'mp3' | 'wav') {
     return run(async signal => {
       const response = await authFetch(`${base}/audio?format=${format}&purpose=download`, { signal });
+      if (response.status === 410) throw new RecordingExpiredError();
       if (!response.ok) throw new Error();
       const blob = await response.blob();
       if (signal.aborted) return;
@@ -218,7 +223,7 @@ export function CallRecording({ callId }: { callId: string }) {
     {meta?.state === 'ready' && <div className="recording-card">
       <div className="recording-card-head">
         <span className="recording-card-mark"><AudioLines size={18} aria-hidden="true" /></span>
-        <div className="recording-card-titles"><strong>통화 녹음</strong><span>{meta.channel === 'pstn' ? '070 일반전화' : '앱 전화'} · {clock(duration)} · 보관 12개월</span></div>
+        <div className="recording-card-titles"><strong>통화 녹음</strong><span>{meta.channel === 'pstn' ? '070 일반전화' : '앱 전화'} · {clock(duration)} · {meta.retentionDays === 1 ? '신청일 기준 1일 보관' : '보관 12개월'}</span></div>
         <span className="recording-ready">재생 가능</span>
       </div>
       {audioUrl ? <>
@@ -257,7 +262,7 @@ export function CallRecording({ callId }: { callId: string }) {
           onError={() => setMessage('음성을 재생할 수 없습니다. 다시 불러오거나 파일을 다운로드해 주세요.')} />
       </> : <div className="recording-card-hint">재생 파일을 준비하지 못했습니다. <button onClick={() => run(prepareAudio)} disabled={busy}>재생 다시 시도</button></div>}
       <div className="recording-card-footer">
-        <span>암호화 보관 · 권한 있는 기관 사용자만 이용</span>
+        <span>암호화 보관 · {meta.retentionDays === 1 ? '운영관리자만 이용' : '권한 있는 기관 사용자만 이용'}</span>
         <div className="recording-downloads">
           <button onClick={() => file('mp3')} disabled={busy}><Download size={15} aria-hidden="true" />MP3 다운로드</button>
           <button onClick={() => file('wav')} disabled={busy}><Download size={15} aria-hidden="true" />WAV 다운로드</button>

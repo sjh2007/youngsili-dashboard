@@ -44,6 +44,7 @@ it('shows masked identity and credit depletion to a superadmin', async () => {
   expect(await screen.findByText('선불 크레딧 소진')).toBeInTheDocument();
   expect(screen.getByText('••••1234 (지문 012345abcdef)')).toBeInTheDocument();
   expect(screen.getByText(/070 전화는 별도/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '체험 통화' })).toBeInTheDocument();
 });
 
 it('replaces the status with an explicit error when refresh returns malformed data', async () => {
@@ -62,4 +63,6 @@ it('does not request or render the Google AI status for CS', async () => {
   await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.includes('/console/stats'))).toBe(true));
   expect(fetchMock.mock.calls.some(([url]) => url.includes('/console/ai-credential-status'))).toBe(false);
   expect(screen.queryByText('Google AI · 앱 전화')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '체험 통화' })).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(([url]) => url.includes('/demo/sessions'))).toBe(false);
 });

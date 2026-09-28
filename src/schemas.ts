@@ -8,9 +8,18 @@ export const RecordingConsentSchema = z.object({ enabled: z.boolean(), version: 
 export const RecordingMetadataSchema = z.object({ state: z.enum(['recording', 'processing', 'ready', 'failed']),
   errorCode: z.enum(['capture_failed', 'upload_failed', 'no_audio', 'duration_limit', 'processing_failed', 'upload_timeout', 'storage_full']).nullable().optional(),
   channel: z.enum(['app', 'pstn']), durationSec: z.number().min(0).max(360).nullable(),
-  formats: z.array(z.enum(['mp3', 'wav'])), retentionMonths: z.literal(12) });
+  formats: z.array(z.enum(['mp3', 'wav'])), retentionMonths: z.literal(12).nullable(),
+  retentionDays: z.literal(1).optional() }).refine(value => value.retentionMonths === 12 || value.retentionDays === 1);
 
 const loose = <T extends z.ZodRawShape>(shape: T) => z.object(shape).catchall(z.unknown());
+
+export const DemoSessionSchema = loose({
+  callId: z.string().min(1), name: z.string(), phone: z.string(),
+  scenario: z.enum(['care', 'weather', 'risk']), status: z.string(),
+  createdAt: z.string().datetime({ offset: true }), expiresAt: z.string().datetime({ offset: true }),
+  transcript: z.string(), durationSec: z.number().nonnegative(), recordingConsent: z.boolean(),
+});
+export const DemoSessionsSchema = loose({ items: z.array(DemoSessionSchema), limit: z.number().int().positive() });
 
 // ── 어르신 (elders) ──
 // 서버는 Firestore 문서를 **가공 없이** 내려준다(elders.service.list → doc.data()).

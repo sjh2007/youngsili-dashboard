@@ -21,6 +21,29 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 function view() { return render(<RecordingProvider><CallRecording callId="call_fixture" /></RecordingProvider>); }
 
+it('labels public demo recordings with one day retention instead of institution retention', async () => {
+  view(); const check = await screen.findByRole('button', { name: '녹음 확인' });
+  fetchMock.mockResolvedValueOnce(response({ ...metadata, channel: 'pstn', retentionMonths: null, retentionDays: 1 }));
+  fireEvent.click(check);
+  expect(await screen.findByText(/신청일 기준 1일 보관/)).toBeInTheDocument();
+  expect(screen.getByText('암호화 보관 · 운영관리자만 이용')).toBeInTheDocument();
+  expect(screen.queryByText(/보관 12개월/)).not.toBeInTheDocument();
+});
+
+it('reports recordings that expired before opening', async () => {
+  view(); const check = await screen.findByRole('button', { name: '녹음 확인' });
+  fetchMock.mockResolvedValueOnce(response({}, 410)); fireEvent.click(check);
+  expect(await screen.findByText('보관 기간이 만료되어 녹음을 확인할 수 없습니다.')).toBeInTheDocument();
+});
+
+it('clears playback and labels expiration when a download expires', async () => {
+  view(); fireEvent.click(await screen.findByRole('button', { name: '녹음 확인' }));
+  const download = await screen.findByRole('button', { name: 'MP3 다운로드' });
+  fetchMock.mockResolvedValueOnce(response({}, 410)); fireEvent.click(download);
+  expect(await screen.findByText('보관 기간이 만료되어 녹음을 확인할 수 없습니다.')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '다시 듣기' })).not.toBeInTheDocument();
+});
+
 it('loads actual stereo waveform on demand and supports authenticated playback and seeking', async () => {
   const page = view();
   const check = await screen.findByRole('button', { name: '녹음 확인' });
