@@ -204,6 +204,14 @@ export const HealthInsightCaseSchema = loose({
   latestObservedAt: z.string().datetime({ offset: true }),
   evidenceCount: z.number().int().nonnegative(), revision: z.number().int().positive(),
 });
+export const HealthInsightEvidenceSchema = loose({
+  observedAt: z.string().datetime({ offset: true }), excerpt: z.string().min(1).max(160),
+  sourceId: z.string(), line: z.number().int().nonnegative(),
+});
+export const HealthInsightDetailSchema = HealthInsightCaseSchema.extend({
+  evidence: z.array(HealthInsightEvidenceSchema).max(12),
+  reviewNote: z.string(), updatedAt: z.string().datetime({ offset: true }).nullable(),
+});
 export const HealthInsightListSchema = loose({
   items: z.array(HealthInsightCaseSchema), nextCursor: z.string().nullable(),
 });
@@ -216,6 +224,7 @@ export const HealthInsightTrendSchema = loose({
   })),
 });
 export type HealthInsightCase = z.infer<typeof HealthInsightCaseSchema>;
+export type HealthInsightDetail = z.infer<typeof HealthInsightDetailSchema>;
 export type HealthInsightTrendPoint = z.infer<typeof HealthInsightTrendSchema>['points'][number];
 
 // ── 기상 (/weather) — { 지역명: {...} } 맵 ──
