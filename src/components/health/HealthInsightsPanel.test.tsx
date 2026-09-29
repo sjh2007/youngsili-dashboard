@@ -70,4 +70,5 @@ it('조치 완료 시 조치 내용을 필수로 저장하고 통화 기록 이�
   expect(promptMock).toHaveBeenCalled();
   await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(5));
   expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({state:'resolved',reviewNote:'보호자에게 연락함'});
+  expect(await screen.findByText('현재 확인할 변화가 없습니다.')).toBeInTheDocument();
 });

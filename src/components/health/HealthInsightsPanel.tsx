@@ -46,6 +46,7 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
   useEffect(()=>{setDetails({});setExpanded({});load()},[elderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected=elders.find(e=>elderKey(e)===elderId);
+  const activeItems=items.filter(item=>item.state==='unreviewed'||item.state==='reviewing');
   const options:ApexOptions=useMemo(()=>({chart:{type:'area',toolbar:{show:false},fontFamily:'Pretendard, sans-serif'},colors:['#b42318'],dataLabels:{enabled:true},stroke:{curve:'smooth',width:3},fill:{type:'gradient',gradient:{opacityFrom:.24,opacityTo:.03}},xaxis:{categories:points.map(p=>new Date(p.observedAt).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))},yaxis:{min:0,forceNiceScale:true,title:{text:'확인 필요 항목 수'}},tooltip:{y:{formatter:v=>`${v}개`}}}),[points]);
 
   const showDetail=async(item:HealthInsightCase)=>{
@@ -89,7 +90,7 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
     </div>
     {loading?<p>불러오는 중…</p>:<>
       <div style={{marginTop:16,border:'1px solid #e2e8f0',borderRadius:12,padding:16}}><b>{selected?.name||'선택한 어르신'} 통화별 변화 흐름</b><p style={{fontSize:13,color:'#64748b'}}>세로값은 각 통화에서 확인이 필요한 항목 수입니다. 문제 없다고 확인된 응답은 위험 카드와 그래프 수치에 포함하지 않습니다.</p>{points.length?<Chart options={options} series={[{name:'확인 필요 항목',data:points.map(p=>p.needsReviewCount)}]} type="area" height={260}/>:<div style={{padding:44,textAlign:'center',color:'#64748b'}}>최근 30일 그래프 자료가 없습니다.</div>}</div>
-      <div style={{display:'grid',gap:10,marginTop:14}}>{items.length?items.map(item=>{
+      <div style={{display:'grid',gap:10,marginTop:14}}>{activeItems.length?activeItems.map(item=>{
         const detail=details[item.caseId],open=!!expanded[item.caseId],busy=busyCaseId===item.caseId;
         return <article key={item.caseId} style={{border:'1px solid #dfe6ef',borderLeft:`5px solid ${['new_statement','repeated_statement'].includes(item.signal)?'#b42318':'#b45309'}`,borderRadius:12,padding:16}}>
           <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}><b>{topicLabel[item.topic]||item.topic}</b><span style={{fontSize:12,fontWeight:800,padding:'4px 8px',borderRadius:20,background:'#fff0ee',color:'#b42318'}}>{signalLabel[item.signal]||item.signal}</span><span style={{fontSize:12,color:'#64748b'}}>{stateLabel[item.state]||item.state}</span></div>
