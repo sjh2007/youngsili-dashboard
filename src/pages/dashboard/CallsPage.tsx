@@ -52,7 +52,7 @@ export default function CallsPage(props: any) {
         {callsRisk!=='all' && <span style={{fontSize:15,color:'#94a3b8'}}>· 대시보드에서 이동됨</span>}
       </div>
       <div className="calls-privacy-note">
-        <ShieldCheck size={18} aria-hidden="true"/><span><b>개인정보 보호</b> · 녹음은 기능 활성화 후 동의가 확인된 통화부터 제공됩니다. 보관 기간은 12개월이며 동의 철회 시 삭제됩니다. 이전 통화의 음성은 복원할 수 없습니다.</span>
+        <ShieldCheck size={18} aria-hidden="true"/><span><b>개인정보 보호</b> · 녹음은 기능 활성화 후 동의가 확인된 통화부터 제공됩니다. 음성 원본은 30일, 전사·요약·위험 기록은 12개월 보관하며 동의 철회 시 음성 원본을 삭제합니다. 이전 통화의 음성은 복원할 수 없습니다.</span>
       </div>
       <RecordingConsent phone={callsPhone} />
       {callsHistory.length===0 ? (

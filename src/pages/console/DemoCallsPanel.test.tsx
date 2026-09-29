@@ -27,7 +27,7 @@ it('shows masked demo data and text without a recording request when consent is 
 it('removes expired transcripts and the recording player at the retention deadline', async () => {
   const expiresAt = new Date(Date.now() + 1000).toISOString();
   fetchMock.mockImplementation(async (url: string) => response(url.endsWith('/config')
-    ? { enabled: true, retentionMonths: 12, canRead: true, canManage: false }
+    ? { enabled: true, retentionDays: 30, canRead: true, canManage: false }
     : { items: [{ ...session, recordingConsent: true, expiresAt }], limit: 100 }));
   jest.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   render(<DemoCallsPanel />);

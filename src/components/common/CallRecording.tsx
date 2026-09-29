@@ -73,11 +73,11 @@ export function RecordingConsent({ phone }: { phone: string }) {
   }
   return <div style={{ padding: 12, margin: '12px 0', border: '1px solid #E2E8F0', borderRadius: 10 }}>
     <strong>선택한 어르신의 통화 녹음</strong>
-    <p style={{ margin: '8px 0' }}>{consent === null ? '상태 확인 중' : consent ? '동의 확인됨 · 앱·070 통화 녹음 허용' : '녹음 동의 미확인 · 원음 저장 안 함'} · 보관 12개월</p>
+    <p style={{ margin: '8px 0' }}>{consent === null ? '상태 확인 중' : consent ? '동의 확인됨 · 앱·070 통화 녹음 허용' : '녹음 동의 미확인 · 원음 저장 안 함'} · 음성 원본 30일 보관</p>
     {config.canManage && consent !== null && <>
       <label style={{ display: 'block', marginBottom: 8 }}>
         <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} disabled={busy} />{' '}
-        {consent ? '동의 철회를 확인했으며 저장된 녹음 파일을 삭제합니다.' : '어르신 또는 권한 있는 대리인에게 녹음 목적·12개월 보관·재생 및 다운로드를 안내하고 동의를 받았습니다.'}
+        {consent ? '동의 철회를 확인했으며 저장된 녹음 파일을 삭제합니다.' : '어르신 또는 권한 있는 대리인에게 녹음 목적·음성 원본 30일 보관·재생 및 다운로드를 안내하고 동의를 받았습니다.'}
       </label>
       <button className="btn-secondary" disabled={busy || !confirmed || (!config.enabled && !consent)} onClick={save}>
         {busy ? '처리 중…' : consent ? '동의 철회 및 녹음 삭제' : '녹음 동의 확인'}
@@ -230,7 +230,7 @@ export function CallRecording({ callId }: { callId: string }) {
     {meta?.state === 'ready' && <div className="recording-card">
       <div className="recording-card-head">
         <span className="recording-card-mark"><AudioLines size={18} aria-hidden="true" /></span>
-        <div className="recording-card-titles"><strong>통화 녹음</strong><span>{meta.channel === 'pstn' ? '070 일반전화' : '앱 전화'} · {clock(duration)} · {meta.retentionDays === 1 ? '신청일 기준 1일 보관' : '보관 12개월'}</span></div>
+        <div className="recording-card-titles"><strong>통화 녹음</strong><span>{meta.channel === 'pstn' ? '070 일반전화' : '앱 전화'} · {clock(duration)} · {meta.retentionDays === 1 ? '신청일 기준 1일 보관' : '음성 원본 30일 보관'}</span></div>
         <span className="recording-ready">재생 가능</span>
       </div>
       {audioUrl ? <>

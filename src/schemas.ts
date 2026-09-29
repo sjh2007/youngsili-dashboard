@@ -3,13 +3,13 @@
 // 정의한다: 알려진 필드는 타입·형식을 검증하고, 모르는 필드는 통과시킨다.
 import { z } from 'zod';
 
-export const RecordingConfigSchema = z.object({ enabled: z.boolean(), retentionMonths: z.literal(12), canRead: z.boolean(), canManage: z.boolean() });
-export const RecordingConsentSchema = z.object({ enabled: z.boolean(), version: z.literal('recording-v1'), retentionMonths: z.literal(12) });
+export const RecordingConfigSchema = z.object({ enabled: z.boolean(), retentionDays: z.literal(30), canRead: z.boolean(), canManage: z.boolean() });
+export const RecordingConsentSchema = z.object({ enabled: z.boolean(), version: z.literal('recording-v1'), retentionDays: z.literal(30) });
 export const RecordingMetadataSchema = z.object({ state: z.enum(['recording', 'processing', 'ready', 'failed']),
   errorCode: z.enum(['capture_failed', 'upload_failed', 'no_audio', 'duration_limit', 'processing_failed', 'upload_timeout', 'storage_full']).nullable().optional(),
   channel: z.enum(['app', 'pstn']), durationSec: z.number().min(0).max(360).nullable(),
-  formats: z.array(z.enum(['mp3', 'wav'])), retentionMonths: z.literal(12).nullable(),
-  retentionDays: z.literal(1).optional() }).refine(value => value.retentionMonths === 12 || value.retentionDays === 1);
+  formats: z.array(z.enum(['mp3', 'wav'])), retentionMonths: z.null(),
+  retentionDays: z.union([z.literal(1), z.literal(30)]) });
 
 const loose = <T extends z.ZodRawShape>(shape: T) => z.object(shape).catchall(z.unknown());
 

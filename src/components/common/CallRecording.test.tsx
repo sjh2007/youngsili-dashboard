@@ -6,8 +6,8 @@ import { recordingWavFixture } from '../../test/fixtures/recordingWav';
 
 jest.mock('../../utils/api', () => ({ authFetch: jest.fn(), SERVER_URL: 'https://api.fixture.invalid' }));
 const fetchMock = authFetch as jest.Mock;
-const config = { enabled: true, retentionMonths: 12, canRead: true, canManage: true };
-const metadata = { state: 'ready', channel: 'app', durationSec: 20, formats: ['mp3', 'wav'], retentionMonths: 12 };
+const config = { enabled: true, retentionDays: 30, canRead: true, canManage: true };
+const metadata = { state: 'ready', channel: 'app', durationSec: 20, formats: ['mp3', 'wav'], retentionMonths: null, retentionDays: 30 };
 const response = (data: unknown, status = 200) => ({ ok: status < 300, status, json: async () => data });
 
 beforeEach(() => {
@@ -27,7 +27,7 @@ it('labels public demo recordings with one day retention instead of institution 
   fireEvent.click(check);
   expect(await screen.findByText(/신청일 기준 1일 보관/)).toBeInTheDocument();
   expect(screen.getByText('암호화 보관 · 운영관리자만 이용')).toBeInTheDocument();
-  expect(screen.queryByText(/보관 12개월/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/음성 원본 30일 보관/)).not.toBeInTheDocument();
 });
 
 it('reports recordings that expired before opening', async () => {
@@ -113,12 +113,12 @@ it('hides controls from roles without recording access and makes no request for 
   expect(fetchMock).not.toHaveBeenCalled();
 });
 it('requires a consent attestation and sends the selected elder in the body', async () => {
-  fetchMock.mockImplementation(async url => response(url.endsWith('/config') ? config : { enabled: false, version: 'recording-v1', retentionMonths: 12 }));
+  fetchMock.mockImplementation(async url => response(url.endsWith('/config') ? config : { enabled: false, version: 'recording-v1', retentionDays: 30 }));
   render(<RecordingProvider><RecordingConsent phone="01000000000" /></RecordingProvider>);
   const save = await screen.findByRole('button', { name: '녹음 동의 확인' });
   expect(save).toBeDisabled();
   fireEvent.click(screen.getByRole('checkbox')); expect(save).toBeEnabled();
-  fetchMock.mockResolvedValueOnce(response({ enabled: true, version: 'recording-v1', retentionMonths: 12 }));
+  fetchMock.mockResolvedValueOnce(response({ enabled: true, version: 'recording-v1', retentionDays: 30 }));
   fireEvent.click(save);
   await screen.findByRole('button', { name: '동의 철회 및 녹음 삭제' });
   expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining('/call-recordings/consent'), expect.objectContaining({

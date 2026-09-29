@@ -13,15 +13,15 @@ const calls = [
   { id: 'legacy', elderName: selected.name, transcript: '번호 없는 과거 텍스트' },
 ];
 const response = (data: unknown) => ({ ok: true, status: 200, json: async () => data });
-const config = { enabled: true, retentionMonths: 12, canRead: true, canManage: true };
+const config = { enabled: true, retentionDays: 30, canRead: true, canManage: true };
 
 beforeEach(() => {
   fetchMock.mockReset().mockImplementation(async (url: string) => {
     if (url.endsWith('/config')) return response(config);
-    if (url.endsWith('/consent/status')) return response({ enabled: false, version: 'recording-v1', retentionMonths: 12 });
+    if (url.endsWith('/consent/status')) return response({ enabled: false, version: 'recording-v1', retentionDays: 30 });
     if (url.includes('/audio?format=wav&purpose=play')) return { ok: true, blob: async () => recordingWavFixture() };
     if (url.includes('/audio?')) return { ok: true, blob: async () => new Blob(['audio'], { type: url.includes('format=mp3') ? 'audio/mpeg' : 'audio/wav' }) };
-    return response({ state: 'ready', channel: url.endsWith('dispatch_app') ? 'app' : 'pstn', durationSec: 20, formats: ['mp3', 'wav'], retentionMonths: 12 });
+    return response({ state: 'ready', channel: url.endsWith('dispatch_app') ? 'app' : 'pstn', durationSec: 20, formats: ['mp3', 'wav'], retentionMonths: null, retentionDays: 30 });
   });
   URL.createObjectURL = jest.fn().mockReturnValue('blob:detail-recording');
   URL.revokeObjectURL = jest.fn();
