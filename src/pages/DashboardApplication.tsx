@@ -3295,7 +3295,7 @@ export default function App() {
               healthRange={healthRange} setHealthRange={setHealthRange} healthHistFrom={healthHistFrom}
               setHealthHistFrom={setHealthHistFrom} healthHistTo={healthHistTo} setHealthHistTo={setHealthHistTo}
               formatDateHeader={formatDateHeader} healthNormalShown={healthNormalShown}
-              notify={notify} me={me}
+              notify={notify} me={me} goPage={goPage} setCallsPhone={setCallsPhone}
             />
           )}
 
