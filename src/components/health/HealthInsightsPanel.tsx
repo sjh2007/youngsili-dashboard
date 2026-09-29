@@ -2,16 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import Chart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import { SERVER_URL, authFetch, errMsg } from '../../utils/api';
-import { HealthInsightCaseSchema, HealthInsightListSchema, HealthInsightTrendSchema, type HealthInsightCase, type HealthInsightTrendPoint } from '../../schemas';
+import { HealthInsightCaseSchema, HealthInsightListSchema, HealthInsightTrendSchema, type Elder, type HealthInsightCase, type HealthInsightTrendPoint } from '../../schemas';
 
 const topicLabel: Record<string,string> = { meal:'식사', sleep:'수면', activity:'활동', discomfort:'불편 사항' };
 const signalLabel: Record<string,string> = { new_statement:'새 불편 확인', repeated_statement:'같은 불편 반복', changed_response:'최근 응답과 달라짐', insufficient_data:'자료 부족' };
 
-export default function HealthInsightsPanel({ elders, notify }: { elders:any[]; notify?:(m:string,t?:string)=>void }) {
-  const elderKey=(elder:any)=>String(elder?.phone||elder?.id||'');
+export default function HealthInsightsPanel({ elders, notify }: { elders:Elder[]; notify?:(m:string,t?:string)=>void }) {
+  const elderKey=(elder:Elder)=>String(elder.phone||elder.id||'');
   const [elderId,setElderId]=useState(''); const [items,setItems]=useState<HealthInsightCase[]>([]); const [points,setPoints]=useState<HealthInsightTrendPoint[]>([]); const [disabled,setDisabled]=useState(false); const [loading,setLoading]=useState(false);
   useEffect(()=>{ if(!elderId&&elders?.length) setElderId(elderKey(elders[0])); },[elders,elderId]);
-  const load=async()=>{if(!elderId)return;setLoading(true);try{const now=new Date(),from=new Date(now.getTime()-30*86400000),q=`elderId=${encodeURIComponent(elderId)}&from=${from.toISOString().slice(0,10)}&to=${now.toISOString().slice(0,10)}`;const [a,b]=await Promise.all([authFetch(`${SERVER_URL}/health/insights?elderId=${encodeURIComponent(elderId)}`),authFetch(`${SERVER_URL}/health/insights/trend?${q}`)]);if(a.status===501||b.status===501){setDisabled(true);setItems([]);setPoints([]);return}const ad=await a.json(),bd=await b.json();if(!a.ok||!b.ok)throw new Error(errMsg(!a.ok?ad:bd));const parsedList=HealthInsightListSchema.safeParse(ad),parsedTrend=HealthInsightTrendSchema.safeParse(bd);if(!parsedList.success||!parsedTrend.success)throw new Error('건강 변화 API 응답 형식이 올바르지 않습니다');setDisabled(false);setItems(parsedList.data.items);setPoints(parsedTrend.data.points)}catch(e:any){notify?.(e.message||'건강 변화 정보를 불러오지 못했습니다')}finally{setLoading(false)}};
+  const load=async()=>{if(!elderId)return;setLoading(true);try{const now=new Date(),from=new Date(now.getTime()-30*86400000),q=`elderId=${encodeURIComponent(elderId)}&from=${from.toISOString().slice(0,10)}&to=${now.toISOString().slice(0,10)}`;const [a,b]=await Promise.all([authFetch(`${SERVER_URL}/health/insights?elderId=${encodeURIComponent(elderId)}`),authFetch(`${SERVER_URL}/health/insights/trend?${q}`)]);if(a.status===501||b.status===501){setDisabled(true);setItems([]);setPoints([]);return}const ad:unknown=await a.json(),bd:unknown=await b.json();if(!a.ok||!b.ok)throw new Error(errMsg(!a.ok?ad:bd));const parsedList=HealthInsightListSchema.safeParse(ad),parsedTrend=HealthInsightTrendSchema.safeParse(bd);if(!parsedList.success||!parsedTrend.success)throw new Error('건강 변화 API 응답 형식이 올바르지 않습니다');setDisabled(false);setItems(parsedList.data.items);setPoints(parsedTrend.data.points)}catch(error:unknown){notify?.(error instanceof Error?error.message:'건강 변화 정보를 불러오지 못했습니다')}finally{setLoading(false)}};
   useEffect(()=>{load()},[elderId]); // eslint-disable-line react-hooks/exhaustive-deps
   const selected=elders.find(e=>elderKey(e)===elderId);
   const options:ApexOptions=useMemo(()=>({chart:{type:'area',toolbar:{show:false},fontFamily:'Pretendard, sans-serif'},colors:['#b42318'],dataLabels:{enabled:true},stroke:{curve:'smooth',width:3},fill:{type:'gradient',gradient:{opacityFrom:.24,opacityTo:.03}},xaxis:{categories:points.map(p=>new Date(p.observedAt).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))},yaxis:{min:0,forceNiceScale:true,title:{text:'확인 필요 항목 수'}},tooltip:{y:{formatter:v=>`${v}개`}}}),[points]);
