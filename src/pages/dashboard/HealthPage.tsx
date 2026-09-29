@@ -4,6 +4,7 @@ import { CheckCircle2, AlertTriangle, AlertCircle, Users } from 'lucide-react';
 import { Button, PageIntro, StatusBadge } from '../../components/ui';
 import { SERVER_URL, authFetch } from '../../utils/api';
 import { STATUS_CONFIG } from '../../constants/app';
+import HealthInsightsPanel from '../../components/health/HealthInsightsPanel';
 
 export default function HealthPage(props: any) {
   const {
@@ -52,6 +53,7 @@ export default function HealthPage(props: any) {
   return (
     <div className="fade-in health-page">
       <PageIntro title="어르신 건강 상태 현황" description="영실이 앱에서 어르신이 직접 체크한 건강 상태 · 15초마다 자동 갱신됩니다" actions={<Button className={healthLoading?'btn-calling':''} onClick={()=>fetchHealth()} disabled={healthLoading}>{healthLoading ? '불러오는 중...' : '갱신'}</Button>} />
+      <HealthInsightsPanel elders={elders} notify={notify} />
       <div className="stat-grid" style={{marginBottom:20}}>
         {[
           {label:'좋아요',   num:healthData.filter(h=>h.status==='good').length, Icon:CheckCircle2,  ic:'#16A34A', color:'#16a34a'},

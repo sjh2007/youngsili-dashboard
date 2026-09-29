@@ -195,6 +195,29 @@ export const CallSchema = loose({
 export type Call = z.infer<typeof CallSchema>;
 export const CallListSchema = z.array(CallSchema);
 
+// ── 건강 변화 확인 (/health/insights) ──
+export const HealthInsightCaseSchema = loose({
+  caseId: z.string().min(1), elderId: z.string().min(1),
+  topic: z.enum(['meal', 'sleep', 'activity', 'discomfort']),
+  signal: z.enum(['new_statement', 'repeated_statement', 'changed_response', 'insufficient_data']),
+  state: z.enum(['unreviewed', 'reviewing', 'resolved', 'corrected', 'dismissed']),
+  latestObservedAt: z.string().datetime({ offset: true }),
+  evidenceCount: z.number().int().nonnegative(), revision: z.number().int().positive(),
+});
+export const HealthInsightListSchema = loose({
+  items: z.array(HealthInsightCaseSchema), nextCursor: z.string().nullable(),
+});
+export const HealthInsightTrendSchema = loose({
+  elderId: z.string().min(1), from: z.string(), to: z.string(),
+  points: z.array(loose({
+    pointId: z.string().min(1), observedAt: z.string().datetime({ offset: true }),
+    needsReviewCount: z.number().int().nonnegative(),
+    topics: loose({ meal: z.number().int().nonnegative(), sleep: z.number().int().nonnegative(), activity: z.number().int().nonnegative(), discomfort: z.number().int().nonnegative() }),
+  })),
+});
+export type HealthInsightCase = z.infer<typeof HealthInsightCaseSchema>;
+export type HealthInsightTrendPoint = z.infer<typeof HealthInsightTrendSchema>['points'][number];
+
 // ── 기상 (/weather) — { 지역명: {...} } 맵 ──
 export const WeatherRegionSchema = loose({
   temp: z.union([z.number(), z.string()]).optional(),

@@ -893,8 +893,7 @@ figcaption{font-size:12.5px;color:var(--faint);margin-top:9px}
       <p class="lead">어르신과 나눈 대화가 날짜별로 쌓입니다. 무슨 이야기가 오갔는지 대화 그대로 확인하고,
         여기서 바로 상담일지 초안을 만들 수 있습니다.</p>
 
-      <div class="co"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5" stroke-linecap="round"/><circle cx="10" cy="6.3" r=".7" fill="var(--muted)" stroke="none"/></svg><p><b>원본 음성은 보관하지 않습니다.</b> 실시간으로 텍스트로 바꾼 직후 음성은 삭제되고
-        텍스트 기록만 남습니다. 녹음을 다시 듣는 기능은 제공하지 않습니다.</p></div>
+      <div class="co"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5" stroke-linecap="round"/><circle cx="10" cy="6.3" r=".7" fill="var(--muted)" stroke="none"/></svg><p>녹음 기능을 선택하고 동의가 확인된 통화는 원본 음성을 30일 동안 암호화해 보관합니다. 소속 기관의 허용된 사용자는 재생하거나 MP3·WAV로 내려받을 수 있습니다.</p></div>
 
       <h2 id="k1">찾는 방법</h2>
       <div class="tw"><table>
@@ -1579,22 +1578,20 @@ figcaption{font-size:12.5px;color:var(--faint);margin-top:9px}
       <div class="tw"><table>
         <thead><tr><th>구분</th><th>보관 여부</th></tr></thead>
         <tbody>
-          <tr><td class="k">원본 음성</td><td><b>보관하지 않습니다.</b> 실시간으로 텍스트 변환 직후 삭제됩니다</td></tr>
+          <tr><td class="k">원본 음성</td><td>녹음 기능을 선택하고 동의가 확인된 통화만 암호화하여 30일 보관합니다</td></tr>
           <tr><td class="k">대화 텍스트 기록</td><td>보관합니다. <span class="chip">통화 기록</span> 에서 턴 단위로 확인할 수 있습니다</td></tr>
-          <tr><td class="k">녹음 재생</td><td><b>제공하지 않습니다.</b> 다시 들을 수 있는 원본이 없기 때문입니다</td></tr>
+          <tr><td class="k">녹음 재생</td><td>소속 기관의 허용된 사용자가 재생하고 MP3·WAV로 내려받을 수 있습니다</td></tr>
           <tr><td class="k">위험 판정 결과</td><td>보관합니다. 리포트·통계에 반영됩니다</td></tr>
-          <tr><td class="k">자동 파기 시점</td><td>통화·발신·위험·건강 기록은 생성일로부터 12개월입니다</td></tr>
+          <tr><td class="k">자동 파기 시점</td><td>녹음 원본은 30일, 통화 텍스트·발신·위험·건강 기록은 12개월입니다</td></tr>
         </tbody>
       </table></div>
-      <div class="co"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5" stroke-linecap="round"/><circle cx="10" cy="6.3" r=".7" fill="var(--muted)" stroke="none"/></svg><p>이 구조는 개인정보 보호를 위한 설계입니다. 음성 원본이 남지 않으므로
-        유출되더라도 <b>목소리 자체가 노출될 위험이 없습니다.</b> 다만 대화 내용을 담은 텍스트는
-        남아 있으므로 접근권한 관리가 여전히 중요합니다.</p></div>
+      <div class="co"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5" stroke-linecap="round"/><circle cx="10" cy="6.3" r=".7" fill="var(--muted)" stroke="none"/></svg><p>녹음 원본과 대화 텍스트는 권한 있는 기관 사용자만 확인할 수 있습니다. 다운로드한 파일도 개인정보이므로 업무 목적 범위에서만 사용하고 별도 보관을 최소화하십시오.</p></div>
 
       <h2 id="rt2">기관에서 자주 받는 질문</h2>
       <div class="tw"><table>
         <thead><tr><th>질문</th><th>답변</th></tr></thead>
         <tbody>
-          <tr><td class="k">녹음 파일을 받을 수 있나요</td><td>불가능합니다. 원본 음성이 보관되지 않습니다</td></tr>
+          <tr><td class="k">녹음 파일을 받을 수 있나요</td><td>녹음 동의가 확인된 통화는 30일 동안 MP3·WAV로 받을 수 있습니다</td></tr>
           <tr><td class="k">대화 내용을 확인할 수 있나요</td><td>가능합니다. <span class="chip">통화 기록</span> 에서 텍스트로 확인합니다</td></tr>
           <tr><td class="k">지자체 감사에 제출할 근거 자료가 있나요</td>
             <td><span class="chip">보고서·서식 → 상담·방문일지 엑셀</span> 과
@@ -1743,7 +1740,17 @@ figcaption{font-size:12.5px;color:var(--faint);margin-top:9px}
         </tbody>
       </table></div>
 
-      <h2 id="fq2">등록과 설정</h2>
+      <h2 id="fq2">결제·요금</h2>
+      <div class="tw"><table>
+        <thead><tr><th>질문</th><th>답변</th></tr></thead>
+        <tbody>
+          <tr><td class="k">결제하면 확인 이메일이 오나요</td>
+            <td>네. 결제가 완료되면 결제를 진행한 기관 로그인 계정의 이메일로 KG이니시스 결제 확인 메일이 발송됩니다.
+              메일이 보이지 않으면 스팸함을 확인하고, 기관 대시보드의 결제 내역에서도 처리 상태를 확인하십시오</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="fq3">등록과 설정</h2>
       <div class="tw"><table>
         <thead><tr><th>질문</th><th>답변</th></tr></thead>
         <tbody>
@@ -1759,7 +1766,7 @@ figcaption{font-size:12.5px;color:var(--faint);margin-top:9px}
         </tbody>
       </table></div>
 
-      <h2 id="fq3">운영 중 문제</h2>
+      <h2 id="fq4">운영 중 문제</h2>
       <div class="tw"><table>
         <thead><tr><th>질문</th><th>답변</th></tr></thead>
         <tbody>
@@ -1778,7 +1785,7 @@ figcaption{font-size:12.5px;color:var(--faint);margin-top:9px}
         </tbody>
       </table></div>
 
-      <h2 id="fq4">계정과 개인정보</h2>
+      <h2 id="fq5">계정과 개인정보</h2>
       <div class="tw"><table>
         <thead><tr><th>질문</th><th>답변</th></tr></thead>
         <tbody>
@@ -1786,7 +1793,7 @@ figcaption{font-size:12.5px;color:var(--faint);margin-top:9px}
             <td>담당자에게 문의하십시오. 계정 생성과 역할 부여는 운영팀에서 처리합니다.
               자세히: <span class="chip">사용자와 권한</span></td></tr>
           <tr><td class="k">통화 녹음 파일을 받을 수 있나요</td>
-            <td>불가능합니다. 원본 음성은 보관하지 않고 텍스트 기록만 남습니다.
+            <td>녹음 동의가 확인된 통화는 30일 동안 재생하고 MP3·WAV로 받을 수 있습니다.
               자세히: <span class="chip">통화 기록 보관</span></td></tr>
           <tr><td class="k">어르신이 AI인 걸 모르고 놀라셨어요</td>
             <td>등록 시 담당자가 미리 말씀드려야 합니다. 자세히: <span class="chip">AI 이용 고지</span></td></tr>
