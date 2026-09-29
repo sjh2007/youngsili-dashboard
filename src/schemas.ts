@@ -211,6 +211,7 @@ export const HealthInsightEvidenceSchema = loose({
 export const HealthInsightDetailSchema = HealthInsightCaseSchema.extend({
   evidence: z.array(HealthInsightEvidenceSchema).max(12),
   reviewNote: z.string(), updatedAt: z.string().datetime({ offset: true }).nullable(),
+  reviewedBy: z.string(),
 });
 export const HealthInsightListSchema = loose({
   items: z.array(HealthInsightCaseSchema), nextCursor: z.string().nullable(),

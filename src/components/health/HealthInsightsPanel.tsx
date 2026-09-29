@@ -21,6 +21,7 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
   const [busyCaseId,setBusyCaseId]=useState('');
   const [disabled,setDisabled]=useState(false);
   const [loading,setLoading]=useState(false);
+  const [showCompleted,setShowCompleted]=useState(false);
 
   useEffect(()=>{ if(!elderId&&elders?.length) setElderId(elderKey(elders[0])); },[elders,elderId]);
 
@@ -31,7 +32,7 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
       const now=new Date(),from=new Date(now.getTime()-30*86400000);
       const q=`elderId=${encodeURIComponent(elderId)}&from=${from.toISOString().slice(0,10)}&to=${now.toISOString().slice(0,10)}`;
       const [a,b]=await Promise.all([
-        authFetch(`${SERVER_URL}/health/insights?elderId=${encodeURIComponent(elderId)}`),
+        authFetch(`${SERVER_URL}/health/insights?elderId=${encodeURIComponent(elderId)}&limit=100`),
         authFetch(`${SERVER_URL}/health/insights/trend?${q}`),
       ]);
       if(a.status===501||b.status===501){setDisabled(true);setItems([]);setPoints([]);return}
@@ -43,10 +44,11 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
     }catch(error:unknown){notify?.(error instanceof Error?error.message:'건강 변화 정보를 불러오지 못했습니다')}
     finally{setLoading(false)}
   };
-  useEffect(()=>{setDetails({});setExpanded({});load()},[elderId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{setDetails({});setExpanded({});setShowCompleted(false);load()},[elderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected=elders.find(e=>elderKey(e)===elderId);
   const activeItems=items.filter(item=>item.state==='unreviewed'||item.state==='reviewing');
+  const completedItems=items.filter(item=>['resolved','corrected','dismissed'].includes(item.state));
   const options:ApexOptions=useMemo(()=>({chart:{type:'area',toolbar:{show:false},fontFamily:'Pretendard, sans-serif'},colors:['#b42318'],dataLabels:{enabled:true},stroke:{curve:'smooth',width:3},fill:{type:'gradient',gradient:{opacityFrom:.24,opacityTo:.03}},xaxis:{categories:points.map(p=>new Date(p.observedAt).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))},yaxis:{min:0,forceNiceScale:true,title:{text:'확인 필요 항목 수'}},tooltip:{y:{formatter:v=>`${v}개`}}}),[points]);
 
   const showDetail=async(item:HealthInsightCase)=>{
@@ -99,6 +101,20 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
           {open&&detail&&<div style={{marginTop:14,padding:'14px 16px',background:'#f8fafc',borderRadius:10}}><b style={{display:'block',marginBottom:10}}>통화 원문 근거</b>{detail.evidence.length?detail.evidence.map((e,index)=><blockquote key={`${e.sourceId}-${e.line}-${index}`} style={{margin:'8px 0',padding:'10px 12px',background:'#fff',borderLeft:'3px solid #b42318',borderRadius:6}}><div style={{fontWeight:700}}>&ldquo;{e.excerpt}&rdquo;</div><small style={{color:'#64748b'}}>{new Date(e.observedAt).toLocaleString('ko-KR')} · 원문 {e.line}번째 줄</small></blockquote>):<p style={{color:'#64748b'}}>표시할 원문 근거가 없습니다.</p>}</div>}
         </article>;
       }):<div style={{padding:28,textAlign:'center',color:'#64748b'}}>현재 확인할 변화가 없습니다.</div>}</div>
+      <div style={{marginTop:16,borderTop:'1px solid #e2e8f0',paddingTop:14}}>
+        <button className="btn-secondary" aria-expanded={showCompleted} onClick={()=>setShowCompleted(value=>!value)}>{showCompleted?'완료 이력 닫기':`완료 이력 보기 (${completedItems.length})`}</button>
+        {showCompleted&&<div style={{display:'grid',gap:10,marginTop:12}}>{completedItems.length?completedItems.map(item=>{
+          const detail=details[item.caseId],open=!!expanded[item.caseId],busy=busyCaseId===item.caseId;
+          return <article key={item.caseId} style={{border:'1px solid #dfe6ef',borderLeft:'5px solid #64748b',borderRadius:12,padding:16,background:'#f8fafc'}}>
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}><b>{topicLabel[item.topic]||item.topic}</b><span style={{fontSize:12,fontWeight:800,padding:'4px 8px',borderRadius:20,background:'#e2e8f0',color:'#334155'}}>{stateLabel[item.state]||item.state}</span><span style={{fontSize:12,color:'#64748b'}}>{new Date(item.latestObservedAt).toLocaleString('ko-KR')}</span></div>
+            <div style={{marginTop:10}}><button className="btn-secondary" disabled={busy} aria-expanded={open} onClick={()=>showDetail(item)}>{busy?'불러오는 중…':open?'완료 상세 닫기':'완료 상세 보기'}</button></div>
+            {open&&detail&&<div style={{marginTop:14,padding:'14px 16px',background:'#fff',borderRadius:10}}>
+              <dl style={{display:'grid',gridTemplateColumns:'90px 1fr',gap:'8px 12px',margin:0}}><dt>조치 내용</dt><dd style={{margin:0}}>{detail.reviewNote||'기록 없음'}</dd><dt>담당자</dt><dd style={{margin:0}}>{detail.reviewedBy||'확인할 수 없음'}</dd><dt>처리 시각</dt><dd style={{margin:0}}>{detail.updatedAt?new Date(detail.updatedAt).toLocaleString('ko-KR'):'기록 없음'}</dd></dl>
+              <b style={{display:'block',marginTop:14,marginBottom:8}}>판단 근거</b>{detail.evidence.length?detail.evidence.map((e,index)=><blockquote key={`${e.sourceId}-${e.line}-${index}`} style={{margin:'8px 0',padding:'10px 12px',background:'#f8fafc',borderLeft:'3px solid #64748b',borderRadius:6}}><div style={{fontWeight:700}}>&ldquo;{e.excerpt}&rdquo;</div><small style={{color:'#64748b'}}>{new Date(e.observedAt).toLocaleString('ko-KR')} · 원문 {e.line}번째 줄</small></blockquote>):<p style={{color:'#64748b'}}>표시할 원문 근거가 없습니다.</p>}
+            </div>}
+          </article>;
+        }):<div style={{padding:24,textAlign:'center',color:'#64748b'}}>완료된 조치 이력이 없습니다.</div>}</div>}
+      </div>
     </>}
   </section>;
 }

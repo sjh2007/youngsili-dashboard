@@ -42,7 +42,7 @@ it('확인 중인 카드에서 근거 보기를 누르면 통화 원문 근거�
       caseId: 'case-1', elderId: '01012345678', topic: 'sleep', signal: 'new_statement', state: 'reviewing',
       latestObservedAt: '2026-09-29T07:06:24.672Z', evidenceCount: 1, revision: 2,
       evidence: [{ observedAt: '2026-09-29T07:06:24.672Z', excerpt: '잠을 못 잤어요', sourceId: 'source-1', line: 8 }],
-      reviewNote: '', updatedAt: '2026-09-29T07:10:00.000Z',
+      reviewNote: '', updatedAt: '2026-09-29T07:10:00.000Z', reviewedBy: '담당자',
     }));
   render(<HealthInsightsPanel elders={[{ phone: '01012345678', name: '홍길동' }]} />);
   const button=await screen.findByRole('button',{name:'근거 보기'});
@@ -53,7 +53,7 @@ it('확인 중인 카드에서 근거 보기를 누르면 통화 원문 근거�
 
 it('조치 완료 시 조치 내용을 필수로 저장하고 통화 기록 이동을 제공한다', async () => {
   const item={caseId:'case-2',elderId:'01012345678',topic:'discomfort',signal:'repeated_statement',state:'reviewing',latestObservedAt:'2026-09-29T07:06:24.672Z',evidenceCount:2,revision:2};
-  const detail={...item,state:'resolved',revision:3,evidence:[],reviewNote:'보호자에게 연락함',updatedAt:'2026-09-29T08:00:00.000Z'};
+  const detail={...item,state:'resolved',revision:3,evidence:[],reviewNote:'보호자에게 연락함',updatedAt:'2026-09-29T08:00:00.000Z',reviewedBy:'staff@example.com'};
   const openRecords=jest.fn();
   const promptMock=jest.spyOn(window,'prompt').mockImplementation(()=>'보호자에게 연락함');
   Object.defineProperty(window,'crypto',{configurable:true,value:{randomUUID:()=> '00000000-0000-4000-8000-000000000001'}});
@@ -71,4 +71,7 @@ it('조치 완료 시 조치 내용을 필수로 저장하고 통화 기록 이�
   await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(5));
   expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({state:'resolved',reviewNote:'보호자에게 연락함'});
   expect(await screen.findByText('현재 확인할 변화가 없습니다.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'완료 이력 보기 (1)'}));
+  expect(await screen.findByText('보호자에게 연락함')).toBeInTheDocument();
+  expect(screen.getByText('staff@example.com')).toBeInTheDocument();
 });
