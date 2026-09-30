@@ -77,14 +77,14 @@ export const PSTN_COMMON_FEATURES = [
   '관리자 대시보드와 예약 발신',
   '통화 결과·이력과 3단계 위험 감지',
   '위험 알림과 담당자 확인',
-  '크레딧 충전·차감·잔액 내역',
+  '추가 통화 이용권 구매·사용·잔액 내역',
 ];
 
-// 070 일반전화의 카드 단건 크레딧 충전 상품. 실제 서버 결제금액과 일치해야 한다.
+// 070 일반전화의 카드 단건 추가 통화 이용권. 서버의 기존 topup 결제금액과 일치해야 한다.
 export const CHARGE_TIERS = [
-  { key:'c30', amount:300000, calls:'약 356통', usage:'일반전화 3분 통화 기준' },
-  { key:'c50', amount:500000, calls:'약 594통', usage:'일반전화 3분 통화 기준', recommended:true },
-  { key:'c100', amount:1000000, calls:'약 1,189통', usage:'일반전화 3분 통화 기준' },
+  { key:'c30', amount:300000, calls:'약 356통', usage:'일반전화 3분 통화 기준', validity:'결제일부터 3개월' },
+  { key:'c50', amount:500000, calls:'약 594통', usage:'일반전화 3분 통화 기준', validity:'결제일부터 3개월', recommended:true },
+  { key:'c100', amount:1000000, calls:'약 1,189통', usage:'일반전화 3분 통화 기준', validity:'결제일부터 3개월' },
 ];
 
 // 주민등록번호 앞 6자리 → 생년월일 (7번째 자리로 세기 판정: 1·2=1900년대, 3·4=2000년대)

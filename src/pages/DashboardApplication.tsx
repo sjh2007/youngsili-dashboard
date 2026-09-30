@@ -169,6 +169,7 @@ export default function App() {
   const [pendingTopup, setPendingTopup] = useState(null); // {amount} — "신청" 클릭 시 결제수단 선택 모달을 띄우기 위한 대기 상태
   const [showPlanModal, setShowPlanModal] = useState(false); // 사이드바 크레딧 잔액 클릭 → 현재 플랜·잔액·결제수단 요약 모달
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [paymentHistoryTotal, setPaymentHistoryTotal] = useState(0);
   const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
   const [refundTarget, setRefundTarget] = useState(null); // {id, amount} — 환불 요청 사유 선택 모달
   const [refundReasonPreset, setRefundReasonPreset] = useState(REFUND_REASON_PRESETS[0]);
@@ -524,12 +525,13 @@ export default function App() {
     }
   };
   // 결제 내역 — 업그레이드 모달의 "결제 내역" 탭에서 조회
-  const fetchPaymentHistory = async () => {
+  const fetchPaymentHistory = async (page = 1) => {
     setPaymentHistoryLoading(true);
     try {
-      const r = await authFetch(`${SERVER_URL}/billing/payments`);
+      const r = await authFetch(`${SERVER_URL}/billing/payments?page=${page}&pageSize=10`);
       const d = await r.json().catch(()=>({}));
       setPaymentHistory(Array.isArray(d?.payments) ? d.payments : []);
+      setPaymentHistoryTotal(Number.isInteger(d?.total) ? d.total : (Array.isArray(d?.payments) ? d.payments.length : 0));
     } catch { notify('결제 내역 조회 실패'); }
     finally { setPaymentHistoryLoading(false); }
   };
@@ -543,7 +545,12 @@ export default function App() {
         method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason }),
       });
       const d = await r.json().catch(()=>({}));
-      if (r.ok) { notify('환불 요청이 접수됐습니다. 담당자 확인 후 처리됩니다.', 'success'); setRefundTarget(null); fetchPaymentHistory(); }
+      if (r.ok) {
+        notify('환불 요청이 접수됐습니다. 담당자 확인 후 처리됩니다.', 'success');
+        setPaymentHistory((items:any[])=>items.map(item=>item.id===refundTarget.id
+          ? {...item,refundRequestStatus:'pending',refundRequestReason:reason} : item));
+        setRefundTarget(null);
+      }
       else notify(errMsg(d, '환불 요청 실패'));
     } catch { notify('네트워크 오류 — 환불 요청 실패'); }
     finally { setRefundRequestBusy(false); }
@@ -2881,7 +2888,7 @@ export default function App() {
           subscriptionActionBusy={subscriptionActionBusy}
           scheduleSubscriptionPlanChange={scheduleSubscriptionPlanChange}
           testSubscriptionRenewal={testSubscriptionRenewal}
-          paymentHistoryLoading={paymentHistoryLoading} paymentHistory={paymentHistory}
+          paymentHistoryLoading={paymentHistoryLoading} paymentHistory={paymentHistory} paymentHistoryTotal={paymentHistoryTotal}
           setRefundTarget={setRefundTarget} setRefundReasonPreset={setRefundReasonPreset}
           setRefundReasonCustom={setRefundReasonCustom}
         />

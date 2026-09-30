@@ -344,6 +344,7 @@ export function parseOr<S extends z.ZodTypeAny, F>(schema: S, data: unknown, fal
 // GET /billing/ledger — 동일 시점의 원장과 잔액.
 export const CreditLedgerSchema = loose({
   orgId: z.string(), balance: z.number().nullable(), openingBalance: z.number(),
+  page: z.number().int().positive().optional(), pageSize: z.number().int().positive().optional(), total: z.number().int().nonnegative().optional(),
   entries: z.array(loose({ id: z.string(), type: z.string(), amount: z.number(),
     balanceAfter: z.number(), productName: z.string(), occurredAt: z.string(), expiresAt: z.string().nullable() })),
 });

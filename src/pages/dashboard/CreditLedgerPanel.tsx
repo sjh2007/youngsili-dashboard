@@ -1,34 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CreditLedgerSchema, parseOr } from '../../schemas';
 import { authFetch, SERVER_URL } from '../../utils/api';
+import HistoryPagination from './HistoryPagination';
+
+const PAGE_SIZE = 10;
 
 export default function CreditLedgerPanel() {
   const [ledger, setLedger] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const refresh = async () => {
+  const [page, setPage] = useState(1);
+  const refresh = useCallback(async (nextPage = 1) => {
     setLoading(true);
     setError('');
     try {
-      const response = await authFetch(`${SERVER_URL}/billing/ledger`);
+      const response = await authFetch(`${SERVER_URL}/billing/ledger?page=${nextPage}&pageSize=${PAGE_SIZE}`);
       if (!response.ok) throw new Error('크레딧 내역을 불러오지 못했습니다. 다시 시도해 주세요.');
       const data = parseOr(CreditLedgerSchema, await response.json(), null);
       if (!data) throw new Error('크레딧 내역 응답을 확인할 수 없습니다.');
       setLedger(data);
+      setPage(nextPage);
     } catch (e) { setError(e instanceof Error ? e.message : '크레딧 조회 오류'); }
     finally { setLoading(false); }
-  };
-  useEffect(() => { void refresh(); }, []);
-  return <section aria-label="크레딧 충전 및 사용 내역" style={{marginBottom:28}}>
+  }, []);
+  useEffect(() => { void refresh(1); }, [refresh]);
+  return <section aria-label="추가 통화 이용권 구매 및 사용 내역" style={{marginBottom:28}}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
       <h3 style={{fontSize:18,margin:'0 0 12px'}}>충전 · 사용 · 잔여 크레딧</h3>
-      <button className="btn-secondary" disabled={loading} onClick={refresh}>새로고침</button>
+      <button className="btn-secondary" disabled={loading} onClick={()=>refresh(1)}>새로고침</button>
     </div>
     {loading ? <p role="status">내역을 확인하고 있습니다.</p> : error ? <p role="alert" style={{color:'#b45309'}}>{error}</p> : ledger && <>
       <div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:12,padding:18,margin:'12px 0'}}>
         <div style={{color:'#475569'}}>현재 잔여 크레딧</div>
         <strong style={{fontSize:28,color:'#1d4ed8'}}>{ledger.balance === null ? '잔액 미설정' : `${ledger.balance.toLocaleString()} 크레딧`}</strong>
-        <div style={{fontSize:12,color:'#64748b',marginTop:6}}>1크레딧 = 1원 · 월 기본요금 결제는 크레딧 충전에 포함되지 않습니다.</div>
+        <div style={{fontSize:12,color:'#64748b',marginTop:6}}>잔액 1원 = 통화 이용료 1원 · 월 정기결제와 추가 통화 이용권은 별도 상품입니다.</div>
       </div>
       {ledger.openingBalance !== 0 && <p role="status" style={{color:'#b45309'}}>이전 잔액 {ledger.openingBalance.toLocaleString()}크레딧이 포함되어 있습니다. 이전 충전일은 담당자 확인이 필요합니다.</p>}
       <div style={{overflowX:'auto'}}>
@@ -42,7 +47,8 @@ export default function CreditLedgerPanel() {
           </tr>)}</tbody>
         </table>
       </div>
-      {ledger.entries.length === 0 && <p>아직 크레딧 충전·사용 내역이 없습니다.</p>}
+      <HistoryPagination page={page} totalItems={ledger.total ?? ledger.entries.length} pageSize={PAGE_SIZE} onChange={next=>void refresh(next)}/>
+      {ledger.entries.length === 0 && <p>아직 추가 통화 이용권 구매·사용 내역이 없습니다.</p>}
     </>}
   </section>;
 }
