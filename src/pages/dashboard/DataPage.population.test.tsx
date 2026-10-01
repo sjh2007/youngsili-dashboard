@@ -29,7 +29,7 @@ it('포항시 제목과 일반구를 표시하고 북구 선택 시 하위 지�
     regions: [{ region: '북구', regionPath: '포항시 북구', hasChildren: true, total: 300, elderly: 68, elderlyRatio: 22.7, solitary: 20 }],
   }} />);
 
-  expect(screen.getByText('포항시 독거노인 현황')).toBeInTheDocument();
+  expect(screen.getByText('포항시 고령 1인 세대 현황')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '북구 하위 지역 보기' }));
   expect(fetchPopulation).toHaveBeenCalledWith('포항시 북구');
 });
@@ -43,7 +43,7 @@ it('북구 화면에서는 읍면동과 지역 경로를 표시한다', () => {
     regions: [{ region: '죽도동', regionPath: '포항시 북구', hasChildren: false, total: 100, elderly: 23, elderlyRatio: 23, solitary: 7 }],
   }} />);
 
-  expect(screen.getByText('포항시 북구 독거노인 현황')).toBeInTheDocument();
+  expect(screen.getByText('포항시 북구 고령 1인 세대 현황')).toBeInTheDocument();
   expect(screen.getByText('읍면동별 독거노인 현황')).toBeInTheDocument();
   expect(screen.getByText('죽도동')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '포항시' })).toBeInTheDocument();
