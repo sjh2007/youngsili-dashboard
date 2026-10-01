@@ -6,13 +6,14 @@ import {
   HealthInsightCaseSchema, HealthInsightDetailSchema, HealthInsightListSchema, HealthInsightRankingsSchema, HealthInsightTrendSchema,
   type Elder, type HealthInsightCase, type HealthInsightDetail, type HealthInsightRankings, type HealthInsightTrendPoint,
 } from '../../schemas';
+import HealthSyntheticTestPanel from './HealthSyntheticTestPanel';
 
 const topicLabel: Record<string,string> = { meal:'식사', sleep:'수면', activity:'활동', discomfort:'불편 사항' };
 const signalLabel: Record<string,string> = { new_statement:'새 불편 확인', repeated_statement:'같은 불편 반복', changed_response:'최근 응답과 달라짐', insufficient_data:'자료 부족' };
 const stateLabel: Record<string,string> = { unreviewed:'미확인', reviewing:'확인 중', resolved:'처리됨', corrected:'정정됨', dismissed:'제외됨' };
 const ALL_ELDERS = '__all__';
 
-export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords }: { elders:Elder[]; notify?:(m:string,t?:string)=>void; onOpenCallRecords?:(elderId:string)=>void }) {
+export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords, canRunTests=false }: { elders:Elder[]; notify?:(m:string,t?:string)=>void; onOpenCallRecords?:(elderId:string)=>void;canRunTests?:boolean }) {
   const elderKey=(elder:Elder)=>String(elder.phone||elder.id||'');
   const [elderId,setElderId]=useState(ALL_ELDERS);
   const [items,setItems]=useState<HealthInsightCase[]>([]);
@@ -97,7 +98,7 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
     {detail.evidence.length?detail.evidence.map((e,index)=><blockquote key={`${e.sourceId}-${e.line}-${index}`} className={tone==='active'?'is-active':''}><div>&ldquo;{e.excerpt}&rdquo;</div><small>{new Date(e.observedAt).toLocaleString('ko-KR')} · 원문 {e.line}번째 줄</small></blockquote>):<p>표시할 원문 근거가 없습니다.</p>}
   </div>;
 
-  return <section className="health-insights-board" aria-labelledby="health-insights-title">
+  return <>{canRunTests&&<HealthSyntheticTestPanel elders={elders} notify={notify}/>}<section className="health-insights-board" aria-labelledby="health-insights-title">
     <header className="health-insights-head">
       <div><span className="health-insights-eyebrow">통화 기반 건강 관찰</span><h2 id="health-insights-title">건강 변화 확인</h2><p>의료 진단이 아닌, 담당자가 통화 근거를 확인하고 조치하는 화면입니다.</p></div>
       <div className="health-insights-controls">
@@ -149,5 +150,5 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
         {showCompleted&&<div className="health-completed-list">{completedItems.length?completedItems.map(item=>{const detail=details[item.caseId],open=!!expanded[item.caseId],busy=busyCaseId===item.caseId;return <article key={item.caseId} className="health-completed-card"><div>{!selected&&<span className="health-elder-badge">{elderName(item.elderId)}</span>}<b>{topicLabel[item.topic]||item.topic}</b><span>{stateLabel[item.state]||item.state}</span><time>{new Date(item.latestObservedAt).toLocaleString('ko-KR')}</time></div><button className="btn-secondary" disabled={busy} aria-expanded={open} onClick={()=>showDetail(item)}>{busy?'불러오는 중…':open?'상세 닫기':'완료 상세'}</button>{open&&detail&&<><dl><dt>조치 내용</dt><dd>{detail.reviewNote||'기록 없음'}</dd><dt>담당자</dt><dd>{detail.reviewedBy||'확인할 수 없음'}</dd><dt>처리 시각</dt><dd>{detail.updatedAt?new Date(detail.updatedAt).toLocaleString('ko-KR'):'기록 없음'}</dd></dl>{renderEvidence(detail,'done')}</>}</article>}):<div className="health-empty">완료된 조치 이력이 없습니다.</div>}</div>}
       </div>
     </>}
-  </section>;
+  </section></>;
 }

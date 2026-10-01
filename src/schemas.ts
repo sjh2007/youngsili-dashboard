@@ -238,6 +238,19 @@ export type HealthInsightCase = z.infer<typeof HealthInsightCaseSchema>;
 export type HealthInsightDetail = z.infer<typeof HealthInsightDetailSchema>;
 export type HealthInsightTrendPoint = z.infer<typeof HealthInsightTrendSchema>['points'][number];
 export type HealthInsightRankings = z.infer<typeof HealthInsightRankingsSchema>;
+export const HealthInsightTestObservationSchema = loose({
+  topic: z.enum(['meal','sleep','activity','discomfort']),
+  value: z.enum(['present','absent','unclear','not_asked','recognition_failed']),
+  subject: z.enum(['self','other','unknown']), temporality: z.enum(['current','past','unknown']),
+  evidenceLine: z.number().int().positive(), evidenceExcerpt: z.string().max(160),
+});
+export const HealthInsightTestRunSchema = loose({
+  runId: z.string().nullable(), elderId: z.string().min(1),
+  createdAt: z.string().datetime({ offset: true }), expiresAt: z.string().datetime({ offset: true }),
+  observations: z.array(HealthInsightTestObservationSchema).max(12),
+});
+export const HealthInsightTestRunListSchema = loose({ items: z.array(HealthInsightTestRunSchema) });
+export type HealthInsightTestRun = z.infer<typeof HealthInsightTestRunSchema>;
 
 // ── 기상 (/weather) — { 지역명: {...} } 맵 ──
 export const WeatherRegionSchema = loose({
