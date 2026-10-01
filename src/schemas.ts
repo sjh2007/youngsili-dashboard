@@ -224,9 +224,20 @@ export const HealthInsightTrendSchema = loose({
     topics: loose({ meal: z.number().int().nonnegative(), sleep: z.number().int().nonnegative(), activity: z.number().int().nonnegative(), discomfort: z.number().int().nonnegative() }),
   })),
 });
+const HealthInsightTopicCountsSchema = loose({ meal: z.number().int().nonnegative(), sleep: z.number().int().nonnegative(), activity: z.number().int().nonnegative(), discomfort: z.number().int().nonnegative() });
+export const HealthInsightRankingsSchema = loose({
+  from: z.string(), to: z.string(), total: z.number().int().nonnegative(),
+  topics: HealthInsightTopicCountsSchema,
+  people: z.array(loose({
+    elderId: z.string().min(1), total: z.number().int().nonnegative(), previousTotal: z.number().int().nonnegative(),
+    delta: z.number().int(), latestObservedAt: z.string().datetime({ offset: true }), topics: HealthInsightTopicCountsSchema,
+  })),
+  points: z.array(loose({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), total: z.number().int().nonnegative() })),
+});
 export type HealthInsightCase = z.infer<typeof HealthInsightCaseSchema>;
 export type HealthInsightDetail = z.infer<typeof HealthInsightDetailSchema>;
 export type HealthInsightTrendPoint = z.infer<typeof HealthInsightTrendSchema>['points'][number];
+export type HealthInsightRankings = z.infer<typeof HealthInsightRankingsSchema>;
 
 // ── 기상 (/weather) — { 지역명: {...} } 맵 ──
 export const WeatherRegionSchema = loose({

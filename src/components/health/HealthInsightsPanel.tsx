@@ -3,8 +3,8 @@ import Chart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import { SERVER_URL, authFetch, errMsg } from '../../utils/api';
 import {
-  HealthInsightCaseSchema, HealthInsightDetailSchema, HealthInsightListSchema, HealthInsightTrendSchema,
-  type Elder, type HealthInsightCase, type HealthInsightDetail, type HealthInsightTrendPoint,
+  HealthInsightCaseSchema, HealthInsightDetailSchema, HealthInsightListSchema, HealthInsightRankingsSchema, HealthInsightTrendSchema,
+  type Elder, type HealthInsightCase, type HealthInsightDetail, type HealthInsightRankings, type HealthInsightTrendPoint,
 } from '../../schemas';
 
 const topicLabel: Record<string,string> = { meal:'식사', sleep:'수면', activity:'활동', discomfort:'불편 사항' };
@@ -16,6 +16,7 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
   const [elderId,setElderId]=useState('');
   const [items,setItems]=useState<HealthInsightCase[]>([]);
   const [points,setPoints]=useState<HealthInsightTrendPoint[]>([]);
+  const [rankings,setRankings]=useState<HealthInsightRankings|null>(null);
   const [details,setDetails]=useState<Record<string,HealthInsightDetail>>({});
   const [expanded,setExpanded]=useState<Record<string,boolean>>({});
   const [busyCaseId,setBusyCaseId]=useState('');
@@ -32,16 +33,17 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
     try{
       const now=new Date(),from=new Date(now.getTime()-rangeDays*86400000);
       const q=`elderId=${encodeURIComponent(elderId)}&from=${from.toISOString().slice(0,10)}&to=${now.toISOString().slice(0,10)}`;
-      const [a,b]=await Promise.all([
+      const [a,b,c]=await Promise.all([
         authFetch(`${SERVER_URL}/health/insights?elderId=${encodeURIComponent(elderId)}&limit=100`),
         authFetch(`${SERVER_URL}/health/insights/trend?${q}`),
+        authFetch(`${SERVER_URL}/health/insights/rankings?from=${from.toISOString().slice(0,10)}&to=${now.toISOString().slice(0,10)}`),
       ]);
-      if(a.status===501||b.status===501){setDisabled(true);setItems([]);setPoints([]);return}
-      const ad:unknown=await a.json(),bd:unknown=await b.json();
-      if(!a.ok||!b.ok)throw new Error(errMsg(!a.ok?ad:bd));
-      const parsedList=HealthInsightListSchema.safeParse(ad),parsedTrend=HealthInsightTrendSchema.safeParse(bd);
-      if(!parsedList.success||!parsedTrend.success)throw new Error('건강 변화 API 응답 형식이 올바르지 않습니다');
-      setDisabled(false);setItems(parsedList.data.items);setPoints(parsedTrend.data.points);
+      if(a.status===501||b.status===501||c.status===501){setDisabled(true);setItems([]);setPoints([]);setRankings(null);return}
+      const ad:unknown=await a.json(),bd:unknown=await b.json(),cd:unknown=await c.json();
+      if(!a.ok||!b.ok||!c.ok)throw new Error(errMsg(!a.ok?ad:!b.ok?bd:cd));
+      const parsedList=HealthInsightListSchema.safeParse(ad),parsedTrend=HealthInsightTrendSchema.safeParse(bd),parsedRankings=HealthInsightRankingsSchema.safeParse(cd);
+      if(!parsedList.success||!parsedTrend.success||!parsedRankings.success)throw new Error('건강 변화 API 응답 형식이 올바르지 않습니다');
+      setDisabled(false);setItems(parsedList.data.items);setPoints(parsedTrend.data.points);setRankings(parsedRankings.data);
     }catch(error:unknown){notify?.(error instanceof Error?error.message:'건강 변화 정보를 불러오지 못했습니다')}
     finally{setLoading(false)}
   };
@@ -51,11 +53,12 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
   const activeItems=items.filter(item=>item.state==='unreviewed'||item.state==='reviewing');
   const completedItems=items.filter(item=>['resolved','corrected','dismissed'].includes(item.state));
   const options:ApexOptions=useMemo(()=>({chart:{type:'area',toolbar:{show:false},fontFamily:'Pretendard, sans-serif',animations:{enabled:true,speed:380}},colors:['#ef3f4a'],dataLabels:{enabled:false},markers:{size:4,strokeWidth:3,strokeColors:'#fff',hover:{size:6}},grid:{borderColor:'#e8edf5',strokeDashArray:4},stroke:{curve:'smooth',width:3},fill:{type:'gradient',gradient:{opacityFrom:.28,opacityTo:.02,stops:[0,90,100]}},xaxis:{categories:points.map(p=>new Date(p.observedAt).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})),labels:{style:{colors:'#8290a6',fontSize:'12px'}},axisBorder:{show:false},axisTicks:{show:false}},yaxis:{min:0,forceNiceScale:true,labels:{style:{colors:'#8290a6'}}},tooltip:{y:{formatter:v=>`${v}개`}}}),[points]);
+  const institutionOptions:ApexOptions=useMemo(()=>({chart:{type:'area',toolbar:{show:false},fontFamily:'Pretendard, sans-serif',animations:{enabled:true,speed:380}},colors:['#ef3f4a'],dataLabels:{enabled:false},markers:{size:4,strokeWidth:3,strokeColors:'#fff',hover:{size:6}},grid:{borderColor:'#e8edf5',strokeDashArray:4},stroke:{curve:'smooth',width:3},fill:{type:'gradient',gradient:{opacityFrom:.28,opacityTo:.02,stops:[0,90,100]}},xaxis:{categories:(rankings?.points||[]).map(p=>new Date(`${p.date}T00:00:00+09:00`).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})),labels:{style:{colors:'#8290a6',fontSize:'12px'}},axisBorder:{show:false},axisTicks:{show:false}},yaxis:{min:0,forceNiceScale:true,labels:{style:{colors:'#8290a6'}}},tooltip:{y:{formatter:v=>`${v}건`}}}),[rankings]);
 
-  const topicCounts=activeItems.reduce<Record<string,number>>((acc,item)=>({...acc,[item.topic]:(acc[item.topic]||0)+1}),{});
-  const topTopic=Object.entries(topicCounts).sort((a,b)=>b[1]-a[1])[0];
+  const topTopic=(Object.entries(rankings?.topics||{}) as [string,number][]).sort((a,b)=>b[1]-a[1])[0];
   const latestPoint=points.at(-1);
-  const maxPoint=points.reduce((max,point)=>Math.max(max,point.needsReviewCount),0);
+  const topPerson=rankings?.people.slice().sort((a,b)=>b.delta-a.delta)[0];
+  const elderName=(id:string)=>elders.find(elder=>elderKey(elder)===id)?.name||'이름 미등록';
 
   const showDetail=async(item:HealthInsightCase)=>{
     if(expanded[item.caseId]){setExpanded(v=>({...v,[item.caseId]:false}));return}
@@ -106,15 +109,31 @@ export default function HealthInsightsPanel({ elders, notify, onOpenCallRecords 
     </header>
 
     {loading?<div className="health-board-loading" role="status">건강 변화 정보를 불러오는 중입니다…</div>:<>
-      <div className="health-summary-grid" aria-label={`${selected?.name||'선택한 어르신'} 건강 변화 요약`}>
-        <div className="health-summary-card"><span>확인 필요</span><strong>{activeItems.length}<small>건</small></strong><p>현재 열린 건강 변화</p></div>
-        <div className="health-summary-card is-amber"><span>가장 많은 항목</span><strong>{topTopic?topicLabel[topTopic[0]]:'없음'}{topTopic&&<small> {topTopic[1]}건</small>}</strong><p>{rangeDays}일 동안 확인된 항목</p></div>
-        <div className="health-summary-card is-red"><span>최근 통화 변화</span><strong>{latestPoint?.needsReviewCount||0}<small>개</small></strong><p>기간 내 최고 {maxPoint}개</p></div>
+      <div className="health-summary-grid" aria-label="기관 전체 건강 변화 요약">
+        <div className="health-summary-card"><span>전체 변화 감지</span><strong>{rankings?.total||0}<small>건</small></strong><p>{rangeDays}일 동안 확인된 기관 전체 기록</p></div>
+        <div className="health-summary-card is-amber"><span>가장 많은 항목</span><strong>{topTopic&&topTopic[1]>0?topicLabel[topTopic[0]]:'없음'}{topTopic&&topTopic[1]>0&&<small> {topTopic[1]}건</small>}</strong><p>같은 통화의 동일 항목은 한 번만 집계</p></div>
+        <div className="health-summary-card is-red"><span>변화 증가 어르신</span><strong>{topPerson&&topPerson.delta>0?elderName(topPerson.elderId):'없음'}{topPerson&&topPerson.delta>0&&<small> +{topPerson.delta}</small>}</strong><p>직전 동일 기간과 비교</p></div>
       </div>
 
       <div className="health-trend-card">
-        <div className="health-card-heading"><div><span>변화 추이</span><h3>{selected?.name||'선택한 어르신'} · 통화별 확인 필요 항목</h3></div>{latestPoint&&<span className="health-trend-pill">최근 {latestPoint.needsReviewCount}개</span>}</div>
-        {points.length?<Chart options={options} series={[{name:'확인 필요 항목',data:points.map(p=>p.needsReviewCount)}]} type="area" height={280}/>:<div className="health-empty">선택한 기간에 그래프 자료가 없습니다.</div>}
+        <div className="health-card-heading"><div><span>기관 전체 추이</span><h3>기간별 건강 변화 감지</h3></div><span className="health-trend-pill">{rankings?.people.length||0}명 확인</span></div>
+        {rankings?.points.length?<Chart options={institutionOptions} series={[{name:'변화 감지',data:rankings.points.map(p=>p.total)}]} type="area" height={250}/>:<div className="health-empty">선택한 기간에 기관 전체 그래프 자료가 없습니다.</div>}
+      </div>
+
+      <div className="health-people-heading"><div><span className="health-insights-eyebrow">어르신별 변화</span><h3>확인이 필요한 어르신</h3></div><span>{rankings?.people.length||0}명</span></div>
+      <div className="health-people-list" aria-label="건강 변화 어르신 순위">
+        {rankings?.people.length?rankings.people.map((person,index)=><button type="button" key={person.elderId} className={`health-ranking-row ${elderId===person.elderId?'is-selected':''}`} aria-pressed={elderId===person.elderId} onClick={()=>setElderId(person.elderId)}>
+          <span className="health-rank-number" aria-label={`${index+1}순위`}>{index+1}</span>
+          <span className="health-rank-person"><b>{elderName(person.elderId)}</b><small>총 {person.total}건 · 눌러서 상세 보기</small></span>
+          <span className="health-rank-topics">{(Object.entries(person.topics) as [string,number][]).filter(([,count])=>count>0).map(([topic,count])=><span key={topic} className={topic==='discomfort'?'is-red':''}>{topicLabel[topic]} ×{count}</span>)}</span>
+          <span className={`health-rank-delta ${person.delta>0?'is-up':person.delta<0?'is-down':''}`}>{person.delta>0?'↑':person.delta<0?'↓':'–'} {person.delta>0?`+${person.delta}`:Math.abs(person.delta)}<small>직전 {person.previousTotal}건</small></span>
+        </button>):<div className="health-empty health-empty-success"><b>선택한 기간에 확인할 어르신이 없습니다.</b><span>문제 표현이 감지되면 사람별로 이곳에 표시됩니다.</span></div>}
+      </div>
+
+      <div className="health-person-detail-head"><div><span className="health-insights-eyebrow">선택한 어르신 상세</span><h3>{selected?.name||'어르신'} 건강 변화</h3></div></div>
+      <div className="health-trend-card is-personal">
+        <div className="health-card-heading"><div><span>개인 변화 추이</span><h3>통화별 확인 필요 항목</h3></div>{latestPoint&&<span className="health-trend-pill">최근 {latestPoint.needsReviewCount}개</span>}</div>
+        {points.length?<Chart options={options} series={[{name:'확인 필요 항목',data:points.map(p=>p.needsReviewCount)}]} type="area" height={220}/>:<div className="health-empty">선택한 기간에 개인 그래프 자료가 없습니다.</div>}
       </div>
 
       <div className="health-review-heading"><div><span className="health-insights-eyebrow">담당자 확인 목록</span><h3>현재 확인할 변화</h3></div><span>{activeItems.length}건</span></div>
