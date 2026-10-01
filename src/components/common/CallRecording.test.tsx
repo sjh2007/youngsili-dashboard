@@ -23,9 +23,9 @@ function view() { return render(<RecordingProvider><CallRecording callId="call_f
 
 it('labels public demo recordings with one day retention instead of institution retention', async () => {
   view(); const check = await screen.findByRole('button', { name: '녹음 확인' });
-  fetchMock.mockResolvedValueOnce(response({ ...metadata, channel: 'pstn', retentionMonths: null, retentionDays: 1 }));
+  fetchMock.mockResolvedValueOnce(response({ ...metadata, channel: 'pstn', retentionMonths: null, retentionDays: 14 }));
   fireEvent.click(check);
-  expect(await screen.findByText(/신청일 기준 1일 보관/)).toBeInTheDocument();
+  expect(await screen.findByText(/신청일 기준 14일 보관/)).toBeInTheDocument();
   expect(screen.getByText('암호화 보관 · 운영관리자만 이용')).toBeInTheDocument();
   expect(screen.queryByText(/음성 원본 30일 보관/)).not.toBeInTheDocument();
 });

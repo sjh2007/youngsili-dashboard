@@ -9,7 +9,8 @@ export const RecordingMetadataSchema = z.object({ state: z.enum(['recording', 'p
   errorCode: z.enum(['capture_failed', 'upload_failed', 'no_audio', 'duration_limit', 'processing_failed', 'upload_timeout', 'storage_full']).nullable().optional(),
   channel: z.enum(['app', 'pstn']), durationSec: z.number().min(0).max(360).nullable(),
   formats: z.array(z.enum(['mp3', 'wav'])), retentionMonths: z.null(),
-  retentionDays: z.union([z.literal(1), z.literal(30)]) });
+  // 1일은 배포 전 생성된 체험통화 메타데이터의 호환을 위해 유지한다.
+  retentionDays: z.union([z.literal(1), z.literal(14), z.literal(30)]) });
 
 const loose = <T extends z.ZodRawShape>(shape: T) => z.object(shape).catchall(z.unknown());
 
