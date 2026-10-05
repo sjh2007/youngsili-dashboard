@@ -1,55 +1,75 @@
+import WorkMemosPanel from './WorkMemosPanel';
+import { useState } from 'react';
+import { noteDateKst } from '../../utils/caseNoteExport';
+import CaseNotePagination from '../../components/case-notes/CaseNotePagination';
 // DashboardApplication.tsx의 page==='casenotes'(상담·방문 일지) 블록을 그대로 옮긴 것 —
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-07).
-import { Search, X, CheckCircle2, PencilLine } from 'lucide-react';
+import { Search, X, PencilLine } from 'lucide-react';
 
 export default function CasenotesPage(props: any) {
   const {
     T, caseSearch, setCaseSearch, openSchedule, openWeeklyReport, exportNotesXlsx, caseNotes,
-    openNewNote, caseType, setCaseType, caseFollowUpOnly, setCaseFollowUpOnly, memoText, setMemoText,
-    memos, setMemos, isAutoDraft, caseLoading, nameByPhone, CASE_TYPE_META, selectedNotes,
+    openNewNote, caseType, setCaseType, caseFollowUpOnly, setCaseFollowUpOnly,
+    isAutoDraft, caseLoading, nameByPhone, CASE_TYPE_META, selectedNotes,
     setSelectedNotes, deleteSelectedNotes, expandedNoteDays, setExpandedNoteDays, formatDateHeader,
     toggleNoteSel, copyNote, copiedNoteId, openEditNote, deleteNote, CASE_CAT_META, CASE_TOPIC_META,
-    AutoDraftBadge,
+    AutoDraftBadge, printNote, caseError, reloadNotes, notesPage, openNoteExport,
   } = props;
+  const [includeDrafts, setIncludeDrafts] = useState(false);
+  const filtered = notesPage ? caseNotes : caseNotes.filter(n =>
+    (caseType === 'all' || n.type === caseType) &&
+    (!caseSearch || (nameByPhone(n.elderPhone, n.elderName) || '').includes(caseSearch)) &&
+    (!caseFollowUpOnly || (n.followUp?.needed && !n.followUp.done))
+  );
+  const exportable = filtered.filter(n => includeDrafts || !isAutoDraft(n));
+  const selectedExportable = exportable.filter(n => selectedNotes.has(n.id));
+  const exportSummary = (notes) => {
+    const people = new Set(notes.map(n => n.elderPhone || n.elderId || n.elderName || n.id)).size;
+    const dates = notes.map(n => noteDateKst(n.visitedAt)).filter(Boolean).sort();
+    return `${notes.length}건 · ${people}명 · 상담일 ${dates.length ? `${dates[0]} ~ ${dates[dates.length - 1]}` : '기록 없음'}`;
+  };
 
   return (
     <div className="fade-in casenotes-page">
       <div className="casenotes-toolbar">
         <div className="casenotes-toolbar-main">
-          <div className="search-box casenotes-search"><Search size={19} aria-hidden="true"/><input className="search-input" placeholder={`${T.elder} 이름으로 검색`} value={caseSearch} onChange={e=>setCaseSearch(e.target.value)}/>{caseSearch&&<button className="search-clear" onClick={()=>setCaseSearch('')} aria-label="검색어 지우기"><X size={16}/></button>}</div>
+          <div className="search-box casenotes-search"><Search size={19} aria-hidden="true"/><input className="search-input" aria-label="어르신 이름 검색" placeholder={`${T.elder} 이름으로 검색`} value={caseSearch} onChange={e=>setCaseSearch(e.target.value)}/>{caseSearch&&<button className="search-clear" onClick={()=>setCaseSearch('')} aria-label="검색어 지우기"><X size={16}/></button>}</div>
           <div className="casenotes-actions">
             <button className="btn-secondary" onClick={openSchedule} title="이용자별 월 급여제공 일정표 — 날짜별 제공시간 입력·저장 후 공식 달력 양식으로 인쇄(PDF)">급여제공 일정표</button>
             <button className="btn-secondary" onClick={openWeeklyReport} title="공식 양식(1~5주차·사회/신체/가사/기타)에 이번 달 일지를 자동으로 채워 인쇄(PDF)합니다">주간업무 보고서</button>
-            <button className="btn-secondary" onClick={()=>exportNotesXlsx(caseNotes)} title="일지 전체(최근 90일)를 엑셀로 다운로드 — 기관 보관·결재용">엑셀</button>
             <button className="btn-primary" onClick={()=>openNewNote()}><PencilLine size={17}/> 새 일지</button>
           </div>
         </div>
         <div className="casenotes-filter-row">
           <span className="casenotes-filter-label">상담 유형</span>
           {[['all','전체'],['visit','방문'],['phone','전화'],['office','내소'],['guardian','보호자'],['etc','기타']].map(([v,l])=>(
-            <button key={v} className={`smart-btn ${caseType===v?'smart-active':''}`} onClick={()=>setCaseType(v)}>{l}</button>
+            <button key={v} aria-pressed={caseType===v} className={`smart-btn ${caseType===v?'smart-active':''}`} onClick={()=>setCaseType(v)}>{l}</button>
           ))}
           <span className="casenotes-filter-divider"/>
-          <button className={`smart-btn casenotes-followup ${caseFollowUpOnly?'is-active':''}`} onClick={()=>setCaseFollowUpOnly(v=>!v)}>후속 필요{caseFollowUpOnly?' · 해제':''}</button>
-          <span className="casenotes-sync">15초마다 자동 갱신</span>
+          <button aria-pressed={caseFollowUpOnly} className={`smart-btn casenotes-followup ${caseFollowUpOnly?'is-active':''}`} onClick={()=>setCaseFollowUpOnly(v=>!v)}>후속 필요{caseFollowUpOnly?' · 해제':''}</button>
+          <span className="casenotes-sync">변경 여부 확인 · 변경 시 최신 페이지 갱신</span>
+        </div>
+        <div style={{borderTop:'1px solid #e2e8f0',paddingTop:12,marginTop:12,display:'flex',flexDirection:'column',gap:8}}>
+          <label style={{display:'flex',alignItems:'center',gap:8,minHeight:44}}><input type="checkbox" checked={includeDrafts} onChange={e=>setIncludeDrafts(e.target.checked)}/> 다운로드에 미확인 자동 초안 포함</label>
+          <span style={{color:'#64748b',fontSize:14}}>최근 90일 생성 일지를 페이지별로 조회합니다. 아래 건수는 현재 페이지 기준입니다. 전체 엑셀은 조회 조건에 맞는 자료를 순서대로 읽어 최대 5,000건씩 나누어 만듭니다.</span>
+          <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+            <button className="btn-secondary" style={{minHeight:44}} disabled={caseLoading || !!caseError || (!notesPage && !exportable.length)} onClick={()=>openNoteExport ? openNoteExport({includeDrafts}) : exportNotesXlsx(exportable)}>조회 결과 엑셀</button>
+            <span data-testid="filtered-export-summary">{exportSummary(exportable)}</span>
+          </div>
+          <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+            <button className="btn-secondary" style={{minHeight:44}} disabled={caseLoading || !!caseError || !selectedExportable.length} onClick={()=>openNoteExport ? openNoteExport({includeDrafts,selectedIds:selectedExportable.map(n=>n.id)}) : exportNotesXlsx(selectedExportable)}>선택 일지 엑셀</button>
+            <span data-testid="selected-export-summary">{exportSummary(selectedExportable)} (현재 조회 결과 안의 선택 일지만)</span>
+          </div>
         </div>
       </div>
+      {caseError && <div role="alert" style={{padding:16,marginBottom:16,border:'1px solid #fbbf24',borderRadius:10,background:'#fffbeb',color:'#92400e'}}>
+        <p style={{marginTop:0}}>{caseError} 표시된 기존 일지는 최신 상태가 아닐 수 있습니다. 다시 불러온 뒤 다운로드해 주세요.</p>
+        {reloadNotes && <button className="btn-secondary" style={{minHeight:44}} disabled={caseLoading} onClick={reloadNotes}>일지 다시 불러오기</button>}
+      </div>}
 
-      <section className="section casenotes-memo">
-        <div className="casenotes-memo-heading"><div><div className="section-title">업무 메모</div><p>상담이나 방문 전에 확인할 내용을 간단히 기록하세요.</p></div></div>
-        <div className="memo-input-wrap">
-          <input className="memo-input" placeholder="새 메모를 입력하세요" value={memoText} onChange={e=>setMemoText(e.target.value)}
-            onKeyDown={e=>{if(e.key==='Enter'&&memoText.trim()){const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});setMemos(prev=>[{id:Date.now(),text:memoText.trim(),time:now,done:false},...prev]);setMemoText('');}}}/>
-          <button className="btn-primary" onClick={()=>{if(!memoText.trim())return;const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});setMemos(prev=>[{id:Date.now(),text:memoText.trim(),time:now,done:false},...prev]);setMemoText('');}}>메모 추가</button>
-        </div>
-        {memos.length>0 && <div className="memo-list">
-          {memos.map(memo=><div key={memo.id} className={`memo-item ${memo.done?'memo-done':''}`}>
-            <button className={`todo-check ${memo.done?'todo-check-on':''}`} onClick={()=>setMemos(prev=>prev.map(m=>m.id===memo.id?{...m,done:!m.done}:m))} aria-label="메모 완료">{memo.done&&<CheckCircle2 size={13} color="#fff" strokeWidth={3}/>}</button>
-            <div className="memo-text">{memo.text}</div><div className="memo-time">{memo.time}</div>
-            <button className="memo-del" aria-label="메모 삭제" onClick={()=>setMemos(prev=>prev.filter(m=>m.id!==memo.id))}><X size={15}/></button>
-          </div>)}
-        </div>}
-      </section>
+      <WorkMemosPanel/>
+      <CaseNotePagination page={notesPage}/>
+      <p style={{fontSize:14,color:'#64748b'}}>아래 요약은 현재 페이지에 표시된 일지만 집계합니다. 기관 전체 실적이 아닙니다.</p>
       {(()=>{
         const ym=new Date().toISOString().slice(0,7);
         const tm=caseNotes.filter(n=>(n.visitedAt||'').slice(0,7)===ym);
@@ -76,13 +96,8 @@ export default function CasenotesPage(props: any) {
       {caseLoading ? (
         <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>불러오는 중...</div>
       ) : (()=>{
-        const filtered=caseNotes.filter(n=>
-          (caseType==='all'||n.type===caseType) &&
-          (!caseSearch||(nameByPhone(n.elderPhone,n.elderName)||'').includes(caseSearch)) &&
-          (!caseFollowUpOnly||(n.followUp&&n.followUp.needed&&!n.followUp.done))
-        );
         if(filtered.length===0) {
-          if(caseNotes.length===0) return <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>아직 작성된 상담·방문 일지가 없습니다. ＋ 새 일지로 첫 기록을 남겨보세요.</div>;
+          if(caseNotes.length===0) return <div style={{padding:30,textAlign:'center',color:'#64748b'}}>이 페이지에 조건과 일치하는 일지가 없습니다.{notesPage?.hasMore ? ' 다음 일지를 눌러 계속 조회하세요.' : ' 조회 조건을 확인하거나 새 일지를 작성하세요.'}</div>;
           const active=[caseFollowUpOnly&&'후속 필요', caseType!=='all'&&`유형: ${(CASE_TYPE_META[caseType]||{}).label||caseType}`, caseSearch&&`검색: "${caseSearch}"`].filter(Boolean);
           return (
             <div style={{padding:'30px',textAlign:'center',color:'#64748b'}}>
@@ -132,11 +147,13 @@ export default function CasenotesPage(props: any) {
                       {isAutoDraft(n)&&<AutoDraftBadge/>}
                       {fu&&<span style={{fontSize:14,color:'#f59e0b',fontWeight:700}}>후속{n.followUp.dueDate?` ~${n.followUp.dueDate}`:''}</span>}
                       <span style={{flex:1}}/>
+                      {printNote && <button className="btn-secondary" style={{minHeight:44}} disabled={!!caseError} onClick={()=>printNote(n)}>PDF·인쇄</button>}
                       <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:15,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'복사됨':'복사'}</button>
                       <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#246BEB',fontSize:15,fontWeight:700,cursor:'pointer'}}>수정</button>
                       <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:15,fontWeight:700,cursor:'pointer'}}>삭제</button>
                     </div>
-                    {n.content&&<div style={{fontSize:16,color:'#1f2937',marginTop:6,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
+                    {(n.content||n.excerpt)&&<div style={{fontSize:16,color:'#1f2937',marginTop:6,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content||n.excerpt}</div>}
+                    {notesPage && <button className="btn-secondary" style={{minHeight:44,marginTop:8}} onClick={()=>openEditNote(n)}>내용 확인</button>}
                     {n.action&&<div style={{fontSize:16,color:'#475569',marginTop:5,lineHeight:1.5}}><b style={{color:'#0f766e'}}>조치</b> {n.action}</div>}
                     {n.authorEmail&&<div style={{fontSize:14,color:'#94a3b8',marginTop:6}}>작성: {n.authorEmail}</div>}
                   </div>

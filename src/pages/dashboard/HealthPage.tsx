@@ -1,21 +1,38 @@
 // DashboardApplication.tsx의 page==='health'(건강 상태) 블록을 그대로 옮긴 것 —
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-08).
+import { useState } from 'react';
 import { CheckCircle2, AlertTriangle, AlertCircle, Users } from 'lucide-react';
 import { Button, PageIntro, StatusBadge } from '../../components/ui';
 import { SERVER_URL, authFetch } from '../../utils/api';
 import { STATUS_CONFIG } from '../../constants/app';
 import HealthInsightsPanel from '../../components/health/HealthInsightsPanel';
+import { riskDisplayText } from '../../utils/riskDisplay';
+import { todayHealthCheckForElder } from '../../utils/healthCheck';
+import type { HealthInsightCase } from '../../schemas';
 
 export default function HealthPage(props: any) {
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
+  const [insightCases, setInsightCases] = useState<HealthInsightCase[]|null>(null);
+  const [insightHasMore, setInsightHasMore] = useState(false);
   const {
-    healthLoading, fetchHealth, healthData, elders, alertsData, alertIsReal, nameByPhone, alertEnCode,
+    healthLoading, healthError, fetchHealth, healthData, elders, alertsData, alertIsReal, nameByPhone, alertEnCode,
     alertKw, draftingAlertId, openNoteFromAlert, healthFilter, setHealthFilter, healthAllOpen,
     setHealthAllOpen, setHealthRowOv, setHealthNormalShown, healthRowOv, getNoResponseDays,
     callsHistory, kwFromTranscript, healthHistory, setCallModal, openDetail, healthRange,
     setHealthRange, healthHistFrom, setHealthHistFrom, healthHistTo, setHealthHistTo,
     formatDateHeader, healthNormalShown,
-    notify, me, goPage, setCallsPhone,
+    notify, me, goPage, setCallsPhone, openSavedNote,
   } = props;
+  const approvedElders = elders.filter(elder => elder.approved !== false);
+  const todayChecks = approvedElders
+    .map(elder => todayHealthCheckForElder(elder, healthData))
+    .filter(Boolean);
+  const openCasesByElder = new Map<string,number>();
+  for (const item of insightCases || []) {
+    if (item.state !== 'unreviewed' && item.state !== 'reviewing') continue;
+    openCasesByElder.set(item.elderId,(openCasesByElder.get(item.elderId)||0)+1);
+  }
+  const openCaseCount = elder => openCasesByElder.get(String(elder.phone||elder.id||''))||0;
 
   const updateAlertStatus = async (alertId: string, body: Record<string, unknown>) => {
     try {
@@ -53,13 +70,14 @@ export default function HealthPage(props: any) {
   return (
     <div className="fade-in health-page">
       <PageIntro title="어르신 건강 상태 현황" description="영실이 앱에서 어르신이 직접 체크한 건강 상태 · 15초마다 자동 갱신됩니다" actions={<Button className={healthLoading?'btn-calling':''} onClick={()=>fetchHealth()} disabled={healthLoading}>{healthLoading ? '불러오는 중...' : '갱신'}</Button>} />
-      <HealthInsightsPanel elders={elders} notify={notify} canRunTests={me?.role==='admin'||me?.role==='superadmin'} onOpenCallRecords={(phone)=>{setCallsPhone(String(phone).replace(/\D/g,''));goPage('calls')}} />
+      <HealthInsightsPanel onOpenNote={openSavedNote} canManageFollowUp={['staff','admin','superadmin'].includes(me?.role)} elders={elders} notify={notify} canRunTests={me?.role==='admin'||me?.role==='superadmin'} onOpenCallRecords={(phone)=>{setCallsPhone(String(phone).replace(/\D/g,''));goPage('calls')}} onCasesChange={(cases,hasMore)=>{setInsightCases(cases);setInsightHasMore(hasMore)}} onCaseReviewed={item=>setInsightCases(previous=>previous?.map(row=>row.caseId===item.caseId?item:row)||null)} />
+      {healthError&&<div className="health-empty" role="alert"><p>{healthError}</p><p>앱 건강 상태와 알림을 갱신하지 못했습니다. 아래 값은 최신 상태가 아닐 수 있습니다.</p><button className="btn-secondary" disabled={healthLoading} onClick={()=>fetchHealth()}>다시 시도</button></div>}
       <div className="stat-grid" style={{marginBottom:20}}>
         {[
-          {label:'좋아요',   num:healthData.filter(h=>h.status==='good').length, Icon:CheckCircle2,  ic:'#16A34A', color:'#16a34a'},
-          {label:'그럭저럭', num:healthData.filter(h=>h.status==='okay').length, Icon:AlertTriangle, ic:'#F59E0B', color:'#d97706'},
-          {label:'안 좋아요', num:healthData.filter(h=>h.status==='bad').length,  Icon:AlertCircle,   ic:'#DC2626', color:'#dc2626'},
-          {label:'미체크',   num:elders.length - healthData.length,               Icon:Users,         ic:'#94a3b8', color:'#64748b'},
+          {label:'좋아요',   num:todayChecks.filter(h=>h.status==='good').length, Icon:CheckCircle2,  ic:'#16A34A', color:'#16a34a'},
+          {label:'그럭저럭', num:todayChecks.filter(h=>h.status==='okay').length, Icon:AlertTriangle, ic:'#F59E0B', color:'#d97706'},
+          {label:'안 좋아요', num:todayChecks.filter(h=>h.status==='bad').length,  Icon:AlertCircle,   ic:'#DC2626', color:'#dc2626'},
+          {label:'미체크',   num:Math.max(0, approvedElders.length - todayChecks.length),     Icon:Users,         ic:'#94a3b8', color:'#64748b'},
         ].map(s=>(
           <div key={s.label} className="stat-card">
             <div className="stat-top"><span className="stat-label">{s.label}</span><s.Icon size={20} strokeWidth={1.75} color={s.ic} aria-hidden="true"/></div>
@@ -81,6 +99,10 @@ export default function HealthPage(props: any) {
           safe:    { label:'안전확인', icon:'✅', c:'#16a34a', bg:'#f0fdf4', bd:'#bbf7d0' },
         };
         const cnt = c => un.filter(a=>(a.category||'health')===c).length;
+        const criticalAlerts = un.filter(a=>a.level==='critical');
+        const otherAlerts = un.filter(a=>a.level!=='critical');
+        const visibleAlerts = showAllAlerts ? [...criticalAlerts,...otherAlerts] : [...criticalAlerts,...otherAlerts.slice(0,5)];
+        const hiddenCount = un.length - visibleAlerts.length;
         return (
         <div className="section" style={{marginBottom:20}}>
           <div className="section-title">미처리 알림 ({un.length}건) <span style={{fontSize:15,fontWeight:600,color:'#94a3b8'}}>— 조치 시작 → 조치 완료(또는 일지 작성)로 마감하세요</span></div>
@@ -89,7 +111,7 @@ export default function HealthPage(props: any) {
               <span key={c} style={{fontSize:15,fontWeight:700,color:CAT[c].c,background:CAT[c].bg,border:'1px solid '+CAT[c].bd,padding:'3px 10px',borderRadius:20}}>{CAT[c].label} {cnt(c)}건</span>
             ))}
           </div>
-          {un.map((alert,i) => {
+          {visibleAlerts.map((alert,i) => {
             const m = CAT[alert.category] || CAT.health;
             return (
             <div key={i} style={{display:'flex',alignItems:'center',gap:14,background:m.bg,borderLeft:'4px solid '+m.c,border:'1px solid '+m.bd,borderRadius:10,padding:'12px 16px',marginBottom:8,flexWrap:'wrap'}}>
@@ -116,6 +138,7 @@ export default function HealthPage(props: any) {
             </div>
             );
           })}
+          {(hiddenCount>0||(showAllAlerts&&otherAlerts.length>5))&&<button className="btn-secondary" onClick={()=>setShowAllAlerts(value=>!value)} aria-expanded={showAllAlerts}>{showAllAlerts?'알림 접기':`나머지 ${hiddenCount}건 보기`}</button>}
         </div>
         );
       })()}
@@ -123,37 +146,39 @@ export default function HealthPage(props: any) {
       <div className="section health-list-section">
         <div className="section-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
           <span style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-            <span>어르신별 건강 상태</span>
-            {[['all','전체'],['danger','위험'],['warning','주의'],['normal','정상']].map(([k,l])=>{
+            <span>어르신별 기존 분류·건강 체크</span>
+            {[['all','전체'],['danger','위험'],['warning','주의'],['normal','기본 분류']].map(([k,l])=>{
               const n = k==='all' ? elders.filter(e=>e.approved!==false).length : elders.filter(e=>e.approved!==false&&e.status===k).length;
               return <button key={k} onClick={()=>setHealthFilter(k)} className={`smart-btn ${healthFilter===k?'smart-active':''}`} style={{fontSize:15,padding:'4px 12px'}}>{l} {n}</button>;
             })}
           </span>
           <button onClick={()=>{const open=!healthAllOpen; setHealthAllOpen(open); setHealthRowOv(()=>{const o={}; elders.forEach(e=>{o[e.id]=open;}); return o;}); if(open) setHealthNormalShown(9999);}} className="btn-secondary" style={{fontSize:15,padding:'4px 10px',fontWeight:700}}>{healthAllOpen?'전체 접기 ▴':'전체 펼치기 ▾'}</button>
         </div>
+        <p className="health-status-explanation">‘기본 분류’는 등록된 어르신의 기본 상태이며 건강 이상이 없다는 판정이 아닙니다. 건강 변화 카드의 미완료 건수는 별도로 표시합니다. 카드 조치 완료는 기존 상태를 자동 변경하지 않습니다.{insightCases===null?' 건강 변화 목록을 확인할 수 없으면 위에서 다시 시도해 주세요.':''}{insightHasMore?' 이전 카드가 더 있어 표시된 건수는 일부입니다.':''}</p>
         {(()=>{
           const list = elders.filter(e=>e.approved!==false);
           if (list.length===0) return <div style={{textAlign:'center',padding:40,color:'#9ca3af'}}>등록된 어르신이 없습니다.</div>;
           const order={danger:0,warning:1,normal:2};
           const HLABEL={good:'좋아요',okay:'그럭저럭',bad:'안 좋아요'};
-          const hCheckOf = (e)=>{ const p=String(e.phone||'').replace(/\D/g,''); return (p&&healthData.find(h=>String(h.phone||'').replace(/\D/g,'')===p))||healthData.find(h=>h.name===e.name); };
+          const hCheckOf = (e)=>todayHealthCheckForElder(e, healthData);
           // 정렬: 위험 → 주의 → 정상(최근 통화순)
-          const sorted = list.slice().sort((a,b)=> ((order[a.status]??2)-(order[b.status]??2)) || String(b.lastCallAt||'').localeCompare(String(a.lastCallAt||'')));
+          const sorted = list.slice().sort((a,b)=> ((openCaseCount(b)>0?1:0)-(openCaseCount(a)>0?1:0)) || ((order[a.status]??2)-(order[b.status]??2)) || String(b.lastCallAt||'').localeCompare(String(a.lastCallAt||'')));
           const visible = sorted.filter(e=>healthFilter==='all'||e.status===healthFilter);
           if (visible.length===0) return <div style={{textAlign:'center',padding:30,color:'#9ca3af'}}>해당 상태의 어르신이 없습니다.</div>;
-          const riskRows = visible.filter(e=>e.status!=='normal');
-          const normalRows = visible.filter(e=>e.status==='normal');
+          const riskRows = visible.filter(e=>e.status!=='normal'||openCaseCount(e)>0);
+          const normalRows = visible.filter(e=>e.status==='normal'&&openCaseCount(e)===0);
           const shownRows = [...riskRows, ...normalRows.slice(0,healthNormalShown)];
           const hiddenNormal = Math.max(0, normalRows.length-healthNormalShown);
           return (<>
             {shownRows.map(elder=>{
               const stc = STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal;
+              const caseCount = openCaseCount(elder);
               const open = healthRowOv[elder.id] !== undefined ? healthRowOv[elder.id] : elder.status==='danger';
               const hc = hCheckOf(elder);
               const nrd = getNoResponseDays(elder.lastCall, elder.lastCallAt);
               const isRisk = elder.status!=='normal';
               const summary = isRisk
-                ? ([elder.keyword&&`"${elder.keyword}" 감지`, nrd>=1&&(nrd>=99?'통화 이력 없음':`${nrd}일째 미응답`), hc&&`앱 체크: ${HLABEL[hc.status]||'-'}`].filter(Boolean).join(' · ') || '위험 신호 확인 필요')
+                ? ([elder.keyword&&`"${riskDisplayText(elder.keyword)}" 감지`, nrd>=1&&(nrd>=99?'통화 이력 없음':`${nrd}일째 미응답`), hc&&`앱 체크: ${HLABEL[hc.status]||'-'}`].filter(Boolean).join(' · ') || '위험 신호 확인 필요')
                 : [nrd===0?'오늘 통화 완료':(nrd==null||nrd>=99)?'통화 이력 없음':`마지막 통화 ${nrd}일 전`, hc?`앱 체크: ${HLABEL[hc.status]||'-'}`:'오늘 앱 미체크'].join(' · ');
               return (
                 <div key={elder.id} style={{marginBottom:8}}>
@@ -165,7 +190,8 @@ export default function HealthPage(props: any) {
                       background:elder.status==='danger'?'#fef2f2':open?'#f0f5ff':'#fff'}}>
                     <span aria-hidden="true" style={{fontSize:14,color:'#94a3b8',width:12,textAlign:'center'}}>{open?'▼':'▶'}</span>
                     <span style={{fontWeight:800,fontSize:17,minWidth:100}}>{elder.name}{elder.age?` (${elder.age}세)`:''}</span>
-                    <StatusBadge tone={elder.status || 'normal'}>{stc.label}</StatusBadge>
+                    <StatusBadge tone={elder.status === 'normal' ? 'neutral' : (elder.status || 'neutral')}>{elder.status === 'normal' ? '기본 분류' : stc.label}</StatusBadge>
+                    {caseCount>0&&<span className="health-open-case-badge">확인할 건강 변화 {caseCount}건{insightHasMore?' 이상':''}</span>}
                     <span style={{flex:1,minWidth:160,fontSize:16,fontWeight:isRisk?700:500,color:elder.status==='danger'?'#dc2626':elder.status==='warning'?'#b45309':'#64748b'}}>{summary}</span>
                     {elder.status==='danger' ? (
                       <span style={{display:'flex',gap:6}} onClick={e=>e.stopPropagation()}>
@@ -191,7 +217,7 @@ export default function HealthPage(props: any) {
                       )),
                     ].sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,8);
                     const judge = isRisk ? [
-                      elder.keyword&&`"${elder.keyword}" 키워드 감지`,
+                      elder.keyword&&`"${riskDisplayText(elder.keyword)}" 키워드 감지`,
                       nrd>=2&&nrd<99&&`${nrd}일 연속 미응답`,
                       hc&&hc.status==='bad'&&`앱 건강 체크 '안 좋아요'`,
                     ].filter(Boolean).join(' + ') : '';
@@ -221,7 +247,7 @@ export default function HealthPage(props: any) {
             })}
             {hiddenNormal>0 && (
               <button onClick={()=>setHealthNormalShown(n=>n+10)} style={{background:'none',border:'none',color:'#246BEB',fontSize:16,fontWeight:700,cursor:'pointer',padding:'6px 2px'}}>
-                + 나머지 정상 {hiddenNormal}명 보기 ▾ <span style={{color:'#94a3b8',fontWeight:600}}>(10명 단위 지연 로드)</span>
+                + 기본 분류 어르신 {hiddenNormal}명 더 보기 ▾ <span style={{color:'#94a3b8',fontWeight:600}}>(10명 단위 지연 로드)</span>
               </button>
             )}
           </>);

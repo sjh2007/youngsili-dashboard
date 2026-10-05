@@ -1,0 +1,54 @@
+import {act,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import HealthCaseNoteLink from './HealthCaseNoteLink';
+import {authFetch} from '../../utils/api';
+jest.mock('../../utils/api',()=>({authFetch:jest.fn(),SERVER_URL:'https://fixture.invalid',errMsg:()=> '저장 실패'}));
+const mock=authFetch as jest.Mock;
+const response=(data:unknown,ok=true)=>({ok,json:async()=>data});
+beforeEach(()=>{mock.mockReset();Object.defineProperty(window,'crypto',{configurable:true,value:{randomUUID:jest.fn().mockReturnValue('00000000-0000-4000-8000-000000000001')}})});
+it('saves only staff input and opens the persisted note without completing the health case',async()=>{
+  mock.mockResolvedValueOnce(response({noteId:null,revision:2})).mockResolvedValueOnce(response({noteId:'note1',revision:3}));
+  const open=jest.fn(),changed=jest.fn();
+  render(<HealthCaseNoteLink caseId="case1" revision={2} onChanged={changed} onOpenNote={open}/>);
+  fireEvent.change(await screen.findByLabelText('상담·방문 내용'),{target:{value:'담당자가 전화로 식사 여부를 확인함'}});
+  fireEvent.change(screen.getByLabelText('조치 내용 (선택)'),{target:{value:'내일 재확인하기로 함'}});
+  fireEvent.click(screen.getByRole('button',{name:'일지 저장·연결'}));
+  fireEvent.click(await screen.findByRole('button',{name:'연결된 일지 열기'}));
+  expect(open).toHaveBeenCalledWith({id:'note1'});
+  expect(JSON.parse(mock.mock.calls[1][1].body)).toEqual({requestId:expect.any(String),revision:2,content:'담당자가 전화로 식사 여부를 확인함',action:'내일 재확인하기로 함'});
+  expect(changed).toHaveBeenLastCalledWith(3);
+  expect(mock.mock.calls.every(([url])=>url.endsWith('/case-note'))).toBe(true);
+});
+it('preserves text and request ID on ambiguous retry and blocks double submit',async()=>{
+  mock.mockResolvedValueOnce(response({noteId:null,revision:2})).mockRejectedValueOnce(new Error('connection lost')).mockResolvedValueOnce(response({noteId:'note1',revision:3}));
+  render(<HealthCaseNoteLink caseId="case1" revision={2} onChanged={jest.fn()}/>);
+  fireEvent.change(await screen.findByLabelText('상담·방문 내용'),{target:{value:'확인 내용'}});
+  const button=screen.getByRole('button',{name:'일지 저장·연결'});
+  fireEvent.click(button);fireEvent.click(button);
+  await screen.findByText('connection lost');
+  expect(mock).toHaveBeenCalledTimes(2);
+  expect(screen.getByLabelText('상담·방문 내용')).toHaveValue('확인 내용');
+  fireEvent.click(screen.getByRole('button',{name:'일지 저장·연결'}));
+  await screen.findByText('저장된 일지가 연결되어 있습니다.');
+  expect(JSON.parse(mock.mock.calls[1][1].body).requestId).toBe(JSON.parse(mock.mock.calls[2][1].body).requestId);
+});
+it('does not use a previous case response after switching cases',async()=>{
+  let finish:(v:unknown)=>void=()=>{};
+  mock.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve})).mockResolvedValueOnce(response({noteId:null,revision:5}));
+  const changed=jest.fn();
+  const view=render(<HealthCaseNoteLink caseId="old" revision={2} onChanged={changed}/>);
+  view.rerender(<HealthCaseNoteLink caseId="new" revision={5} onChanged={changed}/>);
+  await screen.findByLabelText('상담·방문 내용');
+  await act(async()=>finish(response({noteId:'oldNote',revision:8})));
+  expect(screen.queryByRole('button',{name:'연결된 일지 열기'})).toBeNull();
+  expect(changed).toHaveBeenCalledTimes(1);
+});
+it('blocks blank content and malformed responses',async()=>{
+  mock.mockResolvedValueOnce(response({noteId:null,revision:2})).mockResolvedValueOnce(response({noteId:null,revision:3}));
+  render(<HealthCaseNoteLink caseId="case1" revision={2} onChanged={jest.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'일지 저장·연결'}));
+  expect(mock).toHaveBeenCalledTimes(1);
+  fireEvent.change(screen.getByLabelText('상담·방문 내용'),{target:{value:'내용'}});
+  fireEvent.click(screen.getByRole('button',{name:'일지 저장·연결'}));
+  await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('저장된 일지를 확인하지 못했습니다'));
+  expect(screen.queryByRole('button',{name:'연결된 일지 열기'})).toBeNull();
+});

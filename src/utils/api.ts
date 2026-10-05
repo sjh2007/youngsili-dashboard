@@ -64,6 +64,7 @@ function waitForAuth(): Promise<void> {
  * (탭을 오래 열어둬 토큰이 만료된 경우 — getIdToken 캐시가 만료 직전 값을 줄 수 있다).
  */
 export async function authFetch(url: string, opts: RequestInit = {}): Promise<Response> {
+  if (!authEnabled || !auth) throw new Error('인증 서비스를 초기화하지 못했습니다. 새로고침 후 다시 시도해 주세요.');
   await waitForAuth();
 
   const send = async (forceRefresh: boolean): Promise<Response> => {

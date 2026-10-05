@@ -49,7 +49,7 @@ export default function SafetyPage(props: any) {
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {st.unchecked.map(({ e, d }) => (
                   <div key={e.id} style={{display:'flex',alignItems:'center',gap:12,background:d.status==='missed'?'#fff7ed':'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'10px 14px',flexWrap:'wrap'}}>
-                    <div style={{minWidth:90,fontWeight:800,color:'#246BEB',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name}</div>
+                    <button className="safety-name-button" title="돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name}</button>
                     <div style={{minWidth:80,fontSize:16,color:'#64748b'}}>{e.region}</div>
                     <div style={{flex:1,fontSize:16,fontWeight:700,color:d.status==='missed'?'#ea580c':'#dc2626'}}>
                       {d.status==='missed' ? `부재중 — 자동 재발신 ${d.retryCount||0}회에도 무응답` : `발신 실패${d.reason?` (${d.reason})`:''}`}
@@ -63,6 +63,7 @@ export default function SafetyPage(props: any) {
           )}
 
           <div className="section">
+            {nNone > 0 && <div className="safety-target-note" role="note">돌봄군 미지정 {nNone}명은 현재 설정된 전화 주기를 목표로 계산합니다. 미지정 대상의 목표를 확인하거나 이름을 눌러 돌봄군을 설정해 주세요.</div>}
             <div className="section-title">이번 주 주기 준수 현황 <span style={{fontSize:15,fontWeight:600,color:'#94a3b8'}}>(월요일~오늘 · 통화 성공한 날 수 기준 · 돌봄군: 일반 {nGen}명 · 중점 {nInt}명)</span></div>
             <div style={{overflowX:'auto'}}>
               <table className="table" style={{width:'100%'}}>
@@ -70,7 +71,7 @@ export default function SafetyPage(props: any) {
                 <tbody>
                   {sorted.map(({ e, g, target, done, met }) => (
                     <tr key={e.id} style={met?{}:{background:'#fffbeb'}}>
-                      <td style={{fontWeight:700,color:'#246BEB',cursor:'pointer'}} title="클릭 → 돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name} <span style={{fontSize:15,color:'#94a3b8',fontWeight:400}}>{e.region}</span></td>
+                      <td><button className="safety-name-button" title="돌봄군·주기 설정" onClick={()=>openEditSchedule(e)}>{e.name}</button> <span style={{fontSize:15,color:'#64748b'}}>{e.region}</span></td>
                       <td>{g ? <span style={{fontSize:15,fontWeight:800,color:g.color,background:`${g.color}15`,padding:'2px 8px',borderRadius:6}}>{g.label}</span> : <span style={{fontSize:15,color:'#94a3b8'}}>미지정</span>}</td>
                       <td>{target}회</td>
                       <td style={{fontWeight:800,color:met?'#16a34a':'#f59e0b'}}>{done}회</td>
@@ -81,7 +82,7 @@ export default function SafetyPage(props: any) {
                 </tbody>
               </table>
             </div>
-            {nNone > 0 && <div style={{fontSize:15,color:'#94a3b8',marginTop:8}}>· 돌봄군 미지정 어르신 {nNone}명은 설정된 전화 주기를 목표로 계산합니다. 위 표에서 어르신 이름을 클릭하면 바로 돌봄군·주기를 설정할 수 있습니다 (제도 기준: 일반 주2회·중점 주1회).</div>}
+            {nNone > 0 && <div style={{fontSize:15,color:'#94a3b8',marginTop:8}}>· 돌봄군 미지정 어르신 {nNone}명은 설정된 전화 주기를 목표로 계산합니다. 위 표에서 어르신 이름을 선택하면 돌봄군·주기를 설정할 수 있습니다 (제도 기준: 일반 주2회·중점 주1회).</div>}
           </div>
         </>);
       })()}

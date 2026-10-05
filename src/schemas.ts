@@ -2,6 +2,7 @@
 // 서버(youngsili-server)가 내려주는 필드가 늘어날 수 있으므로 전부 loose(.catchall)로
 // 정의한다: 알려진 필드는 타입·형식을 검증하고, 모르는 필드는 통과시킨다.
 import { z } from 'zod';
+export const HealthCaseNoteLinkSchema = z.object({noteId:z.string().min(1).nullable(),revision:z.number().int().positive()}).catchall(z.unknown());
 
 export const RecordingConfigSchema = z.object({ enabled: z.boolean(), retentionDays: z.literal(30), canRead: z.boolean(), canManage: z.boolean() });
 export const RecordingConsentSchema = z.object({ enabled: z.boolean(), version: z.literal('recording-v1'), retentionDays: z.literal(30) });
@@ -9,9 +10,30 @@ export const RecordingMetadataSchema = z.object({ state: z.enum(['recording', 'p
   errorCode: z.enum(['capture_failed', 'upload_failed', 'no_audio', 'duration_limit', 'processing_failed', 'upload_timeout', 'storage_full']).nullable().optional(),
   channel: z.enum(['app', 'pstn']), durationSec: z.number().min(0).max(360).nullable(),
   formats: z.array(z.enum(['mp3', 'wav'])), retentionMonths: z.null(),
-  retentionDays: z.union([z.literal(1), z.literal(30)]) });
+  // 1일은 배포 전 생성된 체험통화 메타데이터의 호환을 위해 유지한다.
+  retentionDays: z.union([z.literal(1), z.literal(14), z.literal(30)]) });
 
 const loose = <T extends z.ZodRawShape>(shape: T) => z.object(shape).catchall(z.unknown());
+
+export const CaseNoteSchema = loose({
+  id: z.string().min(1), elderPhone: z.string(), elderName: z.string(),
+  type: z.string(), category: z.string(), content: z.string(), action: z.string(),
+  topics: z.array(z.string()).optional(), authorEmail: z.string().optional(),
+  visitedAt: z.string(), linkedAlertId: z.string().optional(), callId: z.string().optional(),
+  source: z.string().optional(), status: z.string().optional(),
+  revision: z.number().int().nonnegative(), confirmedAt: z.string().nullable().optional(),
+  confirmedBy: z.string().optional(),
+  followUp: loose({needed: z.boolean(), done: z.boolean(), dueDate: z.string().nullable()}).optional(),
+});
+export const CaseNoteResultSchema = loose({note: CaseNoteSchema});
+export const CaseNoteWriteSchema = loose({success: z.literal(true), id: z.string().min(1), note: CaseNoteSchema});
+export const CaseNoteListSchema = loose({notes: z.array(CaseNoteSchema)});
+export const CaseNoteSummarySchema = CaseNoteSchema.omit({content: true, action: true}).extend({excerpt: z.string()});
+export const CaseNotePageSchema = loose({
+  notes: z.array(CaseNoteSummarySchema), nextCursor: z.string().nullable(),
+  hasMore: z.boolean(), scanned: z.number().int().nonnegative(), version: z.string(),
+});
+export const CaseNoteVersionSchema = loose({version: z.string()});
 
 export const DemoSessionSchema = loose({
   callId: z.string().min(1), name: z.string(), phone: z.string(),
@@ -71,6 +93,12 @@ export const MeSchema = loose({
   needsProvision: z.boolean().optional(),
 });
 export type Me = z.infer<typeof MeSchema>;
+
+export const CallCreditErrorSchema = z.object({
+  error: z.object({
+    details: z.object({ reason: z.literal('no_credit'), creditBalance: z.number().finite().nullable().optional() }).passthrough(),
+  }).passthrough(),
+}).passthrough();
 
 // GET /billing/balance — 선불 충전식 크레딧 잔액(1단계). creditBalance: null=마이그레이션 전 구기관(무제한)
 export const BillingBalanceSchema = loose({
@@ -191,6 +219,15 @@ export const CallSchema = loose({
   durationSec: z.union([z.number(), z.string()]).optional(),
   at: z.union([z.string(), z.number(), z.null()]).optional(),
   channel: z.string().optional(), // 'pstn' — 전화 발신 통화 (앱 통화는 없음)
+  isAlert: z.boolean().optional(),
+  alertType: z.string().optional(),
+  includeCare: z.boolean().optional(),
+  alertDelivery: loose({
+    status: z.enum(['completed', 'failed']),
+    reason: z.string().optional(),
+    includeCare: z.boolean(),
+    alertType: z.string(),
+  }).nullable().optional().catch(null),
 });
 export type Call = z.infer<typeof CallSchema>;
 export const CallListSchema = z.array(CallSchema);
@@ -203,10 +240,13 @@ export const HealthInsightCaseSchema = loose({
   state: z.enum(['unreviewed', 'reviewing', 'resolved', 'corrected', 'dismissed']),
   latestObservedAt: z.string().datetime({ offset: true }),
   evidenceCount: z.number().int().nonnegative(), revision: z.number().int().positive(),
+  recoveryStatus: z.enum(['reported','none']).optional(),
+  recoveryReportedAt: z.string().datetime({ offset: true }).nullable().optional(),
 });
 export const HealthInsightEvidenceSchema = loose({
   observedAt: z.string().datetime({ offset: true }), excerpt: z.string().min(1).max(160),
   sourceId: z.string(), line: z.number().int().nonnegative(),
+  observationId: z.string().optional(), validationStatus: z.string().optional(),
 });
 export const HealthInsightDetailSchema = HealthInsightCaseSchema.extend({
   evidence: z.array(HealthInsightEvidenceSchema).max(12),
@@ -215,6 +255,27 @@ export const HealthInsightDetailSchema = HealthInsightCaseSchema.extend({
 });
 export const HealthInsightListSchema = loose({
   items: z.array(HealthInsightCaseSchema), nextCursor: z.string().nullable(),
+});
+export const HealthFollowUpSchema = loose({
+  revision:z.number().int().positive(),
+  candidateQuestion:z.string().nullable().optional(),
+  approvalAvailable:z.boolean().optional(),
+  approvalBlockedReason:z.string().nullable().optional(),
+  followUp:loose({
+    status:z.string(),question:z.string().optional(),expiresAt:z.string().nullable().optional(),
+    approvedAt:z.string().nullable().optional(),askedAt:z.string().nullable().optional(),answeredAt:z.string().nullable().optional(),
+    reason:z.string().optional(),lastCallId:z.string().nullable().optional(),deliveryReady:z.boolean().optional(),
+    deliveryState:z.string().nullable().optional(),deliveryExpiresAt:z.string().nullable().optional(),
+  }).nullable(),
+});
+export const HealthInsightReportSchema = loose({
+  from:z.string(),to:z.string(),elderId:z.string(),
+  observations:z.array(loose({
+    observationId:z.string(),topic:z.string(),value:z.string(),subject:z.string(),temporality:z.string(),validationStatus:z.string(),
+    observedAt:z.string().datetime({offset:true}),sourceId:z.string(),excerpt:z.string(),line:z.number().int().nonnegative(),invalidationReason:z.string().nullable().optional(),
+  })),
+  cases:z.array(HealthInsightCaseSchema),
+  coverage:loose({complete:z.boolean(),limit:z.number().int().positive(),reason:z.string().nullable(),omittedSources:z.number().int().nonnegative()}),
 });
 export const HealthInsightTrendSchema = loose({
   elderId: z.string().min(1), from: z.string(), to: z.string(),
@@ -227,12 +288,24 @@ export const HealthInsightTrendSchema = loose({
 const HealthInsightTopicCountsSchema = loose({ meal: z.number().int().nonnegative(), sleep: z.number().int().nonnegative(), activity: z.number().int().nonnegative(), discomfort: z.number().int().nonnegative() });
 export const HealthInsightRankingsSchema = loose({
   from: z.string(), to: z.string(), total: z.number().int().nonnegative(),
+  coverage: loose({
+    detectionEvents: z.number().int().nonnegative(), detectedPeople: z.number().int().nonnegative(),
+    analyzedPeople: z.number().int().nonnegative(), analyzedCalls: z.number().int().nonnegative(),
+    detectionRate: z.number().min(0).max(1).nullable(), unreviewedCases: z.number().int().nonnegative(),
+    openCases: z.number().int().nonnegative(), unconnectedPeople: z.number().int().nonnegative().nullable(),
+    unconnectedReason: z.string(),
+  }).optional(),
   topics: HealthInsightTopicCountsSchema,
   people: z.array(loose({
     elderId: z.string().min(1), total: z.number().int().nonnegative(), previousTotal: z.number().int().nonnegative(),
     delta: z.number().int(), latestObservedAt: z.string().datetime({ offset: true }), topics: HealthInsightTopicCountsSchema,
   })),
-  points: z.array(loose({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), total: z.number().int().nonnegative() })),
+  points: z.array(loose({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), total: z.number().int().nonnegative(),
+    detectedPeople: z.number().int().nonnegative().optional(), analyzedPeople: z.number().int().nonnegative().optional(),
+    detectionRate: z.number().min(0).max(1).nullable().optional(),
+    detectedElderIds: z.array(z.string()).optional(), analyzedElderIds: z.array(z.string()).optional(),
+  })),
 });
 export type HealthInsightCase = z.infer<typeof HealthInsightCaseSchema>;
 export type HealthInsightDetail = z.infer<typeof HealthInsightDetailSchema>;
@@ -254,13 +327,14 @@ export type HealthInsightTestRun = z.infer<typeof HealthInsightTestRunSchema>;
 
 // ── 기상 (/weather) — { 지역명: {...} } 맵 ──
 export const WeatherRegionSchema = loose({
-  temp: z.union([z.number(), z.string()]).optional(),
+  temp: z.union([z.number(), z.string(), z.null()]).optional(),
   condition: z.string().optional(),
   alert: z.union([z.string(), z.boolean(), z.null()]).optional(),
   alertText: z.string().optional(),
   pop: z.union([z.number(), z.string()]).optional(),
   stale: z.boolean().optional(),
   noData: z.boolean().optional(),
+  unavailableReason: z.enum(['not_configured', 'grid_unavailable', 'key_expired', 'authentication_failed', 'rate_limited', 'upstream_error']).optional(),
   // 이 지역이 왜 목록에 있는지 — 'org'=기관 주소 지역, 'elder'=어르신 거주지, 'both'=둘 다
   source: z.enum(['org', 'elder', 'both']).optional(),
 });
@@ -483,4 +557,22 @@ export const CallEngineProviderSchema = loose({
     moduleApproved: z.boolean().nullable().optional(),
     telemetryAvailable: z.boolean().optional(),
   }),
+});
+
+export const HealthCurrentListSchema = z.array(loose({ name: z.string(), phone: z.string(), status: z.enum(['good', 'okay', 'bad', '']).optional(), timestamp: z.string(), updatedAt: z.string(), orgId: z.string() }));
+
+export const WorkMemoSchema = loose({
+  id: z.string().min(1), text: z.string().min(1).max(1000), done: z.boolean(),
+  createdAt: z.string().datetime({ offset: true }), updatedAt: z.string().datetime({ offset: true }),
+});
+export const WorkMemoListSchema = loose({ items: z.array(WorkMemoSchema), nextCursor: z.string().nullable() });
+export type WorkMemo = z.infer<typeof WorkMemoSchema>;
+
+export const PopulationSchema = loose({
+  collecting: z.boolean().optional(), unavailable: z.boolean().optional(), message: z.string().optional(),
+  asOf: z.string().optional(), fetchedAt: z.string().optional(), stale: z.boolean().optional(), incomplete: z.boolean().optional(),
+  areaName: z.string().optional(), areaPath: z.string().optional(), sido: z.string().optional(), sidoName: z.string().optional(),
+  regions: z.array(loose({ region: z.string(), regionPath: z.string().optional(), hasChildren: z.boolean().optional(),
+    total: z.number().nonnegative(), elderly: z.number().nonnegative(), elderlyRatio: z.number().nonnegative(), solitary: z.number().nonnegative().nullable() })),
+  total: loose({ population: z.number().nonnegative(), elderly: z.number().nonnegative(), elderlyRatio: z.number().nonnegative(), solitary: z.number().nonnegative().nullable() }).optional(),
 });

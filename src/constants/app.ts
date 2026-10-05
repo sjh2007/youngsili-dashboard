@@ -5,7 +5,7 @@ export const CAREGIVERS = [];  // 서버 /settings/caregivers + 등록된 어르
 export const STATUS_CONFIG = {
   danger:  { label: '위험', color: '#ef4444', bg: '#fef2f2' },
   warning: { label: '주의', color: '#f59e0b', bg: '#fffbeb' },
-  normal:  { label: '정상', color: '#22c55e', bg: '#f0fdf4' },
+  normal:  { label: '기본 분류', color: '#64748b', bg: '#f1f5f9' },
 };
 export const RISK_CONFIG = {
   critical: { label: '긴급', color: '#ef4444' },

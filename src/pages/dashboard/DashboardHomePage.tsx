@@ -5,13 +5,13 @@ import { StatusBadge } from '../../components/ui';
 import { normalizeRegion } from '../dashboardConstants';
 import { STATUS_CONFIG } from '../../constants/app';
 import './DashboardHomePage.css';
+import { riskDisplayText } from '../../utils/riskDisplay';
 
 export default function DashboardHomePage(props: any) {
   const {
     me, openRegister, goPage, alertsData, alertIsReal, alertEnCode, alertKw, elders,
     getNoResponseDays, weatherData, alertsOpen, setAlertsOpen, openDetail, setCallModal, T,
-    isDisability, setSortBy, noRespOpen, setNoRespOpen, danger, warning, normal, todoDone,
-    setTodoDone, todayCalls, drillDispatch, dispatchTotal, answeredCount, missedCount, drillCalls,
+    isDisability, setSortBy, noRespOpen, setNoRespOpen, danger, warning, normal, todayCalls, drillDispatch, dispatchTotal, answeredCount, missedCount, drillCalls,
     totalCalls, criticalCount, urgentCount, normalCount, safetyToday, calling, makeCall, alertCount,
     getSolitudeRisk, renderLastCall,
   } = props;
@@ -66,7 +66,7 @@ export default function DashboardHomePage(props: any) {
         // P2-9: 배너 3건 초과 시 접기 — 위험(critical)은 항상 노출
         const ordered = [...alerts].sort((a, b) => (a.level==='critical'?0:1) - (b.level==='critical'?0:1));
         const kwRows = ordered.map((a, i) => (
-              <div key={`kw${i}`} className={`alert-banner ${a.level==='critical'?'alert-banner-danger':'alert-banner-warning'}`} onClick={() => a.elder && openDetail(a.elder)}>
+              <div key={`kw${i}`} className={`alert-banner ${a.level==='critical'?'alert-banner-danger':'alert-banner-warning'}`}>
                 <span className={`alert-banner-tag ${a.level==='critical'?'tag-danger':'tag-warning'}`}>{a.level==='critical'?'위험':'주의'}</span>
                 <div className="alert-banner-body">
                   <span className="alert-banner-name">{a.elder ? `${a.elder.name}${a.elder.age?` (${a.elder.age}세)`:''}` : a.name}</span>
@@ -74,17 +74,17 @@ export default function DashboardHomePage(props: any) {
                   {a.count > 1 && <span className="alert-banner-count">오늘 {a.count}회</span>}
                   {a.time && <span className="alert-banner-time">최근 {new Date(a.time).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>}
                 </div>
-                {a.elder && <button className="btn-primary btn-banner-call" onClick={e=>{e.stopPropagation();setCallModal(a.elder);}}>앱 전화</button>}
+                {a.elder && <><button className="btn-secondary btn-xs" onClick={()=>openDetail(a.elder)} aria-label={`${a.elder.name} 상세 보기`}>상세 보기</button><button className="btn-primary btn-banner-call" onClick={()=>setCallModal(a.elder)}>앱 전화</button></>}
               </div>
         ));
         const newRows = noRespNew.map(({e, d}) => (
-              <div key={`nr${e.id}`} className="alert-banner alert-banner-danger" onClick={() => openDetail(e)}>
+              <div key={`nr${e.id}`} className="alert-banner alert-banner-danger">
                 <span className="alert-banner-tag tag-danger">미응답</span>
                 <div className="alert-banner-body">
                   <span className="alert-banner-name">{e.name}{e.age?` (${e.age}세)`:''}</span>
                   <span className="alert-banner-msg">{d}일째 미응답 · 오늘 확인 필요</span>
                 </div>
-                <button className="btn-primary btn-banner-call" onClick={ev=>{ev.stopPropagation();setCallModal(e);}}>앱 전화</button>
+                <button className="btn-secondary btn-xs" onClick={()=>openDetail(e)} aria-label={`${e.name} 상세 보기`}>상세 보기</button><button className="btn-primary btn-banner-call" onClick={()=>setCallModal(e)}>앱 전화</button>
               </div>
         ));
         // 위험(빨강) 행은 항상 노출: critical 키워드 → 미응답 신규(위험) → 주의 순으로 배치
@@ -118,13 +118,13 @@ export default function DashboardHomePage(props: any) {
               </div>
             )}
             {noRespOpen && noRespChronic.map(({e, d}) => (
-              <div key={e.id} className="alert-banner alert-banner-danger alert-banner-sub" onClick={() => openDetail(e)}>
+              <div key={e.id} className="alert-banner alert-banner-danger alert-banner-sub">
                 <span className="alert-banner-tag tag-danger">{d}일째</span>
                 <div className="alert-banner-body">
                   <span className="alert-banner-name">{e.name}{e.age?` (${e.age}세)`:''}</span>
                   <span className="alert-banner-msg">{d}일째 미응답 · 즉시 확인 필요</span>
                 </div>
-                <button className="btn-primary btn-banner-call" onClick={ev=>{ev.stopPropagation();setCallModal(e);}}>앱 전화</button>
+                <button className="btn-secondary btn-xs" onClick={()=>openDetail(e)} aria-label={`${e.name} 상세 보기`}>상세 보기</button><button className="btn-primary btn-banner-call" onClick={()=>setCallModal(e)}>앱 전화</button>
               </div>
             ))}
             {heatwaveElders.length > 0 && (
@@ -144,9 +144,9 @@ export default function DashboardHomePage(props: any) {
       <div className="stat-grid">
         {[
           {cls:'stat-total',   label:'총 담당 어르신', num:elders.length, Icon:Users,        ic:'#334155'},
-          {cls:'stat-danger',  label:'위험 감지',     num:danger,        Icon:AlertCircle,  ic:'#DC2626'},
-          {cls:'stat-warning', label:'주의 필요',     num:warning,       Icon:AlertTriangle,ic:'#F59E0B'},
-          {cls:'stat-normal',  label:'정상',          num:normal,        Icon:CheckCircle2, ic:'#16A34A'},
+          {cls:'stat-danger',  label:'등록 상태 · 위험', num:danger,        Icon:AlertCircle,  ic:'#DC2626'},
+          {cls:'stat-warning', label:'등록 상태 · 주의', num:warning,       Icon:AlertTriangle,ic:'#F59E0B'},
+          {cls:'stat-normal',  label:'등록 상태 · 기본 분류', num:normal, Icon:Users, ic:'#64748b'},
         ].map(s=>(
           <div key={s.label} className={`stat-card ${s.cls}`}>
             <div className="stat-top"><span className="stat-label">{s.label}</span><s.Icon size={20} strokeWidth={1.75} color={s.ic} aria-hidden="true"/></div>
@@ -154,6 +154,7 @@ export default function DashboardHomePage(props: any) {
           </div>
         ))}
       </div>
+      <p className="dashboard-status-note">위 수치는 어르신 등록 상태 기준입니다. ‘기본 분류’는 건강 이상 없음 판정이 아닙니다. 통화 위험 알림·건강 변화·미응답은 위의 우선 대응과 각 업무 화면에서 별도로 확인하세요.</p>
 
       <div className="dashboard-flow">
         <div className="dash-col-left">
@@ -169,10 +170,9 @@ export default function DashboardHomePage(props: any) {
               visitCnt>0  && {key:'visit',  label:'방문 필요 어르신 확인', count:`${visitCnt}명`, tone:'warning', go:'elders'},
               heatCnt>0   && {key:'heat',   label:'폭염경보 안전 확인', count:`${heatCnt}명`, tone:'warning', go:'script'},
             ].filter(Boolean);
-            const doneCnt = todos.filter(t=>todoDone[t.key]).length;
             return (
               <div className="section">
-                <div className="todo-header"><div className="section-title" style={{marginBottom:0}}>오늘 할 일</div><span className="todo-progress">{doneCnt} / {todos.length} 완료</span></div>
+                <div className="todo-header"><div className="section-title" style={{marginBottom:0}}>오늘 확인할 업무</div><span className="todo-progress">{todos.length}개 항목 · 실제 조치는 각 화면에서 기록</span></div>
                 {todos.length===0 ? (
                   <div className="empty-state empty-state--sm">
                     <div className="empty-title">오늘 처리할 업무가 없습니다</div>
@@ -180,12 +180,10 @@ export default function DashboardHomePage(props: any) {
                     <button className="btn-secondary" onClick={()=>goPage('schedule')}>전화 일정 관리</button>
                   </div>
                 ) : todos.map(t=>(
-                  <div key={t.key} className={`todo-item ${todoDone[t.key]?'todo-item-done':''}`}>
-                    <button className={`todo-check ${todoDone[t.key]?'todo-check-on':''}`} onClick={()=>setTodoDone(prev=>({...prev,[t.key]:!prev[t.key]}))} aria-label="완료 체크">
-                      {todoDone[t.key] && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>}
-                    </button>
-                    <span className="todo-label" onClick={()=>goPage(t.go)}>{t.label}</span>
+                  <div key={t.key} className="todo-item">
+                    <span className="todo-label">{t.label}</span>
                     <span className={`todo-count ${t.tone==='danger'?'todo-count-danger':'todo-count-warning'}`}>{t.count}</span>
+                    <button className="btn-secondary btn-xs" onClick={()=>goPage(t.go)} aria-label={`${t.label} 화면에서 확인`}>확인하기</button>
                   </div>
                 ))}
               </div>
@@ -321,14 +319,14 @@ export default function DashboardHomePage(props: any) {
               const days = getNoResponseDays(elder.lastCall, elder.lastCallAt);
               return (
                 <tr key={elder.id} style={{cursor:'pointer'}} onClick={()=>openDetail(elder)}>
-                  <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><span style={{fontWeight:700}}>{elder.name}</span>{elder.keyword&&<span className="keyword-tag">"{elder.keyword}"</span>}</div></td>
+                  <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><span style={{fontWeight:700}}>{elder.name}</span>{elder.keyword&&<span className="keyword-tag">"{riskDisplayText(elder.keyword)}"</span>}</div></td>
                   <td>{elder.age?`${elder.age}세`:'—'}</td>
                   <td style={{fontSize:16,color:'#64748b'}}>{elder.region}</td>
                   <td style={{fontSize:16,color:'#64748b'}}>{elder.caregiver||'-'}</td>
                   <td style={{fontSize:16,color:'#64748b'}}>{renderLastCall(elder)}</td>
                   <td>{days===0?<span style={{color:'#22c55e',fontWeight:700,fontSize:15}}>정상</span>:<span style={{color:days>=3?'#ef4444':'#f59e0b',fontWeight:700,fontSize:15}}>{days>=99?'통화이력 없음':`${days}일`}</span>}</td>
                   <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
-                  <td><StatusBadge tone={elder.status || 'normal'}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge></td>
+                  <td><StatusBadge tone={elder.status === 'normal' ? 'neutral' : (elder.status || 'neutral')}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge></td>
                   <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'발신 중':'앱 전화'}</button></td>
                 </tr>
               );

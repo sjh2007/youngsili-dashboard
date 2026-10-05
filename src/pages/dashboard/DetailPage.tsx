@@ -1,17 +1,21 @@
 // DashboardApplication.tsx의 page==='detail'(어르신 상세 정보) 블록을 그대로 옮긴 것 —
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-08).
 import { CallTranscript } from '../../components/common';
+import AlertDeliveryStatus from '../../components/common/AlertDeliveryStatus';
+import { alertHealthUnassessed } from '../../utils/alertRiskDisplay';
 import { CallRecording, RecordingConsent, RecordingProvider } from '../../components/common/CallRecording';
 import { StatusBadge } from '../../components/ui';
 import { STATUS_CONFIG, RISK_CONFIG } from '../../constants/app';
 import { CARE_GROUPS } from '../dashboardConstants';
+import { riskDisplayText } from '../../utils/riskDisplay';
+import CaseNotePagination from '../../components/case-notes/CaseNotePagination';
 
 export default function DetailPage(props: any) {
   const {
     selected, setPage, setSelected, openEdit, deleteElder, callResult, calling, setCallModal,
     makeCall, toggleCallActive, cycleLabel, callsHistory, draftingCallId, openNoteForCall,
     caseNotes, CASE_TYPE_META, CASE_CAT_META, isAutoDraft, AutoDraftBadge, copyNote, copiedNoteId,
-    openEditNote, deleteNote, openNewNote,
+    openEditNote, deleteNote, openNewNote, printNote, caseError, reloadNotes, callNoteErrors = {}, notesPage,
   } = props;
   const phone = String(selected.phone || '').replace(/\D/g, '');
 
@@ -29,7 +33,8 @@ export default function DetailPage(props: any) {
             <div className="detail-profile-copy">
               <div className="detail-name">{selected.name}</div>
               <div className="detail-sub">{selected.age}세 · {selected.region}</div>
-              <StatusBadge tone={selected.status || 'normal'}>{(STATUS_CONFIG[selected.status]||STATUS_CONFIG.normal).label}</StatusBadge>
+              <StatusBadge tone={selected.status === 'normal' ? 'neutral' : (selected.status || 'neutral')}>{(STATUS_CONFIG[selected.status]||STATUS_CONFIG.normal).label}</StatusBadge>
+              {selected.status === 'normal' && <small>등록 기본 분류 · 건강 이상 없음 판정 아님</small>}
             </div>
           </div>
           <div className="call-action-box">
@@ -52,13 +57,13 @@ export default function DetailPage(props: any) {
           </div>
         </div>
         <div className="detail-right">
-          {selected.keyword&&<div className="alert-box"><div className="alert-box-title">감지된 위험 키워드</div><div className="alert-box-keyword">"{selected.keyword}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
+          {selected.keyword&&<div className="alert-box"><div className="alert-box-title">감지된 위험 키워드</div><div className="alert-box-keyword">"{riskDisplayText(selected.keyword)}"</div><div className="alert-box-desc">즉시 방문 또는 가족 연락이 필요합니다.</div></div>}
           <div className="section">
             <div className="script-editor-header" style={{marginBottom:12}}>
               <div className="section-title" style={{marginBottom:0}}>통화 기록</div>
             </div>
             <RecordingConsent phone={phone} />
-            <p style={{color:'#64748b',fontSize:15,lineHeight:1.5}}>동의 등록 후 새 앱·070 통화의 녹음을 각각 확인하고 재생하거나 MP3/WAV로 다운로드할 수 있습니다.</p>
+            <p style={{color:'#64748b',fontSize:15,lineHeight:1.5}}>동의 등록 후 새 앱·전화통화의 녹음을 각각 확인하고 재생하거나 MP3/WAV로 다운로드할 수 있습니다.</p>
             {(()=>{
               // 전화번호가 있으면 동명이인의 통화를 제외한다. 번호 없는 과거 기록은 텍스트만 제공한다.
               const mine = callsHistory.filter(c=>{
@@ -68,19 +73,22 @@ export default function DetailPage(props: any) {
               if(mine.length===0) return <div style={{color:'#9ca3af',fontSize:17,padding:'16px 0'}}>통화 기록 없음</div>;
               return mine.map(c=>{
                 const R=RISK_CONFIG[c.riskLevel]||{};
+                const unassessed = alertHealthUnassessed(c);
                 const hm=c.at?new Date(c.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
                 const dur=c.durationSec||0;
                 return (
                   <div key={c.id} className={`call-row ${c.riskLevel==='critical'?'call-row-danger':c.riskLevel==='urgent'?'call-row-warning':''}`}>
                     <div style={{minWidth:96,color:'#64748b',fontSize:16}}>{c.date} {hm}</div>
                     <div style={{minWidth:64,color:'#64748b',fontSize:16}}>{Math.floor(dur/60)}분 {dur%60}초</div>
-                    <div style={{minWidth:44,fontWeight:700,fontSize:16,color:R.color||'#16a34a'}}>{R.label||'정상'}</div>
+                    <div style={{minWidth:44,fontWeight:700,fontSize:16,color:unassessed?'#b45309':R.color||'#16a34a'}}>{unassessed?'건강 상태 미확인':R.label||'정상'}</div>
                     <button className="btn-small" disabled={!!draftingCallId||!c.transcript}
                       title={c.transcript?'이 통화 내용을 일지 작성 창에 채워서 엽니다':'통화 내용이 없어 초안을 만들 수 없습니다'}
                       onClick={()=>openNoteForCall(c)}
                       style={{marginLeft:'auto',fontSize:15,fontWeight:700}}>
-                      {draftingCallId===c.id?'초안 생성 중…':'일지 작성'}
+                      {draftingCallId===c.id?'일지 불러오는 중…':callNoteErrors[c.id]?'일지 다시 시도':caseNotes.some(n=>n.callId && n.callId===(c.callId||c.id))?'일지 확인':'일지 작성'}
                     </button>
+                    {callNoteErrors[c.id] && <div role="alert" style={{flexBasis:'100%',color:'#b42318'}}>{callNoteErrors[c.id]}</div>}
+                    <AlertDeliveryStatus call={c} />
                     <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
                     {phone && String(c.phone || '').replace(/\D/g, '') === phone && (
                       <div style={{flexBasis:'100%'}}><CallRecording callId={String(c.callId || c.id || '')} /></div>
@@ -95,9 +103,11 @@ export default function DetailPage(props: any) {
               <div className="section-title" style={{marginBottom:0}}>상담·방문 일지</div>
               <button className="btn-primary" style={{fontSize:16,padding:'6px 12px'}} onClick={()=>openNewNote({elderPhone:selected.phone,elderName:selected.name})}>＋ 일지 작성</button>
             </div>
+            {caseError && <div role="alert">{caseError} <button className="btn-secondary" onClick={reloadNotes}>다시 불러오기</button></div>}
+            <CaseNotePagination page={notesPage}/>
             {(()=>{
               const mineNotes=caseNotes.filter(n=>String(n.elderPhone||'').replace(/\D/g,'')===String(selected.phone||'').replace(/\D/g,''));
-              if(mineNotes.length===0) return <div style={{color:'#9ca3af',fontSize:17,padding:'8px 0'}}>상담·방문 일지 없음</div>;
+              if(mineNotes.length===0) return <div style={{color:'#64748b',fontSize:17,padding:'8px 0'}}>이 페이지의 상담·방문 일지 없음{notesPage?.hasMore ? ' · 다음 일지를 확인하세요.' : ''}</div>;
               return mineNotes.map(n=>{
                 const tmeta=CASE_TYPE_META[n.type]||CASE_TYPE_META.etc;
                 const d=n.visitedAt?new Date(n.visitedAt):null;
@@ -111,11 +121,13 @@ export default function DetailPage(props: any) {
                       {n.linkedAlertId&&<span style={{fontSize:14,color:'#dc2626',fontWeight:700}}>알림 대응</span>}
                       {isAutoDraft(n)&&<AutoDraftBadge/>}
                       <span style={{flex:1}}/>
+                      <button className="btn-secondary" style={{minHeight:44}} onClick={()=>printNote(n)}>PDF·인쇄</button>
                       <button onClick={()=>copyNote(n, n.id)} style={{background:'none',border:'none',color:'#16a34a',fontSize:15,fontWeight:700,cursor:'pointer'}} title="붙여넣기용 텍스트 복사">{copiedNoteId===n.id?'복사됨':'복사'}</button>
                       <button onClick={()=>openEditNote(n)} style={{background:'none',border:'none',color:'#246BEB',fontSize:15,fontWeight:700,cursor:'pointer'}}>수정</button>
                       <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:15,fontWeight:700,cursor:'pointer'}}>삭제</button>
                     </div>
-                    {n.content&&<div style={{fontSize:16,color:'#1f2937',marginTop:5,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
+                    {(n.content||n.excerpt)&&<div style={{fontSize:16,color:'#1f2937',marginTop:5,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content||n.excerpt}</div>}
+                    {notesPage && <button className="btn-secondary" style={{minHeight:44,marginTop:8}} onClick={()=>openEditNote(n)}>내용 확인</button>}
                     {n.action&&<div style={{fontSize:15,color:'#475569',marginTop:4}}><b style={{color:'#0f766e'}}>조치</b> {n.action}</div>}
                   </div>
                 );

@@ -6,6 +6,7 @@ import './index.css';
 // 잠깐 보인다(FOUC). 정적 import로 메인 번들에 포함시켜 그 문제를 없앤다.
 import './App.css';
 import reportWebVitals from './reportWebVitals';
+import AuthenticationReadyBoundary from './components/auth/AuthenticationReadyBoundary';
 
 // REACT_APP_TARGET=console(빌드 시점 env)이면 기관 대시보드 대신 총괄 관리자 전용 운영
 // 콘솔을 띄운다 — 별도 서브도메인에 배포하는 완전히 분리된 빌드 산출물(build-console/).
@@ -21,7 +22,7 @@ async function boot() {
       : (await import('./App')).default;
     root.render(
       <React.StrictMode>
-        <Component />
+        <AuthenticationReadyBoundary><Component /></AuthenticationReadyBoundary>
       </React.StrictMode>
     );
   } catch (e: any) {

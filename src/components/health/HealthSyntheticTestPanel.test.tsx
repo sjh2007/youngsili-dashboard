@@ -21,9 +21,9 @@ it('관리자가 전화 없이 미리보기하고 실제 통화와 분리된 결
   expect(screen.getByText('밥을 못 먹었어요')).toBeInTheDocument();
 });
 
-it('저장된 테스트 결과를 실제 통계와 분리한다고 안내한다',async()=>{
+it('요청한 건강 상태 안내 문구를 표시한다',async()=>{
   mockFetch.mockImplementationOnce(()=>response({items:[]}));
   render(<HealthSyntheticTestPanel elders={[{phone:'01012345678',name:'홍길동'}]}/>);
   fireEvent.click(screen.getByRole('button',{name:'테스트 열기'}));
-  expect(await screen.findByText(/실제 통화·과금·건강 통계에는 포함되지 않습니다/)).toBeInTheDocument();
+  expect(await screen.findByText('앱을 설치한 어르신이 선택하신 건강 상태 입니다')).toBeInTheDocument();
 });

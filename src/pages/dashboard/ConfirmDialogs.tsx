@@ -40,8 +40,8 @@ export function BulkConfirmDialog(props: any) {
           <div style={{marginTop:14,padding:'12px 14px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10}}>
             <div style={{fontSize:16,fontWeight:700,color:'#334155',marginBottom:8}}>통화 내용 선택</div>
             {[
-              { v:false, t:'경보 멘트만',        d:'경보를 전하고 이해하셨는지 확인한 뒤 끊습니다. (약 3분)' },
-              { v:true,  t:'경보 + 안부 질문',   d:'경보를 먼저 전하고, 이어서 평소 안부 질문까지 여쭙니다. (약 5분)' },
+              { v:false, t:'경보 멘트만',        d:'경보를 먼저 안내하고 안부 질문은 생략합니다.' },
+              { v:true,  t:'경보 + 안부 질문',   d:'경보 음성의 재생 완료를 확인한 뒤 안부 질문을 이어갑니다. 재생에 실패하면 안부 질문을 진행하지 않습니다.' },
             ].map(o => (
               <label key={String(o.v)} style={{display:'flex',alignItems:'flex-start',gap:9,padding:'8px 4px',cursor:'pointer'}}>
                 <input type="radio" name="alertFlow" checked={alertIncludeCare===o.v} onChange={()=>setAlertIncludeCare(o.v)} style={{marginTop:3}} />

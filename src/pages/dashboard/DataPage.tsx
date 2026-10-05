@@ -1,6 +1,7 @@
-// DashboardApplication.tsx의 page==='data'(공공데이터 현황) 블록을 그대로 옮긴 것 —
+// DashboardApplication.tsx의 page==='data'(데이터 연동) 블록을 그대로 옮긴 것 —
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-07).
 import { normalizeRegion } from '../dashboardConstants';
+import { weatherUnavailableMessage } from '../../utils/weatherAvailability';
 
 export default function DataPage(props: any) {
   const {
@@ -8,10 +9,17 @@ export default function DataPage(props: any) {
     elders, alertSeverity, calling, setCallModal, popDoneOpen, setPopDoneOpen,
     fetchPopulation, fetchWeather, getNoResponseDays, weatherStale, weatherTime, T,
   } = props;
-  const areaName = popData?.areaName || popData?.sidoName || '대구광역시';
+  const areaName = popData?.areaName || popData?.sidoName || '기관 관할 지역';
   const regionHeading = popData?.areaLevel === 'district' ? '읍면동별' : popData?.areaLevel === 'city' ? '하위 행정구역별' : '시군구별';
-  const districtName = popData?.areaLevel === 'district' ? popData.areaPath?.split(/\s+/)[1] : '';
-  const managedElders = districtName ? elders.filter(e => (e.region || '').includes(districtName)) : elders;
+  const inArea = (elder, path = popData?.areaPath || '') => {
+    if (!popData?.sido) return false;
+    const address = normalizeRegion(elder.region || elder.address);
+    return [popData.sido, popData.sidoName].filter(Boolean).some(sido => {
+      const prefix = normalizeRegion(`${sido} ${path}`);
+      return address === prefix || address.startsWith(prefix + ' ');
+    });
+  };
+  const managedElders = elders.filter(e => inArea(e));
 
   return (
     <div className="fade-in">
@@ -78,32 +86,37 @@ export default function DataPage(props: any) {
         <nav aria-label="인구 현황 지역 경로" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',margin:'0 0 16px',fontSize:15,color:'#64748b'}}>
           {popData.breadcrumbs.map((crumb, index) => <span key={`${crumb.label}-${index}`} style={{display:'flex',alignItems:'center',gap:8}}>
             {index > 0 && <span aria-hidden="true">›</span>}
-            {crumb.region && crumb.region !== popData.areaPath
+            {crumb.region !== undefined && crumb.region !== popData.areaPath
               ? <button type="button" onClick={() => fetchPopulation(crumb.region)} style={{border:0,background:'none',padding:0,color:'#246BEB',fontWeight:700,cursor:'pointer',fontSize:'inherit'}}>{crumb.label}</button>
               : <strong style={{color:crumb.region ? '#1f2937' : '#64748b'}}>{crumb.label}</strong>}
           </span>)}
         </nav>
       )}
       {popLoading && <div style={{textAlign:'center',padding:'40px',color:'#64748b',fontSize:18}}>행정안전부 공공데이터 불러오는 중...</div>}
+      {popData?.unavailable && <div className="data-collecting-notice">{popData.message}</div>}
+      {popData?.stale && <div className="data-collecting-notice">최신 자료 확인 중 또는 연동 지연 — 표시된 통계 기준일을 확인해 주세요. 마지막 정상 자료를 유지합니다.</div>}
+      {popData?.fetchedAt && <p style={{color:'#475569',fontSize:14}}>자료 수집 시각: {new Date(popData.fetchedAt).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})} (한국시간) · 통계 기준일과 다릅니다.</p>}
+      {popData?.sourceUrl && <p><a href={popData.sourceUrl} target="_blank" rel="noreferrer">행정안전부 인구 원자료</a> · <a href={popData.householdSourceUrl} target="_blank" rel="noreferrer">1인 세대 원자료</a></p>}
+      {popData?.incomplete && <div className="data-collecting-notice">일부 하위 지역의 1인 세대 자료가 제공되지 않아 ‘자료 없음’으로 표시합니다. 전체 수치는 공식 발표 합계입니다.</div>}
       {popData?.collecting && !popLoading && (
         <div className="data-collecting-notice">
-          {areaName} 하위 지역 인구 통계를 수집하고 있습니다. 상위 지역 수치로 대신 표시하지 않으며, 자료 연동 후 자동으로 표시됩니다.
+          {popData.message || `${areaName} 하위 지역 인구 통계를 수집하고 있습니다. 자료 연동 후 자동으로 표시됩니다.`}
         </div>
       )}
       {popData && !popData.collecting && popData.total && (
         <>
           <div className="data-total-row">
-            {[{num:popData.total.population.toLocaleString()+'명',label:areaName+' 전체 인구'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 주민등록 인구'},{num:popData.total.solitary.toLocaleString()+'명',label:'65세 이상 1인 세대'},{num:managedElders.length+'명',label:'영실이 현재 관리'},{num:(popData.total.solitary>0?managedElders.length/popData.total.solitary*100:0).toFixed(2)+'%',label:'관리 비율'},{num:popData.total.elderlyRatio+'%',label:'고령화율'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num">{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
+            {[{num:popData.total.population.toLocaleString()+'명',label:areaName+' 전체 인구'},{num:popData.total.elderly.toLocaleString()+'명',label:'65세 이상 주민등록 인구'},{num:popData.total.solitary == null ? '자료 없음' : popData.total.solitary.toLocaleString()+'세대',label:'65세 이상 1인 세대'},{num:managedElders.length+'명',label:'영실이 현재 관리'},{num:popData.total.solitary == null ? '자료 없음' : (popData.total.solitary>0?managedElders.length/popData.total.solitary*100:0).toFixed(2)+'%',label:'등록 인원 / 고령 1인 세대'},{num:popData.total.elderlyRatio+'%',label:'고령화율'}].map((d,i)=>(<div key={i} className="data-total-card"><div className="data-total-num">{d.num}</div><div className="data-total-label">{d.label}</div></div>))}
           </div>
           {popData.total.elderlyRatio >= 20 && <div className="data-aging-notice">{areaName} 고령화율 {popData.total.elderlyRatio}% → 초고령사회 진입 (20% 이상)</div>}
           <div className="section">
-            <div className="section-title">{regionHeading} 독거노인 현황</div>
+            <div className="section-title">{regionHeading} 고령 1인 세대 현황</div><p style={{color:'#475569',fontSize:14}}>주민등록상 65세 이상 1인 세대이며, 실제 독거·돌봄 필요 여부를 뜻하지 않습니다. 영실이 관리 수치는 이 기관의 등록 현황으로, 지역 전체 복지서비스 이용률이 아닙니다.</p>
             <table className="table">
-              <thead><tr><th>행정구역</th><th>전체 인구</th><th>65세 이상</th><th>고령화율</th><th>65세 이상 1인 세대</th><th>영실이 관리</th><th>관리 비율</th><th>커버리지</th></tr></thead>
+              <thead><tr><th>행정구역</th><th>전체 인구</th><th>65세 이상</th><th>고령화율</th><th>65세 이상 1인 세대</th><th>영실이 관리</th><th>등록 인원 / 고령 1인 세대</th><th>등록 비율</th></tr></thead>
               <tbody>
-                {[...popData.regions].sort((a,b)=>b.solitary-a.solitary).map((d,i)=>{
-                  const managed=elders.filter(e=>(e.region||'').includes(d.region)).length;
-                  const managedRatio=d.solitary>0?(managed/d.solitary*100).toFixed(2):0;
+                {[...popData.regions].sort((a,b)=>(b.solitary ?? -1)-(a.solitary ?? -1)).map((d,i)=>{
+                  const managed=elders.filter(e=>inArea(e,d.regionPath)).length;
+                  const managedRatio=d.solitary == null ? null : d.solitary>0?(managed/d.solitary*100).toFixed(2):0;
                   const isHighAge=d.elderlyRatio>=20;
                   return (
                     <tr key={i} style={{background:isHighAge?'#fffbeb':'inherit'}}>
@@ -112,10 +125,10 @@ export default function DataPage(props: any) {
                         : <strong>{d.region}</strong>}{isHighAge&&<span style={{fontSize:14,background:'#f59e0b',color:'#fff',padding:'2px 6px',borderRadius:4,fontWeight:700}}>초고령</span>}</div></td>
                       <td>{d.total.toLocaleString()}명</td><td>{d.elderly.toLocaleString()}명</td>
                       <td><span style={{color:d.elderlyRatio>=20?'#b42318':'#344054',fontWeight:700}}>{d.elderlyRatio}%</span></td>
-                      <td><strong>{d.solitary.toLocaleString()}명</strong></td>
+                      <td><strong>{d.solitary == null ? '자료 없음' : d.solitary.toLocaleString()+'세대'}</strong></td>
                       <td><span style={{color:'#344054',fontWeight:700}}>{managed}명</span></td>
-                      <td><span style={{color:'#344054',fontWeight:700}}>{managedRatio}%</span></td>
-                      <td><div className="progress-bar" style={{width:120}}><div className="progress-fill" style={{width:`${Math.min(parseFloat(managedRatio as string)*10,100)}%`}}/></div></td>
+                      <td><span style={{color:'#344054',fontWeight:700}}>{managedRatio == null ? '자료 없음' : `${managedRatio}%`}</span></td>
+                      <td><div className="progress-bar" style={{width:120}}><div className="progress-fill" style={{width:`${Math.min(Number(managedRatio || 0),100)}%`}}/></div></td>
                     </tr>
                   );
                 })}
@@ -142,7 +155,13 @@ export default function DataPage(props: any) {
                 {key:'wildfire', icon:'🔥', label:'산불발생', color:'#ea580c', tip:'대피 안내 확인·안부 확인'},
               ];
               const groups = ALERTS.map(a => ({...a, list: elders.filter(e => weatherData[normalizeRegion(e.region)]?.alert === a.key)})).filter(g => g.list.length > 0);
-              if (groups.length === 0) return <div style={{color:'#16a34a',fontSize:17,padding:'20px 0',textAlign:'center'}}>현재 발령된 기상특보가 없습니다. 모든 어르신이 안전한 날씨입니다.</div>;
+              if (groups.length === 0) {
+                const incomplete = weatherStale || Object.keys(weatherData).length === 0 ||
+                  elders.some(e => !!weatherUnavailableMessage(weatherData[normalizeRegion(e.region)]));
+                return <div style={{color:incomplete?'#b45309':'#475569',fontSize:17,padding:'20px 0',textAlign:'center'}}>
+                  {incomplete ? '일부 지역의 날씨 정보를 확인할 수 없습니다. 기상 상황을 별도로 확인해 주세요.' : '조회된 날씨 데이터에 표시할 주의 항목이 없습니다.'}
+                </div>;
+              }
               return groups.map(g => {
                 // P2-9: '확인 필요'만 노출, 오늘 통화 받은(확인 완료) 어르신은 "+N명 더보기 ▾"로 접기
                 const doneList = g.list.filter(e => getNoResponseDays(e.lastCall, e.lastCallAt) === 0);

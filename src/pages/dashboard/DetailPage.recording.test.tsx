@@ -34,7 +34,7 @@ function view(elder = selected, history = calls) {
 }
 
 it('shows consent and separate recordings for this elder’s app and PSTN calls', async () => {
-  const page = render(view());
+  const utils = render(view());
   expect(await screen.findByRole('button', { name: '녹음 동의 확인' })).toBeDisabled();
   expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/consent/status'), expect.objectContaining({ body: JSON.stringify({ phone: '01000000000' }) }));
   expect(screen.queryByText('다른 어르신 통화')).not.toBeInTheDocument();
@@ -55,16 +55,16 @@ it('shows consent and separate recordings for this elder’s app and PSTN calls'
   fireEvent.click(screen.getByRole('button', { name: 'WAV 다운로드' }));
   await waitFor(() => expect(download).toHaveBeenCalled());
   expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/dispatch_pstn/audio?format=wav&purpose=download'), expect.anything());
-  page.rerender(view({ ...selected, id: 'other', phone: '01000000001' }));
+  utils.rerender(view({ ...selected, id: 'other', phone: '01000000001' }));
   await waitFor(() => expect(screen.queryByLabelText('통화 녹음 재생')).not.toBeInTheDocument());
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:detail-recording');
 });
 
 it('allows consent management before the first call and hides recording controls without access', async () => {
-  const page = render(view(selected, []));
+  const utils = render(view(selected, []));
   await screen.findByRole('button', { name: '녹음 동의 확인' });
   expect(screen.getByText('통화 기록 없음')).toBeInTheDocument();
-  page.unmount();
+  utils.unmount();
   fetchMock.mockResolvedValue(response({ ...config, canRead: false, canManage: false }));
   render(view());
   await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining('/config'), expect.anything()));

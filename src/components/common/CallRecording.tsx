@@ -73,7 +73,7 @@ export function RecordingConsent({ phone }: { phone: string }) {
   }
   return <div style={{ padding: 12, margin: '12px 0', border: '1px solid #E2E8F0', borderRadius: 10 }}>
     <strong>선택한 어르신의 통화 녹음</strong>
-    <p style={{ margin: '8px 0' }}>{consent === null ? '상태 확인 중' : consent ? '동의 확인됨 · 앱·070 통화 녹음 허용' : '녹음 동의 미확인 · 원음 저장 안 함'} · 음성 원본 30일 보관</p>
+    <p style={{ margin: '8px 0' }}>{consent === null ? '상태 확인 중' : consent ? '동의 확인됨 · 앱·전화통화 녹음 허용' : '녹음 동의 미확인 · 원음 저장 안 함'} · 음성 원본 30일 보관</p>
     {config.canManage && consent !== null && <>
       <label style={{ display: 'block', marginBottom: 8 }}>
         <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} disabled={busy} />{' '}
@@ -230,7 +230,7 @@ export function CallRecording({ callId }: { callId: string }) {
     {meta?.state === 'ready' && <div className="recording-card">
       <div className="recording-card-head">
         <span className="recording-card-mark"><AudioLines size={18} aria-hidden="true" /></span>
-        <div className="recording-card-titles"><strong>통화 녹음</strong><span>{meta.channel === 'pstn' ? '070 일반전화' : '앱 전화'} · {clock(duration)} · {meta.retentionDays === 1 ? '신청일 기준 1일 보관' : '음성 원본 30일 보관'}</span></div>
+        <div className="recording-card-titles"><strong>통화 녹음</strong><span>{meta.channel === 'pstn' ? '전화통화' : '앱 전화'} · {clock(duration)} · {meta.retentionDays === 30 ? '음성 원본 30일 보관' : `신청일 기준 ${meta.retentionDays}일 보관`}</span></div>
         <span className="recording-ready">재생 가능</span>
       </div>
       {audioUrl ? <>
@@ -276,7 +276,7 @@ export function CallRecording({ callId }: { callId: string }) {
           onError={() => setMessage('음성을 재생할 수 없습니다. 다시 불러오거나 파일을 다운로드해 주세요.')} />
       </> : <div className="recording-card-hint">재생 파일을 준비하지 못했습니다. <button onClick={() => run(prepareAudio)} disabled={busy}>재생 다시 시도</button></div>}
       <div className="recording-card-footer">
-        <span>암호화 보관 · {meta.retentionDays === 1 ? '운영관리자만 이용' : '권한 있는 기관 사용자만 이용'}</span>
+        <span>암호화 보관 · {meta.retentionDays === 30 ? '권한 있는 기관 사용자만 이용' : '운영관리자만 이용'}</span>
         <div className="recording-downloads">
           <button onClick={() => file('mp3')} disabled={busy}><Download size={15} aria-hidden="true" />MP3 다운로드</button>
           <button onClick={() => file('wav')} disabled={busy}><Download size={15} aria-hidden="true" />WAV 다운로드</button>

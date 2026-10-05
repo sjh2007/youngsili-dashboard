@@ -2,6 +2,8 @@
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-04).
 import { Snowflake, CloudRain, CloudSun, Sun, Flame, ShieldCheck, CircleCheck, Wind } from 'lucide-react';
 import { ALERT_TEMPLATES, WILDFIRE_STAGES, normalizeRegion } from '../dashboardConstants';
+import { weatherStatusText, weatherUnavailableMessage } from '../../utils/weatherAvailability';
+import { institutionWeatherSummary, institutionWeatherCardName } from '../../utils/weatherJurisdiction';
 
 export default function ScriptPage(props: any) {
   const {
@@ -17,12 +19,15 @@ export default function ScriptPage(props: any) {
     questions, setQuestionField, saveQuestions, resetQuestions, questionsSaving, questionsMsg,
     T, pstnCallerId, setPstnCallerId, savePstnCallerId, pstnSaving, pstnMsg,
   } = props;
+  const alertNames: Record<string, string> = { none:'경보 없음', heatwave:'폭염경보', cold:'한파경보', dust:'미세먼지 나쁨', rain:'호우주의보', typhoon:'태풍경보', wildfire:'산불발생' };
+  const alertLabel = '경보 멘트 — ' + (alertNames[activeAlert] || '경보') + (activeAlert === 'wildfire' ? ' / ' + (WILDFIRE_STAGES.find(s => s.id === wildfireStage)?.label || '단계 확인 필요') : '');
+  const weatherScope = institutionWeatherSummary(weatherData, me?.orgRegion);
 
   return (
     <div className="fade-in script-page">
       <div className="weather-panel">
         <div className="weather-panel-header">
-          <div><div className="weather-panel-title">기상청 공공데이터 연동</div><div className="weather-panel-sub">5분 주기 자동 갱신 · 관할: {(() => { const sido = (me?.orgRegion || '').split(' ')[0]; const n = Object.keys(weatherData).length; return sido && n > 1 ? `${sido} 전역 ${n}개 지역` : (me?.orgRegion || `${T.elder} 등록 지역 기준`); })()} (기관 주소 자동 매핑){weatherTime && ` · 마지막 갱신 ${weatherTime}`} · 날씨 경보 발령 시 자동으로 멘트에 삽입됩니다{weatherStale && <span style={{marginLeft:8,background:'#fffbeb',border:'1px solid #fde68a',color:'#b45309',padding:'1px 8px',borderRadius:6,fontWeight:700}}>연동 지연 — 마지막 수신 데이터 표시 중</span>}</div></div>
+          <div><div className="weather-panel-title">기상청 날씨 데이터 연동</div><div className="weather-panel-sub">5분 주기 자동 갱신 · 관할: {weatherScope.text} (구성원 관리의 기관 주소 기준){weatherTime && ` · 마지막 정상 갱신 ${weatherTime}`} · 날씨 경보 발령 시 자동으로 멘트에 삽입됩니다{weatherStale && <span style={{marginLeft:8,background:'#fffbeb',border:'1px solid #fde68a',color:'#b45309',padding:'1px 8px',borderRadius:6,fontWeight:700}}>날씨 정보 일부 확인 불가 · 지역별 안내 확인</span>}</div></div>
           <button className={`btn-fetch-weather ${fetchingWeather?'btn-calling':''}`} onClick={fetchWeather} disabled={fetchingWeather}>{fetchingWeather ? '불러오는 중...' : '날씨 데이터 갱신'}</button>
         </div>
         {(() => {
@@ -39,7 +44,8 @@ export default function ScriptPage(props: any) {
           return (
             <div className="weather-compact-grid">
               {entries.map(([region, weather]) => {
-                const severity = alertSeverity(weather);
+                const unavailable = weatherUnavailableMessage(weather);
+                const severity = unavailable ? 'warn' : alertSeverity(weather);
                 const condition = weather?.condition || '확인 중';
                 const isHeat = condition.includes('폭염');
                 const Icon = condition.includes('눈') ? Snowflake
@@ -61,7 +67,7 @@ export default function ScriptPage(props: any) {
                           같은 시/군 카드끼리 모여 있어 앞부분은 중복이므로 마지막 토큰(읍면동명)만 표시.
                           광역시 자치구("대구 남구")는 원래도 2토큰이라 그대로 둠. 전체 이름은 title로 확인 가능 */}
                       <span title={region} style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>
-                        {region.trim().split(/\s+/).length >= 3 ? region.trim().split(/\s+/).slice(-1)[0] : region}
+                        {institutionWeatherCardName(region, weatherScope.label)}
                       </span>
                       {weather?.source === 'org' && <span className="weather-source-badge weather-source-org" title="기관 주소가 속한 지역">기관</span>}
                       {weather?.source === 'elder' && <span className="weather-source-badge weather-source-elder" title={`${T.elder} 거주지 지역`}>{T.elder}</span>}
@@ -72,7 +78,7 @@ export default function ScriptPage(props: any) {
                         : <Icon className="weather-compact-icon" size={25} strokeWidth={1.7} aria-hidden="true"/>}
                       <div className="weather-compact-reading"><strong>{weather?.temp ?? '-'}°C</strong><span>{condition}</span></div>
                     </div>
-                    <div className={`weather-compact-status is-${severity}`}>{weather?.alertText || '특보 없음'}</div>
+                    <div className={`weather-compact-status is-${severity}`} style={unavailable ? {whiteSpace:'normal',overflow:'visible',wordBreak:'keep-all'} : undefined}>{weatherStatusText(weather)}</div>
                     {fire && !fire.noData && (
                       <div className={`weather-compact-fire is-${fireSeverity}`}>
                         <Flame size={12} strokeWidth={2} aria-hidden="true" />
@@ -227,11 +233,11 @@ export default function ScriptPage(props: any) {
               // 닿아야 해서 일반전화 발신이 필수다(2026-08-21).
               <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
                 <button className="btn-call" disabled={checked.length===0} style={{opacity:checked.length===0?0.5:1,cursor:checked.length===0?'not-allowed':'pointer'}}
-                  onClick={()=>setBulkConfirm({ count: checked.length, queue: null, channel: 'app', isAlert: true, alertLabel: `경보 멘트 — ${activeAlert}${activeAlert==='wildfire' ? ` / ${wildfireStage}` : ''}` })}>
+                  onClick={()=>setBulkConfirm({ count: checked.length, queue: null, channel: 'app', isAlert: true, alertLabel })}>
                   선택한 {checked.length}명에게 앱 알림으로 발신
                 </button>
                 <button className="btn-call" disabled={checked.length===0} style={{opacity:checked.length===0?0.5:1,cursor:checked.length===0?'not-allowed':'pointer'}}
-                  onClick={()=>setBulkConfirm({ count: checked.length, queue: null, channel: 'pstn', isAlert: true, alertLabel: `경보 멘트 — ${activeAlert}${activeAlert==='wildfire' ? ` / ${wildfireStage}` : ''}` })}>
+                  onClick={()=>setBulkConfirm({ count: checked.length, queue: null, channel: 'pstn', isAlert: true, alertLabel })}>
                   선택한 {checked.length}명에게 일반전화로 발신
                 </button>
               </div>
@@ -290,13 +296,13 @@ export default function ScriptPage(props: any) {
         <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid #e2e8f0'}}>
           <div style={{fontSize:18,fontWeight:800,color:'#0f172a',marginBottom:6}}>일반전화 발신번호</div>
           <div style={{fontSize:15,color:'#64748b',marginBottom:10,lineHeight:1.6}}>
-            앱이 없는 {T?.elder || '어르신'}께 일반전화(070)로 전화드릴 때 상대방 화면에 표시되는 번호입니다.
+            앱이 없는 {T?.elder || '어르신'}께 전화통화로 전화드릴 때 상대방 화면에 표시되는 번호입니다.
           </div>
           <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
             <input
               value={pstnCallerId}
               onChange={(e: any)=>setPstnCallerId(e.target.value.replace(/[^0-9]/g,''))}
-              placeholder="예: 07045014906"
+              placeholder="발신번호를 숫자로 입력"
               inputMode="numeric"
               style={{padding:'10px 14px',border:'1px solid #cbd5e1',borderRadius:10,fontSize:17,fontWeight:700,letterSpacing:1,width:220}}
             />

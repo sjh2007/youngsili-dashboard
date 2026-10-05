@@ -43,7 +43,7 @@ it('shows masked identity and credit depletion to a superadmin', async () => {
   render(<ConsoleApp />);
   expect(await screen.findByText('선불 크레딧 소진')).toBeInTheDocument();
   expect(screen.getByText('••••1234 (지문 012345abcdef)')).toBeInTheDocument();
-  expect(screen.getByText(/070 전화는 별도/)).toBeInTheDocument();
+  expect(screen.getByText(/전화통화는 별도/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '체험 통화' })).toBeInTheDocument();
 });
 

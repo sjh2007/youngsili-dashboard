@@ -3,7 +3,7 @@
 export default function FormsPage(props: any) {
   const {
     formsYm, setFormsYm, setReportMonth, formsCounts, openWeeklyReport, printWeeklyBatchFor,
-    openSchedule, printScheduleBatchFor, caseNotes, exportNotesXlsx, monthlyBusy, downloadMonthlyReport,
+    openSchedule, printScheduleBatchFor, openNoteExport, monthlyBusy, downloadMonthlyReport,
   } = props;
 
   return (
@@ -18,8 +18,8 @@ export default function FormsPage(props: any) {
             btns:[ {label:'열람·수정·출력', primary:true, on:()=>openWeeklyReport(formsYm)}, {label:'일괄 출력', on:()=>printWeeklyBatchFor(formsYm)} ] },
           { icon:'', title:'급여제공 일정표', desc:'일별 제공시간(주말·공휴일 1.5배, 월 120시간 한도) — 공식 달력 양식 출력', badge:`${formsYm.split('-')[1]}월 ${formsCounts.sched}명 작성`,
             btns:[ {label:'입력·출력', primary:true, on:()=>openSchedule(formsYm)}, {label:'일괄 출력', on:()=>printScheduleBatchFor(formsYm)} ] },
-          { icon:'', title:'상담·방문일지 엑셀', desc:'일지 전체를 엑셀로 — 기관 보관·결재용', badge:`최근 90일 ${caseNotes.length}건`,
-            btns:[ {label:'엑셀 다운로드', primary:true, on:()=>exportNotesXlsx(caseNotes)} ] },
+          { icon:'', title:'상담·방문일지 엑셀', desc:'확인 완료 일지를 최대 5,000건씩 나누어 생성합니다.', badge:'최근 90일 생성 일지 · 전체 건수는 생성 중 확인',
+            btns:[ {label:'엑셀 다운로드', primary:true, on:()=>openNoteExport()} ] },
           { icon:'', title:'월간 실적 보고서', desc:'통화·안전확인·위험감지·일지 실적 종합 — 지자체 보고용 엑셀', badge:`${formsYm.split('-')[1]}월 기준`,
             btns:[ {label: monthlyBusy?'생성 중…':'엑셀 다운로드', primary:true, on:()=>downloadMonthlyReport(formsYm)} ] },
         ].map(card=>(

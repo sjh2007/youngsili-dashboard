@@ -1,30 +1,36 @@
 // DashboardApplication.tsx의 noteModal(상담·방문 일지 작성/수정) 블록을 그대로 옮긴 것 —
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-08).
-import { type CSSProperties } from 'react';
+import { useRef, type CSSProperties } from 'react';
 
 export default function NoteModal(props: any) {
   const {
     noteForm, setNoteModal, setNoteForm, elders, CASE_TYPE_META, CASE_CAT_META,
-    CASE_TOPIC_META, TIME_OPTS, fmtTimeK, copyNote, copiedNoteId, saveNote, noteSaving,
+    CASE_TOPIC_META, TIME_OPTS, fmtTimeK, copyNote, copiedNoteId, saveNote, noteSaving, noteError,
   } = props;
 
   const L: CSSProperties={display:'block',fontSize:16,fontWeight:700,color:'#334155',marginBottom:5,textAlign:'left'};
   const I: CSSProperties={width:'100%',display:'block',boxSizing:'border-box',margin:0};
-  const close=()=>{setNoteModal(null);setNoteForm(null);};
+  const initial = useRef(JSON.stringify(noteForm));
+  const close=()=>{
+    if (noteSaving) return;
+    if (initial.current !== JSON.stringify(noteForm) && !window.confirm('저장하지 않은 변경 내용을 닫을까요?')) return;
+    setNoteModal(null);setNoteForm(null);
+  };
 
   return (
     <div className="modal-overlay" onClick={close}>
-      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600,width:'94%',textAlign:'left'}}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="상담·방문 일지 작성" aria-busy={noteSaving} onClick={e=>e.stopPropagation()} style={{maxWidth:600,width:'94%',maxHeight:'calc(100dvh - 24px)',display:'flex',flexDirection:'column',overflow:'hidden',textAlign:'left'}}>
         <div className="modal-title" style={{textAlign:'left',marginBottom:noteForm.autoDraft?10:18}}>{noteForm.id?'상담·방문 일지 수정':'새 상담·방문 일지'}</div>
         {noteForm.autoDraft && (
           <div style={{fontSize:16,color:'#b45309',background:'#fef3c7',border:'1px solid #fde68a',borderRadius:10,padding:'10px 12px',marginBottom:16,lineHeight:1.5}}>
             통화 내용으로 <b>자동 작성된 초안</b>입니다. 내용을 확인·수정한 뒤 저장하면 <b>내 이름으로 확정</b>됩니다.
           </div>
         )}
-        <div style={{display:'flex',flexDirection:'column',gap:15,maxHeight:'66vh',overflowY:'auto',paddingRight:4}}>
+        <div style={{minHeight:0,flex:'1 1 auto',maxHeight:'60vh',overflowY:'auto',paddingRight:4}}>
+        <fieldset disabled={noteSaving} style={{border:0,margin:0,padding:0,display:'flex',flexDirection:'column',gap:15}}>
           <div>
             <label style={L}>어르신</label>
-            <select className="form-input" style={I} value={noteForm.elderPhone} onChange={e=>{const el=elders.find(x=>String(x.phone)===e.target.value); setNoteForm(f=>({...f,elderPhone:e.target.value,elderName:el?el.name:''}));}}>
+            <select aria-label="어르신" disabled={!!noteForm.id} className="form-input" style={I} value={noteForm.elderPhone} onChange={e=>{const el=elders.find(x=>String(x.phone)===e.target.value); setNoteForm(f=>({...f,elderPhone:e.target.value,elderName:el?el.name:''}));}}>
               <option value="">— 어르신 선택 —</option>
               {elders.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(e=>(<option key={e.id||e.phone} value={e.phone}>{e.name} ({e.phone})</option>))}
             </select>
@@ -78,11 +84,15 @@ export default function NoteModal(props: any) {
             </label>
             {noteForm.followUpNeeded && <input type="date" className="form-input" style={{width:180,margin:0}} value={noteForm.followUpDue} onChange={e=>setNoteForm(f=>({...f,followUpDue:e.target.value}))}/>}
           </div>
+        </fieldset>
         </div>
-        <div className="modal-btns" style={{marginTop:20,justifyContent:'flex-end'}}>
-          <button className="btn-secondary" onClick={close}>취소</button>
+        {noteError && <p role="alert" style={{color:'#b42318',lineHeight:1.5}}>{noteError}</p>}
+        <p style={{color:'#64748b',fontSize:13}}>상담 일시는 한국시간 기준입니다. PDF는 저장 후 인쇄창에서 ‘PDF로 저장’을 선택하세요.</p>
+        <div className="modal-btns" style={{marginTop:12,justifyContent:'flex-end',flexWrap:'wrap',gap:8}}>
+          <button className="btn-secondary" disabled={noteSaving} onClick={close}>취소</button>
           <button className="btn-secondary" onClick={()=>copyNote({elderName:noteForm.elderName,type:noteForm.type,category:noteForm.category,content:noteForm.content,action:noteForm.action,visitedAt:(noteForm.visitedDate&&noteForm.visitedTime)?`${noteForm.visitedDate}T${noteForm.visitedTime}`:new Date().toISOString(),followUp:{needed:noteForm.followUpNeeded,dueDate:noteForm.followUpDue}},'modal')} title="정부 노인맞춤돌봄시스템 등에 붙여넣기용 텍스트 복사">{copiedNoteId==='modal'?'복사됨':'복사'}</button>
-          <button className="btn-primary" onClick={saveNote} disabled={noteSaving}>{noteSaving?'저장 중...':(noteForm.id?'수정 저장':'일지 저장')}</button>
+          <button className="btn-primary" style={{minHeight:44}} onClick={()=>saveNote(false)} disabled={noteSaving}>{noteSaving?'저장 중…':'확인 완료 저장'}</button>
+          <button className="btn-secondary" style={{minHeight:44}} onClick={()=>saveNote(true)} disabled={noteSaving}>저장 후 PDF</button>
         </div>
       </div>
     </div>

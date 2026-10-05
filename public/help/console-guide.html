@@ -152,14 +152,14 @@ ul.plain li::before{content:"";flex:none;width:5px;height:5px;margin-top:9px;bor
       <div class="status-row">
         <div class="stat"><div class="lb">NCP 백엔드</div><div class="vv"><span class="dot2 ok"></span>정상 응답 (78ms)</div></div>
         <div class="stat"><div class="lb">AI서버</div><div class="vv"><span class="dot2 ok"></span>정상 응답 (5ms)</div></div>
-        <div class="stat"><div class="lb">070 콜엔진</div><div class="vv"><span class="dot2 ok"></span>정상 응답 (8ms)</div></div>
+        <div class="stat"><div class="lb">전화통화 콜엔진</div><div class="vv"><span class="dot2 ok"></span>정상 응답 (8ms)</div></div>
       </div>
       <div class="tw"><table>
         <thead><tr><th>구성요소</th><th>역할</th><th>지연 시 영향</th></tr></thead>
         <tbody>
           <tr><td class="k">NCP 백엔드</td><td>전체 서비스의 기반 서버</td><td>대시보드 전체 응답 지연</td></tr>
           <tr><td class="k">AI서버</td><td>대화 처리와 위험 감지</td><td>통화 품질 저하, 응답 지연</td></tr>
-          <tr><td class="k">070 콜엔진</td><td>실제 발신을 처리</td><td>발신 자체가 지연되거나 실패</td></tr>
+          <tr><td class="k">전화통화 콜엔진</td><td>실제 발신을 처리</td><td>발신 자체가 지연되거나 실패</td></tr>
         </tbody>
       </table></div>
             <div class="note"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5" stroke-linecap="round"/><circle cx="10" cy="6.3" r=".7" fill="var(--muted)" stroke="none"/></svg><p>응답 시간이 눈에 띄게 느려지거나(수백 ms 이상) 상태가 <b>비정상</b>으로 바뀌면 해당 구성요소부터 점검합니다. 기관 담당자로부터 「전화가 안 걸린다」는 문의가 몰리면 이 화면을 가장 먼저 확인하십시오.</p></div>
@@ -182,7 +182,7 @@ ul.plain li::before{content:"";flex:none;width:5px;height:5px;margin-top:9px;bor
         <thead><tr><th>열</th><th>내용</th></tr></thead>
         <tbody>
           <tr><td class="k">어르신 · 기관</td><td>통화 중인 어르신과 소속 기관</td></tr>
-          <tr><td class="k">채널</td><td>앱 · 070(일반전화) 구분</td></tr>
+          <tr><td class="k">채널</td><td>앱 · 전화통화 구분</td></tr>
           <tr><td class="k">상태</td><td>통화 중</td></tr>
           <tr><td class="k">경과 시간</td><td>통화가 시작된 뒤 지난 시간(초)</td></tr>
           <tr><td class="k">통화 ID</td><td>개발팀에 문의할 때 함께 전달하는 식별자</td></tr>
@@ -224,7 +224,7 @@ ul.plain li::before{content:"";flex:none;width:5px;height:5px;margin-top:9px;bor
         <tbody>
           <tr><td class="k">어르신 · 전화번호</td><td>통화 대상</td></tr>
           <tr><td class="k">기관</td><td>소속 기관명</td></tr>
-          <tr><td class="k">채널</td><td>앱 · 070</td></tr>
+          <tr><td class="k">채널</td><td>앱 · 전화통화</td></tr>
           <tr><td class="k">상태</td><td>정상 등 통화 결과</td></tr>
           <tr><td class="k">시간 · 통화시간</td><td>발신 시각과 통화 길이</td></tr>
         </tbody>
@@ -234,11 +234,11 @@ ul.plain li::before{content:"";flex:none;width:5px;height:5px;margin-top:9px;bor
       <div class="qs">
         <div class="qstep"><h3>기관 특정</h3><p><span class="chip">조회</span> 드롭다운에서 문의한 기관을 선택합니다.</p></div>
         <div class="qstep"><h3>기간 확인</h3><p>문의받은 날짜가 기본 30일 범위 안에 있는지 확인합니다. 범위 밖이면 별도 조회가 필요할 수 있습니다.</p></div>
-        <div class="qstep"><h3>발신 여부 확인</h3><p>해당 어르신에게 실제로 발신 기록이 있는지, 채널(앱/070)과 결과를 확인합니다.</p></div>
+        <div class="qstep"><h3>발신 여부 확인</h3><p>해당 어르신에게 실제로 발신 기록이 있는지, 채널(앱/전화통화)과 결과를 확인합니다.</p></div>
         <div class="qstep"><h3>회신</h3><p>발신 여부와 결과를 기관 담당자에게 안내합니다. 발신 자체가 없었다면
           <span class="chip">시스템 상태</span> 와 그 기관의 <span class="chip">전화 발신 관리</span> 설정을 함께 확인합니다.</p></div>
       </div>
-            <div class="note"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5" stroke-linecap="round"/><circle cx="10" cy="6.3" r=".7" fill="var(--muted)" stroke="none"/></svg><p>070과 앱 채널의 통화 시간을 비교하면 특정 채널만의 문제인지 구분할 수 있습니다. 한쪽 채널만 실패가 몰려 있다면 콜엔진 또는 앱 푸시 쪽 문제일 가능성이 큽니다.</p></div>
+            <div class="note"><svg class="ic" viewBox="0 0 20 20" fill="none" stroke="var(--muted)" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5" stroke-linecap="round"/><circle cx="10" cy="6.3" r=".7" fill="var(--muted)" stroke="none"/></svg><p>전화통화와 앱 채널의 통화 시간을 비교하면 특정 채널만의 문제인지 구분할 수 있습니다. 한쪽 채널만 실패가 몰려 있다면 콜엔진 또는 앱 푸시 쪽 문제일 가능성이 큽니다.</p></div>
 
       <h2>다음</h2>
       <div class="next">

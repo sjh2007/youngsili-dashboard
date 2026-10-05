@@ -42,3 +42,19 @@ test('저장 요청에서 조회 전용 메타데이터를 제외한다', async 
   expect(body).not.toHaveProperty('updatedAt');
   expect(body).not.toHaveProperty('updatedBy');
 });
+
+test('시작 기한과 완료 기한이 같으면 요청 전에 안내한다', async () => {
+  mockedAuthFetch.mockClear();
+  render(<SafetyEscalationSettings me={{safetyEscalation:{acknowledgeWithinMinutes:30,completeWithinMinutes:30}}} notify={jest.fn()}/>);
+  fireEvent.click(screen.getByRole('button',{name:'연락망 저장'}));
+  expect(screen.getByRole('alert')).toHaveTextContent('완료 기한은 조치 시작 기한보다 길어야 합니다');
+  expect(mockedAuthFetch).not.toHaveBeenCalled();
+});
+
+test('연락처 이름만 있으면 요청 전에 안내한다', async () => {
+  mockedAuthFetch.mockClear();
+  render(<SafetyEscalationSettings me={{safetyEscalation:{primary:{name:'담당자',phone:''}}}} notify={jest.fn()}/>);
+  fireEvent.click(screen.getByRole('button',{name:'연락망 저장'}));
+  expect(screen.getByRole('alert')).toHaveTextContent('담당자 이름과 전화번호를 함께 입력해 주세요');
+  expect(mockedAuthFetch).not.toHaveBeenCalled();
+});

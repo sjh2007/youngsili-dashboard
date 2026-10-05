@@ -1,6 +1,8 @@
 // DashboardApplication.tsx의 page==='calls'(통화 기록) 블록을 그대로 옮긴 것 —
 // 로직 변경 없음, 부모가 갖고 있던 state/함수를 전부 props로 받는다(6000줄 분리 작업, 2026-09-08).
 import { ShieldCheck } from 'lucide-react';
+import AlertDeliveryStatus from '../../components/common/AlertDeliveryStatus';
+import { alertHealthUnassessed } from '../../utils/alertRiskDisplay';
 import { CallTranscript, GroupHeader } from '../../components/common';
 import { localDayKey } from '../../utils/date';
 import { RISK_CONFIG } from '../../constants/app';
@@ -9,7 +11,7 @@ import { CallRecording, RecordingConsent, RecordingProvider } from '../../compon
 export default function CallsPage(props: any) {
   const {
     callsHistory, callsPhone, callsSearch, callsRiskMatch, nameByPhone, callsRange, setCallsRange,
-    callsFrom, setCallsFrom, callsTo, setCallsTo, fetchCalls, callsLoading, callsAllOpen,
+    callsFrom, setCallsFrom, callsTo, setCallsTo, fetchCalls, callsLoading, callsError, callsAllOpen,
     setCallsAllOpen, setCallsDayOv, callsRisk, setCallsRisk, elders, setCallsSearch, setCallsPhone,
     callsDayOv, expandedCallDays, setExpandedCallDays, formatDateHeader, kwFromTranscript,
     draftingCallId, openNoteForCall,
@@ -26,18 +28,18 @@ export default function CallsPage(props: any) {
       <div className="calls-toolbar">
         <div className="calls-toolbar-main">
         {[['week','최근 7일'],['month','최근 30일'],['custom','직접 선택']].map(([k,label])=>(
-          <button key={k} onClick={()=>setCallsRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(callsRange===k?'#246BEB':'#e2e8f0'),background:callsRange===k?'#eff6ff':'#fff',color:callsRange===k?'#246BEB':'#64748b',fontWeight:700,fontSize:16,cursor:'pointer'}}>{label}</button>
+          <button key={k} aria-pressed={callsRange===k} onClick={()=>setCallsRange(k)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid '+(callsRange===k?'#246BEB':'#e2e8f0'),background:callsRange===k?'#eff6ff':'#fff',color:callsRange===k?'#246BEB':'#64748b',fontWeight:700,fontSize:16,cursor:'pointer'}}>{label}</button>
         ))}
         {callsRange==='custom' && (<>
-          <input type="date" value={callsFrom} onChange={e=>setCallsFrom(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:16}}/>
+          <input type="date" aria-label="조회 시작일" value={callsFrom} onChange={e=>setCallsFrom(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:16}}/>
           <span style={{color:'#94a3b8'}}>~</span>
-          <input type="date" value={callsTo} onChange={e=>setCallsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:16}}/>
+          <input type="date" aria-label="조회 종료일" value={callsTo} onChange={e=>setCallsTo(e.target.value)} style={{padding:'5px 8px',border:'1px solid #e2e8f0',borderRadius:8,fontSize:16}}/>
         </>)}
-        <button onClick={()=>fetchCalls()} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'불러오는 중':'새로고침'}</button>
+        <button onClick={()=>fetchCalls()} disabled={callsLoading} className="btn-download" style={{padding:'6px 12px'}}>{callsLoading?'불러오는 중':'새로고침'}</button>
         <button onClick={()=>{const open=!callsAllOpen; setCallsAllOpen(open); setCallsDayOv(()=>{const o={}; callsHistory.forEach(c=>{o[c.date||(c.at?c.at.slice(0,10):'미상')]=open;}); return o;});}} className="btn-secondary" style={{fontSize:15,padding:'6px 12px',fontWeight:700}}>{callsAllOpen?'전체 접기 ▴':'전체 펼치기 ▾'}</button>
         <span style={{fontSize:15,color:'#94a3b8'}}>15초마다 자동 갱신됩니다</span>
-        <input value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#246BEB':'#e2e8f0'),fontSize:16,width:120}}/>
-        <select value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#246BEB':'#e2e8f0'),fontSize:16,fontWeight:700,color:callsPhone?'#246BEB':'#334155',background:'#fff',cursor:'pointer'}}>
+        <input aria-label="어르신 이름 검색" value={callsSearch} onChange={e=>setCallsSearch(e.target.value)} placeholder="이름 검색" style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsSearch?'#246BEB':'#e2e8f0'),fontSize:16,width:120}}/>
+        <select aria-label="어르신 선택" value={callsPhone} onChange={e=>setCallsPhone(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:'1px solid '+(callsPhone?'#246BEB':'#e2e8f0'),fontSize:16,fontWeight:700,color:callsPhone?'#246BEB':'#334155',background:'#fff',cursor:'pointer'}}>
           <option value="">전체 어르신</option>
           {elders.map(e=>{const k=String(e.phone||'').replace(/\D/g,'');return <option key={k} value={k}>{e.name}</option>;})}
         </select>
@@ -47,7 +49,7 @@ export default function CallsPage(props: any) {
       <div className="calls-risk-filter">
         <span style={{fontSize:16,color:'#64748b',fontWeight:600}}>위험도:</span>
         {[['all','전체','#334155'],['critical','긴급','#dc2626'],['urgent','주의','#f59e0b'],['normal','정상','#16a34a']].map(([k,label,col])=>(
-          <button key={k} onClick={()=>setCallsRisk(k)} style={{padding:'5px 12px',borderRadius:20,border:'1px solid '+(callsRisk===k?col:'#e2e8f0'),background:callsRisk===k?col:'#fff',color:callsRisk===k?'#fff':'#64748b',fontWeight:700,fontSize:15,cursor:'pointer'}}>{label}</button>
+          <button key={k} aria-pressed={callsRisk===k} onClick={()=>setCallsRisk(k)} style={{padding:'5px 12px',borderRadius:20,border:'1px solid '+(callsRisk===k?col:'#e2e8f0'),background:callsRisk===k?col:'#fff',color:callsRisk===k?'#fff':'#64748b',fontWeight:700,fontSize:15,cursor:'pointer'}}>{label}</button>
         ))}
         {callsRisk!=='all' && <span style={{fontSize:15,color:'#94a3b8'}}>· 대시보드에서 이동됨</span>}
       </div>
@@ -55,9 +57,11 @@ export default function CallsPage(props: any) {
         <ShieldCheck size={18} aria-hidden="true"/><span><b>개인정보 보호</b> · 녹음은 기능 활성화 후 동의가 확인된 통화부터 제공됩니다. 음성 원본은 30일, 전사·요약·위험 기록은 12개월 보관하며 동의 철회 시 음성 원본을 삭제합니다. 이전 통화의 음성은 복원할 수 없습니다.</span>
       </div>
       <RecordingConsent phone={callsPhone} />
-      {callsHistory.length===0 ? (
-        <div style={{padding:30,textAlign:'center',color:'#94a3b8'}}>{callsLoading?'불러오는 중...':'이 기간 통화 기록이 없습니다.'}</div>
-      ) : (()=>{
+      {callsError && <div className="calls-feedback calls-feedback-error" role="alert"><strong>통화 기록을 갱신하지 못했습니다.</strong><span>{callsError}{callsHistory.length>0?' 이전에 불러온 목록을 표시하고 있습니다.':''}</span><button className="btn-secondary" onClick={()=>fetchCalls()} disabled={callsLoading}>다시 시도</button></div>}
+      {!callsError && callsLoading && callsHistory.length===0 && <div className="calls-feedback" role="status">통화 기록을 불러오는 중입니다…</div>}
+      {!callsError && !callsLoading && filteredCalls.length===0 ? (
+        <div className="calls-feedback">{callsHistory.length===0?'이 기간 통화 기록이 없습니다.':'조건에 맞는 통화 기록이 없습니다. 검색어와 필터를 확인해 주세요.'}</div>
+      ) : filteredCalls.length===0 ? null : (()=>{
         const src = filteredCalls;
         const grouped: Record<string, any[]> = {};
         src.forEach(c=>{ const dk=c.date||(c.at?c.at.slice(0,10):'미상'); (grouped[dk]=grouped[dk]||[]).push(c); });
@@ -78,6 +82,7 @@ export default function CallsPage(props: any) {
               open={open} onToggle={()=>setCallsDayOv(p=>({...p,[date]:!open}))}/>
             {open && shown.map(c=>{
               const R=RISK_CONFIG[c.riskLevel]||{};
+              const unassessed = alertHealthUnassessed(c);
               const hm=c.at?new Date(c.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
               const dur=c.durationSec||0;
               const risky=c.riskLevel==='critical'||c.riskLevel==='urgent';
@@ -87,7 +92,7 @@ export default function CallsPage(props: any) {
                   <div style={{minWidth:46,color:'#64748b',fontSize:16}}>{hm}</div>
                   <div style={{minWidth:80,fontWeight:700,fontSize:17}}>{nameByPhone(c.phone,c.elderName)}</div>
                   <div style={{minWidth:64,color:'#94a3b8',fontSize:16}}>{Math.floor(dur/60)}분 {dur%60}초</div>
-                  <span className={`result-pill ${c.riskLevel==='critical'?'pill-danger':c.riskLevel==='urgent'?'pill-warning':'pill-normal'}`}>{R.label||'정상'}</span>
+                  <span className={`result-pill ${unassessed?'pill-warning':c.riskLevel==='critical'?'pill-danger':c.riskLevel==='urgent'?'pill-warning':'pill-normal'}`}>{unassessed?'건강 상태 미확인':R.label||'정상'}</span>
                   <div style={{minWidth:110,fontWeight:700,fontSize:16,color:R.color||'#cbd5e1'}}>{kw?`“${kw}”`:'—'}</div>
                   {c.transcript && (
                     <button className="btn-secondary" style={{fontSize:15,padding:'4px 10px',marginLeft:'auto'}}
@@ -96,6 +101,7 @@ export default function CallsPage(props: any) {
                       {draftingCallId===c.id ? '초안 생성 중…' : '일지 초안'}
                     </button>
                   )}
+                  <AlertDeliveryStatus call={c} />
                   <div style={{flexBasis:'100%'}}><CallTranscript text={c.transcript} /></div>
                   <div style={{flexBasis:'100%'}}><CallRecording callId={c.callId || c.id} /></div>
                 </div>

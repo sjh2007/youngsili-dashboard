@@ -255,7 +255,7 @@ export default function SchedulePage(props: any) {
                 <td><span className="cycle-badge">{cycleLabel(elder.callCycle, elder.callDays)}</span></td>
                 <td><span className="time-badge">{elder.callTime}</span></td>
                 <td style={{fontSize:16,color:'#64748b'}}>{renderLastCall(elder)}</td>
-                <td><StatusBadge tone={elder.status || 'normal'}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge></td>
+                <td><StatusBadge tone={elder.status === 'normal' ? 'neutral' : (elder.status || 'neutral')}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge></td>
                 <td>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                     <span style={{fontSize:15,fontWeight:700,padding:'3px 10px',borderRadius:20,whiteSpace:'nowrap',...(elder.callActive?{background:'#dcfce7',color:'#15803d'}:{background:'#fee2e2',color:'#dc2626'})}}>{elder.callActive?'발신 중':'발신 중단'}</span>

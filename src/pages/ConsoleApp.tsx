@@ -988,7 +988,7 @@ export default function ConsoleApp() {
     if (nextCallEngineProvider === 'openai' && callEngineProvider?.runtime?.openaiReady !== true) {
       notify('OpenAI Live가 통화 가능한 상태가 아니어서 전환할 수 없습니다.'); return;
     }
-    const confirmation = window.prompt(`신규 070 통화의 AI 엔진을 ${nextCallEngineProvider === 'gemini' ? 'Gemini Live' : 'OpenAI Live'}로 전환합니다.\n계속하려면 ENGINE CHANGE를 입력하세요.`);
+    const confirmation = window.prompt(`신규 전화통화의 AI 엔진을 ${nextCallEngineProvider === 'gemini' ? 'Gemini Live' : 'OpenAI Live'}로 전환합니다.\n계속하려면 ENGINE CHANGE를 입력하세요.`);
     if (confirmation !== 'ENGINE CHANGE') {
       if (confirmation !== null) notify('확인 문구가 일치하지 않아 전환하지 않았습니다.');
       return;
@@ -1003,7 +1003,7 @@ export default function ConsoleApp() {
       setCallEngineProvider(updated);
       setNextCallEngineProvider(updated.provider);
       setCallEngineReason('');
-      notify('신규 070 통화의 AI 엔진을 전환했습니다.', 'success');
+      notify('신규 전화통화의 AI 엔진을 전환했습니다.', 'success');
       await fetchHealth();
     } catch (error:any) { notify(error?.message || 'AI 엔진 전환 실패'); }
     finally { setCallEngineBusy(false); }
@@ -1814,7 +1814,7 @@ export default function ConsoleApp() {
             <textarea ref={pilotReasonRef} id="pilot-status-reason" className="form-input" rows={4} maxLength={500} value={pilotStatusReason} onChange={e=>setPilotStatusReason(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginTop:6}} placeholder={`${label} 사유를 5자 이상 입력하세요`}/>
             {pilotStatusDialog.status==='active'&&<div style={{display:'grid',gap:7,marginTop:14,fontSize:13}}>{[
               ['consentConfirmed','대상자 동의'],['emergencyContactsConfirmed','비상 연락망'],['scheduleConfirmed','예약 일정'],['callEngineHealthy','콜엔진 정상'],['approvedImageDigestConfirmed','승인 이미지 digest'],
-            ].map(([key,text])=><label key={key} style={{display:'flex',gap:8}}><input type="checkbox" checked={(pilotReadinessChecks as any)[key]} onChange={e=>setPilotReadinessChecks(v=>({...v,[key]:e.target.checked}))}/>{text} 확인</label>)}<label style={{display:'flex',gap:9,alignItems:'flex-start',marginTop:5,lineHeight:1.55}}><input type="checkbox" checked={pilotReadinessConfirmed} onChange={e=>setPilotReadinessConfirmed(e.target.checked)} style={{marginTop:3}}/><span>위 확인 결과를 근거로 070 파일럿 시작을 승인합니다.</span></label></div>}
+            ].map(([key,text])=><label key={key} style={{display:'flex',gap:8}}><input type="checkbox" checked={(pilotReadinessChecks as any)[key]} onChange={e=>setPilotReadinessChecks(v=>({...v,[key]:e.target.checked}))}/>{text} 확인</label>)}<label style={{display:'flex',gap:9,alignItems:'flex-start',marginTop:5,lineHeight:1.55}}><input type="checkbox" checked={pilotReadinessConfirmed} onChange={e=>setPilotReadinessConfirmed(e.target.checked)} style={{marginTop:3}}/><span>위 확인 결과를 근거로 전화통화 파일럿 시작을 승인합니다.</span></label></div>}
             <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}><button className="btn-secondary" disabled={pilotProgramBusy} onClick={closePilotStatusDialog}>취소</button><button className="btn-primary" disabled={pilotProgramBusy||pilotStatusReason.trim().length<5||(pilotStatusDialog.status==='active'&&(!pilotReadinessConfirmed||Object.values(pilotReadinessChecks).some(value=>!value)))} onClick={changePilotStatus}>{pilotProgramBusy?'처리 중...':`${label} 확정`}</button></div>
           </div>
         </div>;
@@ -1908,7 +1908,7 @@ export default function ConsoleApp() {
               <label style={{display:'block',fontSize:12,fontWeight:700,marginBottom:14}}>실행 사유<input className="form-input" style={{marginTop:5,width:'100%',boxSizing:'border-box'}} maxLength={300} value={operatorCommandReason} onChange={e=>setOperatorCommandReason(e.target.value)} placeholder="예: 파일럿 시작 전 시스템 준비상태 확인"/></label>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:10}}>{[
                 ['api_readiness','API 준비상태','Firestore 연결과 예약 작업 주기를 확인합니다.'],
-                ['service_health','전체 서비스 상태','API·AI·070 콜엔진·개인정보 파기 상태를 확인합니다.'],
+                ['service_health','전체 서비스 상태','API·AI·전화통화 콜엔진·개인정보 파기 상태를 확인합니다.'],
                 ['call_engine_status','콜엔진·FreeSWITCH','AI 엔진, 연결 상태, 승인 이미지와 모듈 상태를 확인합니다.'],
                 ['scheduler_status','예약 작업 상태','링 스윕과 자동발신 스캔의 최근 실행 시각을 확인합니다.'],
               ].map(([command,label,description])=><div key={command} style={{border:'1px solid #dadce0',borderRadius:10,padding:14,background:'#fff'}}><div style={{fontWeight:800,fontSize:14}}>{label}</div><div style={{fontSize:12,color:'#64748b',lineHeight:1.55,minHeight:38,margin:'6px 0 12px'}}>{description}</div><button className="btn-primary" style={{width:'100%'}} disabled={!!operatorCommandBusy||operatorCommandReason.trim().length<5} onClick={()=>runOperatorCommand(command)}>{operatorCommandBusy===command?'실행 중...':'점검 실행'}</button></div>)}</div>
@@ -2014,7 +2014,7 @@ export default function ConsoleApp() {
           <div className="fade-in">
             <section className="section" style={{marginBottom:20}}>
               <div className="section-title" style={{marginBottom:4}}>일반전화 AI 엔진</div>
-              <div style={{fontSize:12,color:'#5f6368',marginBottom:14}}>변경 사항은 진행 중인 통화에 영향을 주지 않고, 저장 이후 시작하는 신규 070 통화부터 적용됩니다.</div>
+              <div style={{fontSize:12,color:'#5f6368',marginBottom:14}}>변경 사항은 진행 중인 통화에 영향을 주지 않고, 저장 이후 시작하는 신규 전화통화부터 적용됩니다.</div>
               {!callEngineProvider ? <div style={{color:'#c5221f',fontSize:14}}>엔진 설정을 불러오지 못했습니다. 새로고침 후 다시 확인해 주세요.</div> : <>
                 <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:14}}>
                   {(['gemini','openai'] as const).map(provider => {
@@ -2037,7 +2037,7 @@ export default function ConsoleApp() {
                 {callEngineProvider.runtime?.openaiConfigured===true && callEngineProvider.runtime?.openaiReady!==true && <div style={{fontSize:12,color:'#b45309',marginTop:6}}>OpenAI 계정의 API 크레딧과 Live 사용 권한을 확인해 주세요.</div>}
                 <div style={{marginTop:16,borderTop:'1px solid #e8eaed',paddingTop:14}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:10}}>
-                    <strong style={{fontSize:13}}>070 런타임 무결성·음성 품질</strong>
+                    <strong style={{fontSize:13}}>전화통화 런타임 무결성·음성 품질</strong>
                     {callEngineProvider.runtime?.imageApproved===false || callEngineProvider.runtime?.moduleApproved===false
                       ? <span className="gcp-chip" style={{background:'#fce8e6',color:'#c5221f'}}>승인값 불일치 · 즉시 확인</span>
                       : callEngineProvider.runtime?.telemetryAvailable
@@ -2107,7 +2107,7 @@ export default function ConsoleApp() {
                   <div>모델: <strong>{aiCredentialStatus.model}</strong></div>
                   <div>최근 Live 연결: <strong style={{color:aiCredentialStatus.lastLive.state==='credits_depleted'?'#c5221f':'#202124'}}>{({unknown:'확인 이력 없음',connected:'연결 확인',connection_error:'연결 오류',credits_depleted:'선불 크레딧 소진'})[aiCredentialStatus.lastLive.state as 'unknown'|'connected'|'connection_error'|'credits_depleted']}</strong>
                     {aiCredentialStatus.lastLive.observedAt && ` · ${new Date(aiCredentialStatus.lastLive.observedAt).toLocaleString()}`}</div>
-                  <div style={{color:'#64748b',fontSize:12}}>실제 잔여 토큰·금액은 Google AI 계정에서 확인하세요. 최근 앱 통화에서 관측한 연결 결과이며 070 전화는 별도입니다. AI 서버 재시작 후에는 확인 이력이 초기화됩니다.</div>
+                  <div style={{color:'#64748b',fontSize:12}}>실제 잔여 토큰·금액은 Google AI 계정에서 확인하세요. 최근 앱 통화에서 관측한 연결 결과이며 전화통화는 별도입니다. AI 서버 재시작 후에는 확인 이력이 초기화됩니다.</div>
                 </div>}
             </section>}
             {consoleRole === 'superadmin' && <section className="section" style={{marginTop:20}}>

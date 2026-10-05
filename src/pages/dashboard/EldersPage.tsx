@@ -4,6 +4,7 @@ import { Search, X, LayoutGrid, List, Plus } from 'lucide-react';
 import { GroupHeader } from '../../components/common';
 import { Toolbar, StatusBadge } from '../../components/ui';
 import { STATUS_CONFIG } from '../../constants/app';
+import { riskDisplayText } from '../../utils/riskDisplay';
 
 export default function EldersPage(props: any) {
   const {
@@ -32,14 +33,14 @@ export default function EldersPage(props: any) {
       )}
       <div className="elders-controls">
         <Toolbar className="elder-toolbar" label={`${T.elder} 검색과 상태 필터`}>
-          <div className="search-box elder-search"><Search size={19} aria-hidden="true"/><input className="search-input" placeholder={`${T.elder} 이름으로 검색`} value={searchName} onChange={e => setSearchName(e.target.value)}/>{searchName && <button className="search-clear" onClick={() => setSearchName('')} aria-label="검색어 지우기"><X size={16}/></button>}</div>
+          <div className="search-box elder-search"><Search size={19} aria-hidden="true"/><input className="search-input" aria-label="어르신 이름 검색" placeholder={`${T.elder} 이름으로 검색`} value={searchName} onChange={e => setSearchName(e.target.value)}/>{searchName && <button className="search-clear" onClick={() => setSearchName('')} aria-label="검색어 지우기"><X size={16}/></button>}</div>
           <select className="form-input region-select" aria-label="지역 선택" value={regionFilter} onChange={e => setRegionFilter(e.target.value)}>{REGIONS.map(r => <option key={r} value={r}>{r==='전체'?'전체 지역':r}</option>)}</select>
-          <div className="filter-bar" aria-label="상태 필터">{['all','danger','warning','normal'].map(f=>(<button key={f} className={`filter-btn ${filter===f?'filter-active':''}`} onClick={()=>setFilter(f)}>{f==='all'?'전체':STATUS_CONFIG[f].label}<span className="filter-count">{f==='all'?elders.length:elders.filter(e=>e.status===f).length}</span></button>))}</div>
+          <div className="filter-bar" aria-label="상태 필터">{['all','danger','warning','normal'].map(f=>(<button key={f} aria-pressed={filter===f} className={`filter-btn ${filter===f?'filter-active':''}`} onClick={()=>setFilter(f)}>{f==='all'?'전체':STATUS_CONFIG[f].label}<span className="filter-count">{f==='all'?elders.length:elders.filter(e=>e.status===f).length}</span></button>))}</div>
         </Toolbar>
         <Toolbar className="elder-toolbar2" label={`${T.elder} 정렬과 보기 설정`}>
           <div className="elder-sort-row">
           <span className="elder-control-label">정렬</span>
-          {[{id:'status',label:'위험도순'},{id:'risk',label:'고독사위험'},{id:'noResponse',label:'미응답순'},{id:'age',label:'나이순'},{id:'name',label:'이름순'}].map(s=>(<button key={s.id} className={`sort-btn ${sortBy===s.id?'sort-active':''}`} onClick={()=>setSortBy(s.id)}>{s.label}</button>))}
+          {[{id:'status',label:'위험도순'},{id:'risk',label:'고독사위험'},{id:'noResponse',label:'미응답순'},{id:'age',label:'나이순'},{id:'name',label:'이름순'}].map(s=>(<button key={s.id} aria-pressed={sortBy===s.id} className={`sort-btn ${sortBy===s.id?'sort-active':''}`} onClick={()=>setSortBy(s.id)}>{s.label}</button>))}
         </div>
         <div className="elder-actions-row">
           <div className="view-toggle" role="group" aria-label="보기 방식">
@@ -60,6 +61,7 @@ export default function EldersPage(props: any) {
         </Toolbar>
       </div>
       <div className="search-result-count">총 <strong>{filteredElders.length}명</strong>{searchName && <span> · "{searchName}" 검색결과</span>}{regionFilter !== '전체' && <span> · {regionFilter}</span>}</div>
+      <p className="health-status-explanation">‘기본 분류’는 등록 시 기본 상태입니다. 건강 변화 카드와 미처리 알림은 건강 상태 화면에서 별도로 확인해 주세요.</p>
 
       {pendingElders.length > 0 && (
         <div className="section pending-section">
@@ -111,21 +113,21 @@ export default function EldersPage(props: any) {
           const risk = getSolitudeRisk(elder);
           const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
           return (
-            <div key={elder.id} className="elder-card" onClick={()=>openDetail(elder)} style={selectedElders.has(elder.id)?{outline:'2px solid #246BEB',outlineOffset:2}:undefined}>
-              <div className="elder-top"><div style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:16,height:16,cursor:'pointer'}}/><div className="elder-avatar">{(elder.name||'?')[0]}</div></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><StatusBadge tone={elder.status || 'normal'}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
-              <div className="elder-name">{elder.name}</div>
+            <div key={elder.id} className="elder-card" style={selectedElders.has(elder.id)?{outline:'2px solid #246BEB',outlineOffset:2}:undefined}>
+              <div className="elder-top"><div style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:16,height:16,cursor:'pointer'}}/><div className="elder-avatar">{(elder.name||'?')[0]}</div></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}><StatusBadge tone={elder.status === 'normal' ? 'neutral' : (elder.status || 'neutral')}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge><div className="risk-badge" style={{background:risk.bg,color:risk.color}}>{risk.label}</div></div></div>
+              <button type="button" className="elder-detail-link elder-name" onClick={()=>openDetail(elder)} aria-label={`${elder.name} 상세 보기`}>{elder.name} · 상세 보기</button>
               <div className="elder-info">{elder.age?`${elder.age}세 · `:''}{elder.title} · {elder.region}</div>
               {elder.caregiver && <div className="elder-info" style={{color:'#246BEB',fontWeight:600}}>담당: {elder.caregiver}</div>}
               {noResponseDays >= 1 && <div className={`no-response-tag ${noResponseDays >= 3 ? 'no-response-danger' : 'no-response-warning'}`}>{noResponseDays >= 99 ? '통화이력 없음' : `${noResponseDays}일째 미응답`}</div>}
               <div className="elder-last">마지막 통화: {renderLastCall(elder)}</div>
-              {elder.keyword && <div className="keyword-tag mt8">"{elder.keyword}" 감지</div>}
+              {elder.keyword && <div className="keyword-tag mt8">"{riskDisplayText(elder.keyword)}" 감지</div>}
               {elder.visits > 0 && <div className="visit-tag mt8">방문 필요 {elder.visits}회</div>}
               {!elder.callActive && <div className="paused-tag mt8">전화 중단 중</div>}
             </div>
           );
         };
         const renderCompactRow = elder => (
-          <div key={elder.id} onClick={()=>openDetail(elder)}
+          <div key={elder.id}
             style={{display:'flex',alignItems:'center',gap:12,padding:'8px 14px',background:selectedElders.has(elder.id)?'#eff6ff':'#fff',border:'1px solid '+(selectedElders.has(elder.id)?'#93c5fd':'#e2e8f0'),borderRadius:10,marginBottom:6,cursor:'pointer',flexWrap:'wrap'}}>
             <input type="checkbox" checked={selectedElders.has(elder.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleElderSel(elder.id)} style={{width:15,height:15,cursor:'pointer'}}/>
             <span style={{fontWeight:700,fontSize:17,minWidth:96}}>{elder.name}{elder.age?` (${elder.age}세)`:''}</span>
@@ -134,16 +136,16 @@ export default function EldersPage(props: any) {
             <span style={{fontSize:15}}>{renderLastCall(elder)}</span>
             <span style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
               {!elder.callActive && <span style={{fontSize:15,fontWeight:700,color:'#dc2626'}}>전화 중단</span>}
-              <StatusBadge tone={elder.status || 'normal'}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge>
-              <span style={{color:'#94a3b8',fontSize:15,fontWeight:700}}>상세 ›</span>
+              <StatusBadge tone={elder.status === 'normal' ? 'neutral' : (elder.status || 'neutral')}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge>
+              <button type="button" className="elder-detail-link" onClick={()=>openDetail(elder)} aria-label={`${elder.name} 상세 보기`}>상세 ›</button>
             </span>
           </div>
         );
-        return [['danger','위험'],['warning','주의'],['normal','정상']]
+        return [['danger','위험'],['warning','주의'],['normal','기본 분류']]
           .map(([k,l])=>({k,l,list:filteredElders.filter(e=>e.status===k)}))
           .filter(g=>g.list.length>0)
           .map(g=>{
-            const open = elderSecOv[g.k] !== undefined ? elderSecOv[g.k] : g.k!=='normal';
+            const open = elderSecOv[g.k] !== undefined ? elderSecOv[g.k] : true;
             return (
               <div key={g.k} style={{marginBottom:14}}>
                 <GroupHeader label={g.l} count={g.list.length} unit="명"
@@ -179,9 +181,9 @@ export default function EldersPage(props: any) {
               const risk = getSolitudeRisk(elder);
               const noResponseDays = getNoResponseDays(elder.lastCall, elder.lastCallAt);
               return (
-                <tr key={elder.id} style={{cursor:'pointer',...(selectedElders.has(elder.id)?{background:'#eff6ff'}:{})}} onClick={()=>openDetail(elder)}>
+                <tr key={elder.id} style={selectedElders.has(elder.id)?{background:'#eff6ff'}:undefined}>
                   <td onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedElders.has(elder.id)} onChange={()=>toggleElderSel(elder.id)} className="cb"/></td>
-                  <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><strong>{elder.name}</strong></div></td>
+                  <td><div style={{display:'flex',alignItems:'center',gap:8}}><div className="table-avatar">{(elder.name||'?')[0]}</div><button type="button" className="elder-detail-link" onClick={()=>openDetail(elder)} aria-label={`${elder.name} 상세 보기`}>{elder.name}</button></div></td>
                   <td><span className="cycle-badge">{elder.title}</span></td>
                   <td>{elder.age?`${elder.age}세`:'—'}</td>
                   <td style={{fontSize:16,color:'#64748b'}}>{elder.region}</td>
@@ -189,8 +191,8 @@ export default function EldersPage(props: any) {
                   <td style={{fontSize:16,color:'#64748b'}}>{renderLastCall(elder)}</td>
                   <td>{noResponseDays===0?<span style={{color:'#22c55e',fontWeight:700}}>정상</span>:<span style={{color:noResponseDays>=3?'#ef4444':'#f59e0b',fontWeight:700}}>{noResponseDays>=99?'통화이력 없음':`${noResponseDays}일`}</span>}</td>
                   <td><span className="risk-badge-sm" style={{background:risk.bg,color:risk.color}}>{risk.label}</span></td>
-                  <td><StatusBadge tone={elder.status || 'normal'}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge></td>
-                  <td>{elder.keyword ? <span className="keyword-tag">"{elder.keyword}"</span> : <span style={{color:'#9ca3af',fontSize:15}}>없음</span>}</td>
+                  <td><StatusBadge tone={elder.status === 'normal' ? 'neutral' : (elder.status || 'neutral')}>{(STATUS_CONFIG[elder.status]||STATUS_CONFIG.normal).label}</StatusBadge></td>
+                  <td>{elder.keyword ? <span className="keyword-tag">"{riskDisplayText(elder.keyword)}"</span> : <span style={{color:'#9ca3af',fontSize:15}}>없음</span>}</td>
                   <td onClick={e=>e.stopPropagation()}><button className={`btn-call-sm ${calling===elder.id?'btn-calling':''}`} onClick={()=>setCallModal(elder)} disabled={calling===elder.id}>{calling===elder.id?'발신 중':'앱 전화'}</button></td>
                 </tr>
               );

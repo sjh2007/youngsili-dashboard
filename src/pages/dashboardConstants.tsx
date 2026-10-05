@@ -62,11 +62,11 @@ export const PSTN_SUBSCRIPTION_PLANS = [
 // 070 일반전화 월 이용료. 통화 크레딧은 포함하지 않으며 카드 단건 충전과 분리한다.
 // 안전% 목표는 고객 화면에 노출하지 않는다. 근거와 원가 상한은 proposals/일반전화 방식 원가 계산.md 참조.
 export const PSTN_PLANS = [
-  { key:'pstn100', name:'070–100', elderLimit:100, monthlyFee:700000 },
-  { key:'pstn200', name:'070–200', elderLimit:200, monthlyFee:800000 },
-  { key:'pstn300', name:'070–300', elderLimit:300, monthlyFee:900000, recommended:true },
-  { key:'pstn400', name:'070–400', elderLimit:400, monthlyFee:1000000 },
-  { key:'pstn500', name:'070–500', elderLimit:500, monthlyFee:1100000 },
+  { key:'pstn100', name:'전화통화–100', elderLimit:100, monthlyFee:700000 },
+  { key:'pstn200', name:'전화통화–200', elderLimit:200, monthlyFee:800000 },
+  { key:'pstn300', name:'전화통화–300', elderLimit:300, monthlyFee:900000, recommended:true },
+  { key:'pstn400', name:'전화통화–400', elderLimit:400, monthlyFee:1000000 },
+  { key:'pstn500', name:'전화통화–500', elderLimit:500, monthlyFee:1100000 },
 ];
 
 // 전원 휴대폰 착신, 1회 3분 통화 기준 고객 차감액.

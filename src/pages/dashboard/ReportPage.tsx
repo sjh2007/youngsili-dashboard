@@ -12,15 +12,16 @@ export default function ReportPage(props: any) {
 
   return (
     <div className="fade-in report-page">
-      <div className="report-banner"><div><div className="report-banner-title">{new Date().getFullYear()}년 {new Date().getMonth()+1}월 월간 리포트</div><div className="report-banner-sub">{me?.orgName ? `${me.orgName} · ` : ''}AI 영실이 복지 서비스</div></div><div className="report-banner-actions"><button className="btn-download" onClick={exportStatsCSV}>엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>PDF 다운로드</button></div></div>
+      <div className="report-banner"><div><div className="report-banner-title">운영 리포트 · 통계</div><div className="report-banner-sub">{me?.orgName ? `${me.orgName} · ` : ''}AI 영실이 복지 서비스</div></div><div className="report-banner-actions"><button className="btn-download" onClick={exportStatsCSV}>엑셀 다운로드</button><button className="btn-download" onClick={()=>window.print()}>PDF 다운로드</button></div></div>
       <div className="section report-export-panel">
         <div className="section-title">월간 실적 보고서 (지자체 보고용 엑셀)</div>
         <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-          <input type="month" className="form-input" style={{width:170,marginBottom:0}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)}/>
+          <input type="month" aria-label="월간 실적 보고서 기준 월" className="form-input" style={{width:170,marginBottom:0}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)}/>
           <button className="btn-primary" disabled={monthlyBusy} onClick={downloadMonthlyReport}>{monthlyBusy?'생성 중…':'엑셀 다운로드'}</button>
           <span style={{fontSize:15,color:'#94a3b8'}}>시트 4개 — 요약(안전확인 성공률·위험감지·일지) · 어르신별 실적 · 일별 현황 · 위험 감지 상세</span>
         </div>
       </div>
+      <p className="report-period-note">아래 통화 요약은 위험 키워드 통계의 선택 기간({statsRange==='week'?'최근 7일':statsRange==='3month'?'최근 3개월':statsRange==='custom'?`${statsFrom||'시작일'} ~ ${statsTo||'종료일'}`:'최근 30일'}) 기준입니다. 위 월간 실적 보고서의 월 선택과 별개입니다. 건수는 통화 기준, 위험도 분포는 어르신 수 기준입니다.</p>
       <div className="report-stat-grid">
         {[{label:'총 통화',value:`${reportCalls.length}건`,Icon:Phone},{label:'긴급 감지',value:`${reportCalls.filter(c=>c.riskLevel==='critical').length}건`,Icon:AlertCircle,tone:'danger'},{label:'주의 감지',value:`${reportCalls.filter(c=>c.riskLevel==='urgent').length}건`,Icon:AlertTriangle,tone:'warning'},{label:'정상 통화',value:`${reportCalls.filter(c=>!c.riskLevel||c.riskLevel==='normal').length}건`,Icon:CheckCircle2},{label:'총 통화 시간',value:`${Math.round(reportCalls.reduce((s,c)=>s+(c.durationSec||0),0)/60)}분`,Icon:Clock},{label:'관리 어르신',value:`${elders.length}명`,Icon:Users}].map((s,i)=>(
           <div key={i} className={`report-stat-card ${s.tone?`is-${s.tone}`:''}`}>

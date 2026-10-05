@@ -83,3 +83,48 @@ it('조치 완료 시 조치 내용을 필수로 저장하고 통화 기록 이�
   expect(await screen.findByText('보호자에게 연락함')).toBeInTheDocument();
   expect(screen.getByText('staff@example.com')).toBeInTheDocument();
 });
+
+it('조회 실패를 정상 0건으로 표시하지 않고 재시도를 제공한다', async () => {
+  fetchMock.mockResolvedValueOnce(response({},500)).mockResolvedValueOnce(response(rankings));
+  render(<HealthInsightsPanel elders={[]}/>);
+  expect(await screen.findByRole('alert')).toHaveTextContent('오류');
+  expect(screen.queryByText('현재 확인할 변화가 없습니다.')).not.toBeInTheDocument();
+  fetchMock.mockResolvedValueOnce(response({items:[],nextCursor:null})).mockResolvedValueOnce(response(rankings));
+  fireEvent.click(screen.getByRole('button',{name:'다시 시도'}));
+  expect(await screen.findByText('현재 확인할 변화가 없습니다.')).toBeInTheDocument();
+});
+
+it('이전 기록 커서를 이어 조회하고 기존 카드를 중복 없이 유지한다', async () => {
+  const item={caseId:'case-a',elderId:'01012345678',topic:'activity',signal:'new_statement',state:'reviewing',latestObservedAt:'2026-09-29T07:06:24.672Z',evidenceCount:1,revision:1};
+  fetchMock.mockResolvedValueOnce(response({items:[item],nextCursor:'cursor/+='})).mockResolvedValueOnce(response(rankings));
+  fetchMock.mockResolvedValueOnce(response({items:[item,{...item,caseId:'case-b',topic:'sleep'}],nextCursor:null}));
+  render(<HealthInsightsPanel elders={[{phone:'01012345678',name:'홍길동'}]}/>);
+  await waitFor(()=>expect(screen.getAllByRole('button',{name:'근거 보기'})).toHaveLength(2));
+  expect(fetchMock.mock.calls[2][0]).toContain('cursor=cursor%2F%2B%3D');
+  expect(screen.queryByRole('button',{name:'이전 기록 더 보기'})).not.toBeInTheDocument();
+});
+
+it('어르신을 바꾼 후 늦게 도착한 이전 응답으로 화면을 덮어쓰지 않는다', async () => {
+  let resolveOld:(value:unknown)=>void=()=>{};
+  fetchMock.mockReturnValueOnce(new Promise(resolve=>{resolveOld=resolve})).mockResolvedValueOnce(response(rankings));
+  render(<HealthInsightsPanel elders={[{phone:'01012345678',name:'홍길동'}]}/>);
+  fetchMock.mockResolvedValueOnce(response({items:[],nextCursor:null})).mockResolvedValueOnce(response({elderId:'01012345678',from:'2026-09-01',to:'2026-09-29',points:[]})).mockResolvedValueOnce(response(rankings));
+  fireEvent.change(screen.getByLabelText('어르신 필터'),{target:{value:'01012345678'}});
+  expect(await screen.findByText('현재 확인할 변화가 없습니다.')).toBeInTheDocument();
+  resolveOld(response({},500));
+  await waitFor(()=>expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+});
+
+it('같은 revision으로 새 근거가 도착해도 새로고침 후에는 이전 원문을 재사용하지 않는다',async()=>{
+  const item={caseId:'case-fresh',elderId:'01012345678',topic:'sleep',signal:'new_statement',state:'reviewing',latestObservedAt:'2026-09-29T07:06:24.672Z',evidenceCount:1,revision:2};
+  const detail=(excerpt:string)=>({...item,evidence:[{observedAt:item.latestObservedAt,excerpt,sourceId:'source',line:2}],reviewNote:'',updatedAt:null,reviewedBy:''});
+  fetchMock.mockResolvedValueOnce(response({items:[item],nextCursor:null})).mockResolvedValueOnce(response(rankings)).mockResolvedValueOnce(response(detail('이전 근거')));
+  render(<HealthInsightsPanel elders={[{phone:'01012345678',name:'홍길동'}]}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'근거 보기'}));
+  expect(await screen.findByText('“이전 근거”')).toBeInTheDocument();
+  fetchMock.mockResolvedValueOnce(response({items:[{...item,evidenceCount:2}],nextCursor:null})).mockResolvedValueOnce(response(rankings)).mockResolvedValueOnce(response(detail('갱신된 근거')));
+  fireEvent.click(screen.getByRole('button',{name:'목록 새로고침'}));
+  fireEvent.click(await screen.findByRole('button',{name:'근거 보기'}));
+  expect(await screen.findByText('“갱신된 근거”')).toBeInTheDocument();
+  expect(screen.queryByText('“이전 근거”')).not.toBeInTheDocument();
+});

@@ -53,7 +53,7 @@ export default function DemoCallsPanel() {
     </div>
     <p style={{ color: '#475569', lineHeight: 1.7 }}>등록 여부와 관계없이 홈페이지에서 신청한 체험입니다. 운영관리자만 열람하며 기관 통화 기록과 분리됩니다.</p>
     <p style={{ padding: 12, background: '#EFF6FF', color: '#1E40AF', borderRadius: 8, lineHeight: 1.7 }}>
-      신청일 기준 1일 보관 · 대화 텍스트와 별도 선택 동의한 녹음은 보관 기간이 지나면 삭제됩니다. 이전에 수집하지 않은 녹음은 복원할 수 없습니다.
+      신규 신청일 기준 14일(2주) 보관 · 대화 텍스트와 별도 선택 동의한 녹음은 보관 기간이 지나면 삭제됩니다. 이전에 수집하지 않은 녹음은 복원할 수 없습니다.
     </p>
     {error && <p role="alert" style={{ color: '#B45309' }}>{error}</p>}
     {expired > 0 && <p role="status">보관 기간이 만료된 체험 {expired}건은 더 이상 표시하지 않습니다.</p>}

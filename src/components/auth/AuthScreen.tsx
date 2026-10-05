@@ -36,7 +36,7 @@ function PwInput({ value, onChange, placeholder, autoComplete, onKeyDown, ariaLa
 }
 
 export default function AuthScreen({ authUser, needsProvision, authFetch, serverUrl, onReload, onProvisioned }) {
-  const [tab, setTab] = useState('login');     // login | signup
+  const [tab, setTab] = useState(() => ['#signup', '#trial'].includes(window.location.hash) ? 'signup' : 'login');     // login | signup
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
@@ -45,7 +45,7 @@ export default function AuthScreen({ authUser, needsProvision, authFetch, server
   const [pw, setPw] = useState('');
   const [keep, setKeep] = useState(false);  // P2-2: 어르신 건강정보 취급 시스템 — 자동 로그인 기본 해제
   // ── 아이디·비밀번호 찾기 (디자인팀 로그인 개선안 v1.0) ──
-  const [mode, setMode] = useState('none'); // none | findId | findIdResult | findPw | findPwSent
+  const [mode, setMode] = useState(() => window.location.hash === '#find-password' ? 'findPw' : 'none'); // none | findId | findIdResult | findPw | findPwSent
   const [fi, setFi] = useState({ name: '', phone: '' });
   const [fiResult, setFiResult] = useState(null);
   const [fpEmail, setFpEmail] = useState('');

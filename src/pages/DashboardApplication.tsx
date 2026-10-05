@@ -1,3 +1,14 @@
+import { useCaseNotesPage } from '../hooks/useCaseNotesPage';
+import { weatherRefreshDecision } from '../utils/weatherAvailability';
+import { prefillWeeklyNotes } from '../utils/weeklyNotePrefill';
+import CaseNoteExport from '../components/case-notes/CaseNoteExport';
+import { ensureCallNote, fetchCaseNote, persistCaseNote } from '../utils/caseNotesApi';
+import { reserveNotePrintWindow, printSavedCaseNote } from '../utils/caseNoteExport';
+import { CaseNoteListSchema, PopulationSchema, CallCreditErrorSchema } from '../schemas';
+import InsufficientCreditDialog from '../components/common/InsufficientCreditDialog';
+import { fetchHealthSnapshot } from '../utils/healthApi';
+import { riskDisplayText } from '../utils/riskDisplay';
+import { callRiskMatches } from '../utils/alertRiskDisplay';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { auth, authEnabled } from '../firebase';
 import { onAuthStateChanged, signOut, sendEmailVerification } from 'firebase/auth';
@@ -120,10 +131,7 @@ export default function App() {
   const [regionFilter, setRegionFilter] = useState('전체');
   const [sortBy, setSortBy]           = useState('status');
   const [viewMode, setViewMode]       = useState('card');
-  const [memoText, setMemoText]       = useState('');
-  const [memos, setMemos]             = useState(() => { try { return JSON.parse(localStorage.getItem('youngsili_memos')) || []; } catch { return []; } });
   const [lastSync, setLastSync]       = useState(null);   // 마지막 데이터 갱신 시각 (헤더 표시)
-  const [todoDone, setTodoDone]       = useState({});     // 대시보드 "오늘 할 일" 체크 상태
   const [noRespOpen, setNoRespOpen]   = useState(false);  // 대시보드 만성 미응답 요약 펼침 상태
   const [alertsOpen, setAlertsOpen]   = useState(false);  // 대시보드 알림 배너 3건 초과분 펼침 (위험은 항상 노출)
   const [healthData, setHealthData]     = useState([]);
@@ -134,6 +142,7 @@ export default function App() {
   // 마지막으로 표시한 페이지를 기억해 15초 폴링마다 반복되는 것은 막는다.
   const lastBillingAlertPageRef = useRef('');
   const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState('');
   // 영실이 콘솔(총괄 관리자 전용) — 3개 서버 헬스체크 + 전체 기관 진행 중인 통화
   const [consoleHealth, setConsoleHealth] = useState(null);   // {status, components:[{name,ok,latencyMs,detail}]}
   const [consoleCalls, setConsoleCalls]   = useState([]);
@@ -157,7 +166,8 @@ export default function App() {
   const [me, setMe]               = useState(null);   // {role, orgId, orgName, orgCode, email}
   const [orgNotices, setOrgNotices] = useState([]);    // 총괄 관리자 콘솔이 보낸 공지(GET /notices/active)
   const [dismissedNoticeIds, setDismissedNoticeIds] = useState([]); // 닫기는 이 세션 동안만(서버에 안 남김)
-  const [billing, setBilling]     = useState(null);   // {creditBalance: number|null} — null(미조회) 이면 차단 화면 안 띄움
+  const [billing, setBilling]     = useState(null);   // null 잔액은 무제한; 로그인/조회는 잔액과 무관
+  const [creditCallBlocked, setCreditCallBlocked] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false); // 요금제 정책 v1.0(2026-08-28) §5 기준 정액제 안내
   const [upgradeTab, setUpgradeTab] = useState('metered'); // 'metered'(정량제, 주력) | 'flat'(정액제, 보조)
   const [topupBusy, setTopupBusy] = useState(false); // 포트원 결제 요청 처리 중(버튼 중복 클릭 방지)
@@ -209,6 +219,7 @@ export default function App() {
   const [statsLoading, setStatsLoading]   = useState(false);
   const [callsHistory, setCallsHistory]   = useState([]);     // 서버 /calls (통화별 1건)
   const [callsLoading, setCallsLoading]   = useState(false);
+  const [callsError, setCallsError] = useState('');
   const [callsRange, setCallsRange]       = useState('month'); // week | month | custom
   const [callsFrom, setCallsFrom]         = useState('');
   const [callsTo, setCallsTo]             = useState('');
@@ -832,20 +843,13 @@ export default function App() {
   const fetchHealth = async (silent = false) => {
     if (!silent) setHealthLoading(true);
     try {
-      const [hRes, aRes] = await Promise.all([
-        authFetch(`${SERVER_URL}/health/all`),
-        authFetch(`${SERVER_URL}/alerts`),
-      ]);
-      const hData = await hRes.json();
-      const aData = await aRes.json();
-      // 401/에러 응답은 배열이 아닌 객체 → .filter 크래시 방지 (로그아웃/토큰만료 시 흰화면 차단)
-      const hArr = Array.isArray(hData) ? hData : [];
-      const aArr = Array.isArray(aData) ? aData : [];
+      const { health: hArr, alerts: aArr } = await fetchHealthSnapshot();
+      setHealthError('');
       setHealthData(hArr);
       setAlertsData(aArr);
       setAlertCount(aArr.filter(a => a.status ? a.status === 'new' : !a.read).length);
     } catch (err) {
-      console.error('건강 데이터 오류:', err);
+      setHealthError(err instanceof Error ? err.message : '건강 현황을 불러오지 못했습니다');
     } finally {
       if (!silent) setHealthLoading(false);
     }
@@ -925,7 +929,7 @@ export default function App() {
   // 계정 전환(로그아웃→다른 계정 로그인) 시 새 조회가 끝나기 전까지 이전 계정의 크레딧 잔액이
   // 화면에 그대로 남아있던 버그(2026-08-31 실사용 지적) — 잔액은 곧바로 null로 비워 재조회가
   // 끝날 때까지는 아무것도 안 보이게 한다(다른 기관 금액을 잘못 보여주는 것보다 안전).
-  useEffect(() => { setBilling(null); setSubStatus(null); fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); fetchSpecialWarning(); fetchBillingBalance(); fetchOrgNotices(); } }, [authUser]); // eslint-disable-line
+  useEffect(() => { setBilling(null); setCreditCallBlocked(false); setSubStatus(null); fetchElders(); fetchCaregivers(); fetchCalls(); fetchMe(); if (authUser) { fetchWeather(); fetchForestFire(); fetchSpecialWarning(); fetchBillingBalance(); fetchOrgNotices(); } }, [authUser]); // eslint-disable-line
   useEffect(() => { if (page === 'admin' && isStaffUp) { if (isSuper) fetchOrgs(); fetchAccounts(); fetchInvites(); setAdminMsg(''); } }, [page, isStaffUp, isSuper]); // eslint-disable-line
   // 어르신 등록/수정 폼: 담당 지원사 배정 드롭다운용 계정 목록
   useEffect(() => { if (page === 'register' && isStaffUp && accounts.length === 0) fetchAccounts(); }, [page, isStaffUp]); // eslint-disable-line
@@ -1026,15 +1030,21 @@ export default function App() {
     const controller = new AbortController();
     callsRequestRef.current = controller;
     if (!silent) setCallsLoading(true);
+    if (!silent) setCallsError('');
     try {
       const now = new Date();
       let from = new Date(now.getTime() - 30 * 86400000), to = now;
       if (callsRange === 'week') from = new Date(now.getTime() - 7 * 86400000);
       else if (callsRange === 'custom') { if (callsFrom) from = new Date(callsFrom); if (callsTo) to = new Date(callsTo + 'T23:59:59'); }
       const r = await authFetch(`${SERVER_URL}/calls?from=${from.toISOString()}&to=${to.toISOString()}`, { signal: controller.signal });
+      if (!r.ok) throw new Error('통화 기록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
       const j = await r.json();
-      if (!controller.signal.aborted) setCallsHistory(parseOr(CallListSchema, j && j.calls, []));
-    } catch { if (!silent && !controller.signal.aborted) setCallsHistory([]); }
+      const parsed = CallListSchema.safeParse(j && j.calls);
+      if (!parsed.success) throw new Error('통화 기록 응답을 확인할 수 없습니다. 다시 시도해 주세요.');
+      if (!controller.signal.aborted) { setCallsHistory(parsed.data); setCallsError(''); }
+    } catch (error) {
+      if (!controller.signal.aborted) setCallsError(error instanceof TypeError ? '서버에 연결할 수 없습니다. 네트워크를 확인하고 다시 시도해 주세요.' : error instanceof Error ? error.message : '통화 기록을 불러오지 못했습니다.');
+    }
     finally {
       if (callsRequestRef.current === controller) {
         callsRequestRef.current = null;
@@ -1102,24 +1112,38 @@ export default function App() {
   const [popData, setPopData]       = useState(null);
   const [popLoading, setPopLoading] = useState(false);
   const [popError, setPopError]     = useState(null);
+  const popRequestRef = useRef(0);
+  const popRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const invalidatePopulation = () => {
+    ++popRequestRef.current;
+    if (popRetryRef.current) clearTimeout(popRetryRef.current);
+  };
 
   const fetchPopulation = async (region = '', retry = 0) => {
+    const request = ++popRequestRef.current;
+    if (popRetryRef.current) clearTimeout(popRetryRef.current);
     setPopLoading(true); setPopError(null);
     try {
       const params = new URLSearchParams();
       if (region) params.set('region', region);
       const res = await authFetch(`${SERVER_URL}/population${params.size ? `?${params}` : ''}`);
-      const data = await res.json();
+      if (!res.ok) throw new Error('population unavailable');
+      const data = PopulationSchema.parse(await res.json());
+      if (request !== popRequestRef.current) return;
       setPopData(data);
       // 타 시도 첫 조회는 서버가 백그라운드 수집 → 잠시 후 자동 재조회 (최대 6회)
-      if (data && data.collecting && retry < 6) setTimeout(() => fetchPopulation(region, retry + 1), 12000);
-    } catch { setPopError('데이터를 불러오지 못했습니다.'); }
-    finally { setPopLoading(false); }
+      if (data && (data.collecting || data.stale) && retry < 6) popRetryRef.current = setTimeout(() => fetchPopulation(region, retry + 1), 12000);
+    } catch { if (request === popRequestRef.current) setPopError('데이터를 불러오지 못했습니다.'); }
+    finally { if (request === popRequestRef.current) setPopLoading(false); }
   };
 
-  useEffect(() => { if (page === 'data' && !popData) fetchPopulation(); }, [page]); // eslint-disable-line
+  useEffect(() => {
+    invalidatePopulation();
+    setPopData(null);
+    if (page === 'data' && me) fetchPopulation();
+    return invalidatePopulation;
+  }, [page, me?.orgRegion, me?.orgId]); // eslint-disable-line
   // 어르신 목록은 서버(Firestore)가 원본 — localStorage 저장 제거 (PC마다 다르게 노는 문제 방지)
-  useEffect(() => { try { localStorage.setItem('youngsili_memos', JSON.stringify(memos)); } catch {} }, [memos]);
   useEffect(() => { localStorage.removeItem('youngsili_callLogs'); }, []);  // 옛 더미 통화로그 1회 정리
   const [mainScript]                    = useState(DEFAULT_SCRIPT);
   const [activeAlert, setActiveAlert]   = useState('none');
@@ -1147,6 +1171,7 @@ export default function App() {
   const [weatherTime, setWeatherTime] = useState('');
   const [weatherStale, setWeatherStale] = useState(false); // 기상 연동 지연 — 마지막 성공 수신 데이터를 유지한 채 표시
   const [weatherData, setWeatherData]   = useState({});  // 서버 /weather 실데이터로 로드 (가짜 날씨 폐지)
+  const weatherRequestRef = useRef(0);
   const [forestFireData, setForestFireData] = useState<Record<string, any>>({}); // 서버 /forest-fire — 날씨 카드와 동일 지역 key
   const [specialWarningData, setSpecialWarningData] = useState<Record<string, any>>({}); // 서버 /special-warning — 기상청 공식 특보(단기예보 추정과 별개)
   const [disasterMsgs, setDisasterMsgs] = useState<any[]>([]);           // 서버 /disaster-msg — 기관 관할지역 오늘자 긴급재난문자
@@ -1163,7 +1188,7 @@ export default function App() {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkDone, setBulkDone]     = useState([]);
   const [bulkCurrent, setBulkCurrent] = useState(null);
-  const [bulkChannel, setBulkChannel] = useState<'app'|'pstn'>('app');   // 진행 중인 일괄 발신이 앱 알림인지 일반전화(070)인지
+  const [bulkChannel, setBulkChannel] = useState<'app'|'pstn'>('app');   // 진행 중인 일괄 발신이 앱 알림인지 전화통화인지
   const [dispatchHist, setDispatchHist] = useState([]);   // 발신 이력(날짜별) — 서버 dispatches
   const [histLoading, setHistLoading] = useState(false);
   const [histDays, setHistDays]     = useState(7);
@@ -1188,8 +1213,6 @@ export default function App() {
   // 이번 일괄 발신이 경보 발신이었는지 — 부재중 재발신 때 같은 종류로 다시 걸기 위해 기억한다
   const bulkWithAlertRef = useRef(false);
   // 상담·방문 일지(caseNotes)
-  const [caseNotes, setCaseNotes]   = useState([]);
-  const [caseLoading, setCaseLoading] = useState(false);
   const [caseType, setCaseType]     = useState('all');       // 유형 필터
   const [caseSearch, setCaseSearch] = useState('');          // 어르신 이름 검색
   const [caseFollowUpOnly, setCaseFollowUpOnly] = useState(false);
@@ -1203,6 +1226,23 @@ export default function App() {
   const [noteModal, setNoteModal]   = useState(null);        // null | { note?, prefill? }
   const [noteForm, setNoteForm]     = useState(null);        // 작성/수정 폼 값
   const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState('');
+  const [callNoteErrors, setCallNoteErrors] = useState<Record<string,string>>({});
+  const noteSaveLock = useRef(false);
+  const noteDraftLock = useRef(false);
+  const [noteExport, setNoteExport] = useState<any>(null);
+  const noteActorKey = JSON.stringify([authUser?.uid, me?.orgId, me?.role]);
+  const noteViewKey = JSON.stringify([noteActorKey, page, selected?.phone]);
+  const noteView = useRef({key: noteViewKey, request: 0});
+  if (noteView.current.key !== noteViewKey) noteView.current = {key: noteViewKey, request: noteView.current.request + 1};
+  const notesPage = useCaseNotesPage({active: !!authUser && (page === 'casenotes' || (page === 'detail' && !!selected?.phone)),
+    elderPhone: page === 'detail' ? selected?.phone : undefined,
+    search: page === 'casenotes' ? caseSearch : '', type: page === 'casenotes' ? caseType : 'all',
+    followUpOnly: page === 'casenotes' && caseFollowUpOnly,
+    scopeKey: String(authUser?.uid || '') + ':' + String(me?.orgId || '') + ':' + String(me?.role || '')});
+  const {notes: caseNotes, loading: caseLoading, error: caseError} = notesPage;
+  useEffect(() => { setSelectedNotes(new Set()); }, [notesPage.pageNumber, notesPage.query]);
+  useEffect(() => { setNoteExport(null); setNoteModal(null); setNoteForm(null); }, [noteActorKey]);
 
   const danger  = elders.filter(e => e.status==='danger').length;
   const warning = elders.filter(e => e.status==='warning').length;
@@ -1281,19 +1321,19 @@ export default function App() {
   const alertStageFor = () => activeAlert === 'wildfire' ? wildfireStage : '';
 
   const fetchWeather = async () => {
+    const requestId = ++weatherRequestRef.current;
     setFetchingWeather(true);
     try {
       const res = await authFetch(`${SERVER_URL}/weather`);
       if (res.ok) {
         const data = await res.json();
+        if (requestId !== weatherRequestRef.current) return;
         setWeatherData(data);
+        const availability = weatherRefreshDecision(data);
         const _n = new Date();
         const _d = ['일','월','화','수','목','금','토'][_n.getDay()];
         const _h = _n.getHours();
-        setWeatherTime(`(${_d}요일) ${_h < 12 ? '오전' : '오후'} ${_h % 12 || 12}:${String(_n.getMinutes()).padStart(2,'0')}`);
-        const hasHeatwave = Object.values(data as Record<string, any>).some(w => w.alert === 'heatwave');
-        const hasCold     = Object.values(data as Record<string, any>).some(w => w.alert === 'cold');
-        const hasRain     = Object.values(data as Record<string, any>).some(w => w.alert === 'rain');
+        if (availability.updateTime) setWeatherTime(`(${_d}요일) ${_h < 12 ? '오전' : '오후'} ${_h % 12 || 12}:${String(_n.getMinutes()).padStart(2,'0')}`);
         // 날씨로 경보가 자동 선택될 때도 **서버에 저장된 멘트**를 우선한다.
         // 기본값을 그대로 넣으면 담당자가 수정해 둔 멘트가 화면에서 사라진 것처럼 보인다.
         //
@@ -1311,17 +1351,14 @@ export default function App() {
           appliedAlertKeyRef.current = k;
           setAlertScript(tplText(k, ALERT_TEMPLATES[k]));
         };
-        if (hasHeatwave)     pick('heatwave');
-        else if (hasCold)    pick('cold');
-        else if (hasRain)    pick('rain');
-        else                 pick('none');
+        if (availability.automaticAlert !== null) pick(availability.automaticAlert);
         // 서버가 기상청 장애 시 stale:true(직전 성공 데이터 유지)로 내려줌 → '연동 지연' 표시
-        setWeatherStale(Object.values(data as Record<string, any>).some(w => w && w.stale));
-      } else { setWeatherStale(true); }
+        setWeatherStale(availability.stale);
+      } else if (requestId === weatherRequestRef.current) { setWeatherStale(true); }
     } catch (err) {
       console.error('날씨 API 오류:', err);
-      setWeatherStale(true);
-    } finally { setFetchingWeather(false); }
+      if (requestId === weatherRequestRef.current) setWeatherStale(true);
+    } finally { if (requestId === weatherRequestRef.current) setFetchingWeather(false); }
   };
 
   // R3: 기상 데이터 5분 주기 자동 갱신 (서버도 지역별 5분 캐시 — 기상청 호출량 안전)
@@ -1426,13 +1463,15 @@ export default function App() {
       const body = ((a.message || '').split('— ')[1] || '').replace(/\s*·.*$/, '').trim();
       return body || EN_ALERT_KO[code];
     }
-    return a.keyword || (a.message ? a.message.split(/감지[::]?/).pop().trim() : '') || a.message || '';
+    const keyword = String(a.keyword || '').trim();
+    const description = keyword || (a.message ? a.message.split(/감지[::]?/).pop().trim() : '') || a.message || '';
+    return riskDisplayText(description, a.level);
   };
   // 브라우저 뒤로가기 → 대시보드 홈 (SPA 히스토리 연동: 하위 탭에서 뒤로가기 시 새 탭/이탈 대신 홈으로)
   // URL 해시에 페이지 기록 → 새로고침(F5) 시 현재 페이지 유지, 뒤로가기 시 이전 페이지로
   useEffect(() => {
     try { localStorage.setItem('youngsili_current_page', page); } catch {}
-    if (/invite=/.test(window.location.hash)) return;   // 초대 해시는 AuthScreen이 읽기 전까지 보존
+    if (/invite=/.test(window.location.hash) || ['#signup', '#trial', '#find-password'].includes(window.location.hash)) return;   // 초대 해시는 AuthScreen이 읽기 전까지 보존
     if (((window.location.hash || '').replace('#','') || 'dashboard') !== page) window.history.pushState({ page }, '', '#' + page);
   }, [page]);
   useEffect(() => {
@@ -1515,6 +1554,7 @@ export default function App() {
         method:'POST', headers:{'Content-Type':'application/json'}, body: bulkCallBody(elder, channel, withAlert),
       });
       const data = await res.json();
+      if (handleCallCreditError(data)) return;
       setBulkDone(prev => [...prev, { id: elder.id, callId: data.callId, success: data.success, status: data.success ? 'ringing' : 'failed' }]);
       if (data.success) {
         setElders(prev => prev.map(e => e.id===elder.id ? {...e, lastCall:`오늘 ${timeStr}`} : e));
@@ -1531,13 +1571,16 @@ export default function App() {
     bulkWithAlertRef.current = withAlert;   // 부재중 재발신(resendMissed)이 같은 종류로 나가도록 기억
 
     if (channel === 'pstn') {
-      // 일반전화(070)는 콜엔진이 동시 발신을 감당하므로 배치 안에서는 전부 한꺼번에 건다
-      // (앱 알림처럼 AI서버 부하 때문에 한 명씩 늦출 필요가 없다) — 배치 간격만 유지.
+      // 전화 통화는 배치 크기와 배치 간격을 유지하고, 요청 접수는 한 건씩 확인한다.
       for (let i = 0; i < queue.length; i += batchSize) {
         if (!bulkRef.current) break;
         const batch = queue.slice(i, i + batchSize);
         setBulkCurrent(batch[batch.length - 1]?.id ?? null);
-        await Promise.allSettled(batch.map(elder => dialElder(elder, 'pstn', withAlert)));
+        // 접수만 순차 수행하여 잔액 거절 이후 추가 요청을 보내지 않는다. 접수된 통화는 동시 진행한다.
+        for (const elder of batch) {
+          if (!bulkRef.current) break;
+          await dialElder(elder, 'pstn', withAlert);
+        }
         const isLastBatch = i + batchSize >= queue.length;
         if (!isLastBatch && bulkRef.current) {
           for (let s = batchIntervalSec; s > 0 && bulkRef.current; s--) { setBatchWait(s); await new Promise(r => setTimeout(r, 1000)); }
@@ -1552,7 +1595,7 @@ export default function App() {
         await dialElder(elder, 'app', withAlert);
         // 배치 분산: batchSize명마다 batchIntervalSec초 대기(AI서버 동시통화 부하 완화). 배치 내는 1.5초 간격
         const isLast = i === queue.length - 1;
-        if (!isLast) {
+        if (!isLast && bulkRef.current) {
           if ((i + 1) % batchSize === 0) {
             for (let s = batchIntervalSec; s > 0 && bulkRef.current; s--) { setBatchWait(s); await new Promise(r => setTimeout(r, 1000)); }
             setBatchWait(0);
@@ -1640,7 +1683,7 @@ export default function App() {
 
   const savePstnCallerId = async () => {
     const v = pstnCallerId.replace(/[^0-9]/g, '');
-    if (!/^0\d{8,10}$/.test(v)) { setPstnMsg('0으로 시작하는 숫자 9~11자리로 입력해 주세요 (예: 07045014906)'); return; }
+    if (!/^0\d{8,10}$/.test(v)) { setPstnMsg('0으로 시작하는 숫자 9~11자리로 입력해 주세요'); return; }
     setPstnSaving(true); setPstnMsg('');
     try {
       const r = await authFetch(`${SERVER_URL}/settings/pstn`, {
@@ -1785,58 +1828,51 @@ export default function App() {
   // 주간업무 보고서(공식 양식)의 업무 구분 체크박스: □사회 □신체 □가사 □기타
   const CASE_TOPIC_META = { social:'사회', physical:'신체', housework:'가사', etc:'기타' };
 
-  const loadCaseNotes = async (silent = false) => {
-    if (!silent) setCaseLoading(true);
-    try {
-      const from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-      const r = await authFetch(`${SERVER_URL}/case-notes?from=${encodeURIComponent(from)}`);
-      const d = await r.json();
-      setCaseNotes(Array.isArray(d.notes) ? d.notes : []);
-    } catch { if (!silent) setCaseNotes([]); }
-    if (!silent) setCaseLoading(false);
+  const loadCaseNotes = (_silent = false) => notesPage.reload();
+  const openNoteExport = (options: {includeDrafts?: boolean; selectedIds?: string[]} = {}) => {
+    const now = new Date();
+    const base = page === 'casenotes' || page === 'detail' ? notesPage.query : {from:new Date(now.getTime()-90*86400000).toISOString(),to:now.toISOString()};
+    const query: Record<string,string> = {...base, full:'true', limit:'100', includeDrafts:String(!!options.includeDrafts)};
+    delete query.cursor;
+    setNoteExport({query, selectedIds:options.selectedIds});
   };
-  useEffect(() => {
-    if (page !== 'casenotes' && page !== 'detail') return;
-    loadCaseNotes();
-    // 일지는 기관 공유 데이터 — 다른 담당자가 쓴 일지도 15초 안에 보이게 자동 갱신
-    if (page !== 'casenotes') return;
-    const t = setInterval(whileVisible(() => loadCaseNotes(true)), 15000);
-    return () => clearInterval(t);
-  }, [page]); // eslint-disable-line
+  const openSavedNote = async (note) => {
+    const key = noteView.current.key;
+    const request = ++noteView.current.request;
+    const current = () => noteView.current.key === key && noteView.current.request === request;
+    try { const saved = await fetchCaseNote(note.id); if (current()) openEditNote(saved); }
+    catch (error) { if (current()) notify(error instanceof Error ? error.message : '일지를 불러오지 못했습니다.'); }
+  };
 
-  // 날짜/시간 헬퍼 (상담 일시를 날짜 입력 + 시간 드롭다운으로 분리)
   const pad2 = (n) => String(n).padStart(2, '0');
-  const dateStrOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-  const timeStrOf = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  const roundHalf = (d) => { let h = d.getHours(), m = d.getMinutes(); if (m < 15) m = 0; else if (m < 45) m = 30; else { m = 0; h = (h + 1) % 24; } return `${pad2(h)}:${pad2(m)}`; };
   const fmtTimeK = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return `${h < 12 ? '오전' : '오후'} ${h % 12 === 0 ? 12 : h % 12}:${pad2(m)}`; };
   const TIME_OPTS = (() => { const a = []; for (let h = 0; h < 24; h++) for (const m of [0, 30]) a.push(`${pad2(h)}:${pad2(m)}`); return a; })();
 
   // 새 일지 작성 폼 열기 (prefill: 어르신/주제/연동알림)
   // 통화 내용 → 활동일지 초안 생성 (AI서버 Gemini 요약, Railway 프록시) → 일지 작성 모달 프리필
-  const makeNoteDraft = async (c) => {
-    if (draftingCallId) return;
+  const openNoteForCall = async (c) => {
+    if (noteDraftLock.current) return;
+    noteDraftLock.current = true;
     setDraftingCallId(c.id);
+    setCallNoteErrors(prev => ({...prev, [c.id]: ''}));
     try {
-      const r = await authFetch(`${SERVER_URL}/case-notes/draft`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ elderName: nameByPhone(c.phone, c.elderName), transcript: c.transcript, riskLevel: c.riskLevel, durationSec: c.durationSec }),
-      });
-      const d = await r.json();
-      openNewNote({
-        elderPhone: c.phone, elderName: nameByPhone(c.phone, c.elderName), type: 'phone',
-        category: d.category || 'safety', content: d.content || '', action: d.action || '', visitedAt: c.at,
-      });
-    } catch { notify('일지 초안 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.'); }
-    setDraftingCallId(null);
+      const note = await ensureCallNote(String(c.id || c.callId || ''));
+      void notesPage.reload();
+      openEditNote(note);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '초안을 불러오지 못했습니다. 다시 시도해 주세요.';
+      setCallNoteErrors(prev => ({...prev, [c.id]: message}));
+      notify(message);
+    } finally { setDraftingCallId(null); noteDraftLock.current = false; }
   };
 
-  // 통화 행의 '일지 작성' — 통화 종료 시 서버가 만들어 둔 자동 일지가 있으면 그것을 열어 수정한다.
-  // (새로 만들면 같은 통화에 일지가 2건 생긴다. 자동 일지 문서 id는 auto_{callId} 규칙)
-  const openNoteForCall = (c) => {
-    const exist = c.callId && caseNotes.find(n => n.callId === c.callId);
-    if (exist) { openEditNote(exist); return; }
-    makeNoteDraft(c);
+  const printNote = async (note) => {
+    let target: Window | undefined;
+    try {
+      target = reserveNotePrintWindow();
+      const saved = await fetchCaseNote(note.id);
+      printSavedCaseNote(saved, target);
+    } catch (error) { target?.close(); notify(error instanceof Error ? error.message : '일지 출력에 실패했습니다. 다시 시도해 주세요.'); }
   };
 
   // 일지 → 정부 노인맞춤돌봄시스템 붙여넣기용 텍스트 복사 (현장 최다 사용 흐름)
@@ -1857,36 +1893,12 @@ export default function App() {
   };
   const copyNote = async (n, key) => {
     try {
-      await navigator.clipboard.writeText(noteToText(n));
+      const saved = key === 'modal' ? n : await fetchCaseNote(n.id);
+      await navigator.clipboard.writeText(noteToText(saved));
       setCopiedNoteId(key); setTimeout(() => setCopiedNoteId(null), 2000);
     } catch { notify('복사에 실패했습니다. 브라우저 권한을 확인해 주세요.'); }
   };
   // 일지 목록 엑셀 다운로드 (기관 내부 보관·결재용)
-  const exportNotesXlsx = async (list) => {
-    const XLSX = await loadXLSX();
-    const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
-    const CAT_KO = { safety: '안전', health: '건강', meal: '식사', emotional: '정서', welfare: '생활지원', etc: '기타' };
-    const aoa = [['일시', '어르신', '유형', '분류', '내용', '조치사항', '후속필요', '후속기한', '작성자', '상태']];
-    [...list].sort((a, b) => (a.visitedAt || '').localeCompare(b.visitedAt || '')).forEach(n => {
-      aoa.push([
-        n.visitedAt ? new Date(n.visitedAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '',
-        n.elderName || '', TYPE_KO[n.type] || n.type, CAT_KO[n.category] || n.category,
-        n.content || '', n.action || '',
-        (n.followUp && n.followUp.needed) ? 'O' : '', (n.followUp && n.followUp.dueDate) || '',
-        (n.authorEmail || '').split('@')[0],
-        isAutoDraft(n) ? '자동기록(확인 필요)' : '확인 완료',
-      ]);
-    });
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 60 }, { wch: 26 }, { wch: 8 }, { wch: 11 }, { wch: 12 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(wb, ws, '상담방문일지');
-    XLSX.writeFile(wb, `영실이_상담방문일지_${new Date().toLocaleDateString('sv-SE')}.xlsx`);
-  };
-
-  // ── 주간업무 보고서 (공식 PDF 양식 재현) ──
-  // 월 단위 1장: 1~5주차 블록에 그 주의 일지를 자동 채움(일반돌봄 주2회·중점 주1회 통화라 주차당 한 칸에 충분).
-  // 각 주차 상단에 □사회 □신체 □가사 □기타 — 일지의 '업무 구분' 체크 합집합. 새 창에서 인쇄 → PDF 저장.
   const [weeklyModal, setWeeklyModal] = useState(null);   // { phone, ym, benefit, author } — 선택
   const [weeklyDoc, setWeeklyDoc] = useState(null);       // { weeks:{1..5:{content,topics}}, note, workerName, birth, loaded } — 편집본
   const [weeklyAll, setWeeklyAll] = useState([]);         // 해당 월 전체(일괄 출력용)
@@ -1894,7 +1906,9 @@ export default function App() {
   const loadWeekly = async (phone, ym) => {
     setWeeklyDoc({ weeks: {}, note: '', workerName: '', birth: '', loaded: false });
     try {
-      const r = await authFetch(`${SERVER_URL}/weekly-reports?ym=${ym}`).then(x => x.json());
+      const response = await authFetch(`${SERVER_URL}/weekly-reports?ym=${ym}`);
+      if (!response.ok) throw new Error('주간 보고서를 불러오지 못했습니다.');
+      const r = await response.json();
       const all = (r && r.reports) || [];
       setWeeklyAll(all);
       const mine = all.find(w => String(w.elderPhone||'').replace(/\D/g,'') === phone) || {};
@@ -1903,28 +1917,21 @@ export default function App() {
         const w = (mine.weeks || {})[String(i)] || {};
         weeks[i] = { content: w.content || '', topics: w.topics || [] };
       }
+      // Auxiliary note failure must not replace successfully loaded saved report content.
+      try {
       // 빈 주차는 그 주의 상담일지로 프리필 (지원사가 일지로만 남긴 경우 대비 — 저장 전까지는 참고 초안)
-      const [y, m] = ym.split('-').map(Number);
-      const TYPE_KO = { visit: '가정방문', phone: '전화상담', office: '내소상담', guardian: '보호자상담', etc: '기타' };
-      caseNotes.filter(n => {
-        const ph = String(n.elderPhone||'').replace(/\D/g,'');
-        const d = n.visitedAt ? new Date(n.visitedAt) : null;
-        return ph === phone && d && d.getFullYear() === y && (d.getMonth()+1) === m;
-      }).sort((a,b)=>(a.visitedAt||'').localeCompare(b.visitedAt||'')).forEach(n => {
-        const d = new Date(n.visitedAt);
-        const wk = Math.min(5, Math.floor((d.getDate()-1)/7) + 1);
-        if (weeks[wk].content) return;   // 앱에서 작성한 주차는 건드리지 않음
-        weeks[wk]._fromNotes = true;
-        weeks[wk].content = `${weeks[wk].content ? weeks[wk].content + '\n' : ''}${m}/${d.getDate()} [${TYPE_KO[n.type]||'기타'}] ${n.content}${n.action ? `\n  → 조치: ${n.action}` : ''}`;
-        weeks[wk].topics = [...new Set([...(weeks[wk].topics||[]), ...(n.topics||[])])];
-      });
+      const nr = await authFetch(SERVER_URL + '/case-notes?' + new URLSearchParams({elderPhone:phone,from:new Date(Date.now()-90*86400000).toISOString()}).toString());
+      const nd = await nr.json();
+      if (!nr.ok || !CaseNoteListSchema.safeParse(nd).success) throw new Error('주간 보고서 참고 일지를 불러오지 못했습니다.');
+      prefillWeeklyNotes(weeks, nd.notes, phone, ym);
+      } catch { notify('저장된 주간 보고서는 불러왔지만 참고 일지를 불러오지 못했습니다. 다시 조회해 주세요.'); }
       const el = elders.find(e => String(e.phone||'').replace(/\D/g,'') === phone) || {};
       setWeeklyDoc({
         weeks, note: mine.note || '', birth: mine.birth || juminToBirth(el.jumin) || '',
         workerName: mine.workerName || (accounts.find(u=>u.email===el.assignedTo)||{}).name || '',
         loaded: true,
       });
-    } catch { setWeeklyDoc(f => ({ ...(f||{}), weeks: {}, loaded: true })); }
+    } catch { setWeeklyDoc(f => ({ ...(f||{}), weeks: {}, loaded: false })); notify('주간 보고서를 불러오지 못했습니다. 다시 조회해 주세요.'); }
   };
   const openWeeklyReport = (ymArg) => {
     const first = elders[0];
@@ -2058,7 +2065,7 @@ export default function App() {
 
   // ── 급여제공 일정표 (스트림 C): 세로(날짜 리스트) 입력 → 저장 → 공식 달력 양식 인쇄 ──
   const [schedModal, setSchedModal] = useState(null);   // { phone, ym, days:{}, holidays:[], categories:[], birth, residence, workerName, saving }
-  const modalOpenKey = [bulkConfirm, callModal, csvImport, schedModal, weeklyModal, noteForm].map(Boolean).join(':');
+  const modalOpenKey = [bulkConfirm, callModal, csvImport, schedModal, weeklyModal, noteForm, creditCallBlocked, showUpgradeModal].map(Boolean).join(':');
 
   // 모든 모달에 공통으로 적용되는 키보드 접근성: 첫 포커스, Tab 순환, Escape 닫기.
   useEffect(() => {
@@ -2303,7 +2310,7 @@ export default function App() {
     } catch {}
   };
   // ⚠️ 이 효과는 formsYm·loadFormsCounts 선언 뒤에 있어야 함 (앞에 두면 선언 전 참조로 앱 전체 크래시)
-  useEffect(() => { if (page === 'forms') { loadFormsCounts(formsYm); if (caseNotes.length === 0) loadCaseNotes(true); if (isStaffUp && accounts.length === 0) fetchAccounts(); } }, [page, formsYm]); // eslint-disable-line
+  useEffect(() => { if (page === 'forms') { loadFormsCounts(formsYm); if (isStaffUp && accounts.length === 0) fetchAccounts(); } }, [page, formsYm]); // eslint-disable-line
   // 모달 없이 곧바로 일괄 출력 (서식 메뉴 카드용)
   const printWeeklyBatchFor = async (ym) => {
     const r = await authFetch(`${SERVER_URL}/weekly-reports?ym=${ym}`).then(x=>x.json()).catch(()=>null);
@@ -2366,99 +2373,105 @@ export default function App() {
   };
 
   const openNewNote = (prefill: any = {}) => {
+    setNoteError('');
     const now = prefill.visitedAt ? new Date(prefill.visitedAt) : new Date();   // 통화→초안이면 통화 시각을 상담일시로
     setNoteForm({
-      id: null,
+      id: null, requestId: window.crypto.randomUUID(),
       elderPhone: prefill.elderPhone || '',
       elderName: prefill.elderName || '',
       type: prefill.type || 'visit',
       category: prefill.category || 'safety',
       content: prefill.content || '', action: prefill.action || '',
       topics: prefill.topics || [],
-      visitedDate: dateStrOf(now), visitedTime: roundHalf(now),
+      visitedDate: new Date(now.getTime()+9*3600000).toISOString().slice(0,10), visitedTime: new Date(now.getTime()+9*3600000).toISOString().slice(11,16),
       linkedAlertId: prefill.linkedAlertId || '',
       followUpNeeded: false, followUpDue: '',
     });
     setNoteModal({});
   };
   const openEditNote = (n) => {
+    setNoteError('');
     const d = n.visitedAt ? new Date(n.visitedAt) : new Date();
     setNoteForm({
-      id: n.id,
+      id: n.id, revision: n.revision ?? 0, callId: n.callId || '',
       elderPhone: n.elderPhone || '', elderName: n.elderName || '',
       type: n.type || 'visit', category: n.category || 'safety',
       content: n.content || '', action: n.action || '',
       topics: n.topics || [],
-      visitedDate: dateStrOf(d), visitedTime: timeStrOf(d),
+      visitedDate: new Date(d.getTime()+9*3600000).toISOString().slice(0,10), visitedTime: new Date(d.getTime()+9*3600000).toISOString().slice(11,16),
       linkedAlertId: n.linkedAlertId || '',
-      followUpNeeded: !!(n.followUp && n.followUp.needed), followUpDue: (n.followUp && n.followUp.dueDate) || '',
+      followUpDone: !!n.followUp?.done, followUpNeeded: !!(n.followUp && n.followUp.needed), followUpDue: (n.followUp && n.followUp.dueDate) || '',
       autoDraft: isAutoDraft(n),   // 저장 시 '확인 완료'로 확정된다는 안내용
     });
     setNoteModal({ note: n });
   };
-  const saveNote = async () => {
-    if (!noteForm) return;
-    if (!noteForm.content.trim() && !noteForm.action.trim()) { notify('상담·방문 내용을 입력해 주세요.'); return; }
-    setNoteSaving(true);
-    const body = {
-      elderPhone: noteForm.elderPhone, elderName: noteForm.elderName,
-      type: noteForm.type, category: noteForm.category,
-      content: noteForm.content, action: noteForm.action,
-      topics: noteForm.topics || [],
-      visitedAt: (noteForm.visitedDate && noteForm.visitedTime) ? new Date(`${noteForm.visitedDate}T${noteForm.visitedTime}`).toISOString() : new Date().toISOString(),
-      linkedAlertId: noteForm.linkedAlertId,
-      followUp: { needed: noteForm.followUpNeeded, dueDate: noteForm.followUpNeeded ? (noteForm.followUpDue || null) : null, done: false },
-    };
-    const localNote = {
-      id: noteForm.id || null,
-      elderPhone: noteForm.elderPhone, elderName: noteForm.elderName,
-      type: noteForm.type, category: noteForm.category,
-      content: noteForm.content, action: noteForm.action,
-      topics: noteForm.topics || [],
-      authorEmail: (authUser && authUser.email) || '',
-      linkedAlertId: noteForm.linkedAlertId, visitedAt: body.visitedAt, followUp: body.followUp,
-    };
+  const saveNote = async (withPrint = false) => {
+    if (!noteForm || noteSaveLock.current) return;
+    if (!noteForm.elderPhone) { setNoteError('어르신을 선택해 주세요.'); return; }
+    if (!noteForm.content.trim() && !noteForm.action.trim()) { setNoteError('상담·방문 내용을 입력해 주세요.'); return; }
+    const at = new Date(noteForm.visitedDate + 'T' + noteForm.visitedTime + ':00+09:00');
+    if (!Number.isFinite(at.getTime())) { setNoteError('상담 날짜와 시간을 확인해 주세요.'); return; }
+    noteSaveLock.current = true; setNoteSaving(true); setNoteError('');
+    let target: Window | undefined;
     try {
-      if (noteForm.id) {
-        await authFetch(`${SERVER_URL}/case-notes/${noteForm.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        setCaseNotes(prev => prev.map(n => n.id === noteForm.id ? { ...n, ...localNote } : n));   // 낙관적 반영
-      } else {
-        const r = await authFetch(`${SERVER_URL}/case-notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        let newId = null; try { const d = await r.json(); newId = d && d.id; } catch {}
-        setCaseNotes(prev => [{ ...localNote, id: newId || `local_${Date.now()}` }, ...prev]);      // 낙관적 반영(저장 즉시 표시)
-        // 폐루프: 알림에서 시작한 일지면 해당 알림을 자동 '조치 완료' 처리 (일지 = 조치 기록)
-        if (noteForm.linkedAlertId && !String(noteForm.linkedAlertId).startsWith('alertresp_')) {
-          authFetch(`${SERVER_URL}/alerts/${noteForm.linkedAlertId}/status`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'done', note: '상담·방문 일지 작성으로 조치 완료' }),
-          }).then(() => fetchHealth()).catch(() => {});
-        }
-      }
+      if (withPrint) target = reserveNotePrintWindow();
+      const body = {
+        elderPhone: noteForm.elderPhone, elderName: noteForm.elderName,
+        type: noteForm.type, category: noteForm.category,
+        content: noteForm.content, action: noteForm.action,
+        topics: noteForm.topics || [], visitedAt: at.toISOString(),
+        linkedAlertId: noteForm.linkedAlertId,
+        followUp: {needed: noteForm.followUpNeeded, dueDate: noteForm.followUpNeeded ? (noteForm.followUpDue || null) : null, done: !!noteForm.followUpDone},
+        ...(noteForm.id ? {expectedRevision: noteForm.revision ?? 0} : {requestId: noteForm.requestId}),
+      };
+      const saved = await persistCaseNote(noteForm.id, body);
+      notesPage.invalidate();
       setNoteModal(null); setNoteForm(null);
-      loadCaseNotes();   // 백그라운드 재조회로 서버와 정합성 보정(낙관적 반영이 먼저 보임)
-    } catch { notify('저장에 실패했습니다. 다시 시도해 주세요.'); }
-    setNoteSaving(false);
+      notify('일지를 저장했습니다.');
+      if (withPrint) {
+        try { printSavedCaseNote(saved, target); }
+        catch { target?.close(); notify('일지는 저장되었습니다. PDF·인쇄 버튼으로 출력을 다시 시도해 주세요.'); }
+      }
+      void loadCaseNotes(true);
+    } catch (error) {
+      target?.close();
+      setNoteError(error instanceof Error ? error.message : '저장에 실패했습니다. 입력 내용은 유지됩니다. 다시 시도해 주세요.');
+    } finally { noteSaveLock.current = false; setNoteSaving(false); }
   };
+
   const deleteNote = async (id) => {
     if (!window.confirm('이 일지를 삭제할까요?')) return;
-    setCaseNotes(prev => prev.filter(n => n.id !== id));   // 낙관적
-    setSelectedNotes(prev => { const s = new Set(prev); s.delete(id); return s; });
-    try { await authFetch(`${SERVER_URL}/case-notes/${id}`, { method: 'DELETE' }); } catch {}
-    loadCaseNotes();
+    try {
+      const r = await authFetch(SERVER_URL + '/case-notes/' + encodeURIComponent(id), {method:'DELETE'});
+      if (!r.ok) throw new Error(errMsg(await r.json(), '삭제에 실패했습니다.'));
+      setSelectedNotes(prev => {const next = new Set(prev); next.delete(id); return next;});
+      void notesPage.reload();
+    } catch (error) { notify(error instanceof Error ? error.message : '삭제에 실패했습니다.'); }
   };
-  // 일지 선택/일괄 삭제
-  const toggleNoteSel = (id) => setSelectedNotes(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleNoteSel = (id) => setSelectedNotes(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const deleteSelectedNotes = async () => {
-    if (selectedNotes.size === 0) return;
-    const ids = [...selectedNotes];
-    if (!window.confirm(`선택한 ${ids.length}건의 일지를 삭제할까요?`)) return;
-    setCaseNotes(prev => prev.filter(n => !selectedNotes.has(n.id)));   // 낙관적
-    setSelectedNotes(new Set());
-    try { await Promise.all(ids.map(id => authFetch(`${SERVER_URL}/case-notes/${id}`, { method: 'DELETE' }))); } catch {}
-    loadCaseNotes();
+    const ids = caseNotes.filter(n => selectedNotes.has(n.id)).map(n => n.id);
+    if (!ids.length || !window.confirm('현재 페이지에서 선택한 ' + ids.length + '건을 삭제할까요?')) return;
+    let failed = 0;
+    for (const id of ids) {
+      try { const r = await authFetch(SERVER_URL + '/case-notes/' + encodeURIComponent(id), {method:'DELETE'}); if (!r.ok) failed++; }
+      catch { failed++; }
+    }
+    setSelectedNotes(new Set()); void notesPage.reload();
+    if (failed) notify(failed + '건을 삭제하지 못했습니다. 목록에서 확인해 주세요.');
   };
 
   // ── 단건 전화 ──
+  const handleCallCreditError = (data: unknown) => {
+    const parsed = CallCreditErrorSchema.safeParse(data);
+    if (!parsed.success) return false;
+    bulkRef.current = false;
+    const balance = parsed.data.error.details.creditBalance;
+    if (typeof balance === 'number') setBilling(prev => ({...prev, creditBalance:balance}));
+    setCreditCallBlocked(true);
+    void fetchBillingBalance();
+    return true;
+  };
   // channel 'app'  = 앱 푸시(FCM) 우선, 실패 시 서버가 전화로 폴백
   // channel 'pstn' = 앱을 건너뛰고 070 번호로 바로 전화 (앱 미설치 어르신용)
   const makeCall = async (elder, channel: 'app' | 'pstn' = 'app', confirmPstn = false) => {
@@ -2484,6 +2497,7 @@ export default function App() {
         }),
       });
       const data = await res.json();
+      if (handleCallCreditError(data)) return;
       // 앱 토큰이 아직 없는 어르신(방금 재등록 등) — 확인 없이 실전화로 조용히 넘어가던 문제(2026-08-20)
       // 방지: 여기서 한 번 물어보고, 승낙하면 confirmPstn:true로 같은 요청을 다시 보낸다.
       if (data.needsConfirm) {
@@ -2527,12 +2541,17 @@ export default function App() {
 
   const validateStep = step => {
     const errors: any = {};
-    if (step===1) { if(!form.name.trim()) errors.name='이름을 입력하세요'; if(!form.age) errors.age='나이를 입력하세요'; if(!form.phone.trim()) errors.phone='전화번호를 입력하세요'; if(!form.address.trim()) errors.address='주소를 입력하세요'; }
+    if (step===1) { if(!form.name.trim()) errors.name='이름을 입력하세요'; if(!form.age) errors.age='나이를 입력하세요'; if(!form.phone.trim()) errors.phone='전화번호를 입력하세요'; if(!form.address.trim()) errors.address='주소를 입력하세요'; else if(!form.region?.trim()) errors.address='주소 검색으로 주소와 관할 구역을 확인해 주세요'; }
     if (step===2) { if(!form.guardian.trim()) errors.guardian='보호자 이름을 입력하세요'; if(!form.guardianPhone.trim()) errors.guardianPhone='보호자 연락처를 입력하세요'; }
     setFormErrors(errors); return Object.keys(errors).length===0;
   };
   const nextStep = () => { if(validateStep(formStep)) setFormStep(s=>s+1); };
   const saveElder = async () => {
+    if (form.address?.trim() && !form.region?.trim()) {
+      setFormErrors({ address: '주소 검색으로 주소와 관할 구역을 확인해 주세요' });
+      setFormStep(1);
+      return;
+    }
     let saved;
     // 수정 전 번호 — 서버 문서 ID가 전화번호라, 번호를 바꾸면 옛 문서가 남아 목록에 중복으로 뜨고
     // 그쪽을 고르면 옛 번호로 전화가 간다. 서버가 옛 문서를 지울 수 있게 함께 보낸다.
@@ -2677,7 +2696,7 @@ export default function App() {
     if(fail && failReasons.length) console.warn('[CSV 일괄등록] 실패 상세:', failReasons);
     notify(`등록 완료: 성공 ${ok}명${fail?` · 실패 ${fail}명 (${failReasons.slice(0,3).join('; ')}${failReasons.length>3?' 등':''})`:''}`, fail ? 'info' : 'success');
   };
-  const inp = field => ({ value:form[field]??'', onChange:e=>setForm(f=>({...f,[field]:e.target.value})), className:`form-input ${formErrors[field]?'input-error':''}` });
+  const inp = field => ({ value:form[field]??'', onChange:e=>setForm(f=>({...f,[field]:e.target.value,...(field==='address'?{region:''}:{})})), className:`form-input ${formErrors[field]?'input-error':''}` });
 
   // 다음(카카오) 우편번호 검색 → 주소 자동입력 + 관할구역(시/구) 자동추출
   const openAddressSearch = () => {
@@ -2723,7 +2742,7 @@ export default function App() {
     return { unchecked, undialed, checkedCount, activeCount: active.length };
   };
   // 통화기록 위험도 필터 매칭 (KPI 드릴다운)
-  const callsRiskMatch = (c) => callsRisk==='all' ? true : callsRisk==='critical' ? c.riskLevel==='critical' : callsRisk==='urgent' ? (c.riskLevel==='urgent'||c.riskLevel==='warning') : (!c.riskLevel||c.riskLevel==='normal');
+  const callsRiskMatch = (c) => callRiskMatches(c, callsRisk);
   // KPI 클릭 → 상세로 이동(+필터). 위험도는 오늘 범위로 좁혀 KPI 숫자와 일치.
   const drillCalls = (risk) => { setCallsRisk(risk); setCallsRange('custom'); setCallsFrom(_todayStr); setCallsTo(_todayStr); goPage('calls'); };
   const drillDispatch = (status) => { setHistStatus(status); setHistDays(7); goPage('schedule'); };
@@ -2751,35 +2770,19 @@ export default function App() {
   if (authEnabled && (!authUser || me?.needsProvision)) {
     return <AuthScreen authUser={authUser} needsProvision={me?.needsProvision} authFetch={authFetch} serverUrl={SERVER_URL} onReload={reloadUser} onProvisioned={fetchMe} />;
   }
-  // 선불 충전식 크레딧(1단계) — 잔액 0 이하면 서버(OrgGuard)가 다른 요청을 전부 403으로
-  // 막으므로, 화면도 "왜 막혔는지"를 바로 보여주고 다른 메뉴 진입을 막는다. superadmin(orgId='*')과
-  // 잔액 미조회(billing===null, 로딩 중이거나 구기관=무제한)는 차단하지 않는다.
+  // 잔액은 로그인/기록 조회를 막지 않는다. 발신의 최종 적격성은 서버가 판단한다.
   const trialActive = !!billing?.trialEndsAt && new Date(billing.trialEndsAt).getTime() > Date.now();
   const activeSubscriptions = subStatus?.subscriptions
     ? Object.values(subStatus.subscriptions).filter((item:any) => item?.autoRenew)
     : subStatus?.autoRenew ? [subStatus] : [];
-  if (me && me.role !== 'superadmin' && billing && typeof billing.creditBalance === 'number' && billing.creditBalance <= 0 && !trialActive && !showUpgradeModal) {
-    return (
-      <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8fafc',padding:20}}>
-        <div style={{maxWidth:420,background:'#fff',borderRadius:16,padding:'40px 32px',textAlign:'center',boxShadow:'0 4px 20px rgba(0,0,0,0.06)'}}>
-          <div style={{fontSize:40,marginBottom:12}}>💳</div>
-          <h2 style={{margin:'0 0 8px',fontSize:20,fontWeight:800,color:'#0f172a'}}>충전 잔액이 없습니다</h2>
-          <p style={{color:'#64748b',fontSize:15,lineHeight:1.6,margin:'0 0 24px'}}>
-            {me.orgName || '소속 기관'}의 이용 크레딧이 없어 서비스 이용이 제한되어 있습니다.<br/>
-            아래에서 바로 충전하시면 확인 후 이용하실 수 있습니다.
-          </p>
-          <div style={{background:'#f1f5f9',borderRadius:10,padding:'12px 16px',fontSize:14,color:'#334155',marginBottom:20}}>
-            현재 잔액: <b>{billing.creditBalance.toLocaleString()}원</b>
-          </div>
-          <button className="btn-primary" style={{width:'100%',marginBottom:10}} onClick={()=>{ setUpgradeTab('metered'); setShowUpgradeModal(true); }}>충전하기</button>
-          <button className="btn-secondary" style={{width:'100%'}} onClick={()=>{fetchBillingBalance();}}>새로고침</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="app">
+      {creditCallBlocked && <InsufficientCreditDialog
+        balance={typeof billing?.creditBalance === 'number' ? billing.creditBalance : null}
+        onClose={()=>setCreditCallBlocked(false)} onRefresh={()=>void fetchBillingBalance()}
+        onTopup={()=>{setCreditCallBlocked(false); setUpgradeTab('metered'); setShowUpgradeModal(true);}}
+      />}
       {/* 일괄 발신 확인 — 실제 전화가 나가는 되돌릴 수 없는 행위. 대상 수·멘트 종류를 다시 보여준다. */}
       {/* 하단 토스트 — notify() 공용. 화면을 가리지 않고 잠시 떴다 자동으로 사라진다 */}
       {toast && (
@@ -2949,12 +2952,13 @@ export default function App() {
         />
       )}
 
+      {noteExport && <div className="modal-overlay"><div className="modal" role="dialog" aria-modal="true" aria-label="일지 엑셀 생성" style={{maxWidth:720,maxHeight:"90dvh",overflowY:"auto",textAlign:"left"}}><CaseNoteExport query={noteExport.query} selectedIds={noteExport.selectedIds} onClose={()=>setNoteExport(null)}/></div></div>}
       {noteModal && noteForm && (
         <NoteModal
           noteModal={noteModal} noteForm={noteForm} setNoteModal={setNoteModal} setNoteForm={setNoteForm}
           elders={elders} CASE_TYPE_META={CASE_TYPE_META} CASE_CAT_META={CASE_CAT_META}
           CASE_TOPIC_META={CASE_TOPIC_META} TIME_OPTS={TIME_OPTS} fmtTimeK={fmtTimeK} copyNote={copyNote}
-          copiedNoteId={copiedNoteId} saveNote={saveNote} noteSaving={noteSaving}
+          copiedNoteId={copiedNoteId} saveNote={saveNote} noteSaving={noteSaving} noteError={noteError}
         />
       )}
 
@@ -2967,7 +2971,7 @@ export default function App() {
       />
 
       <aside className={`sidebar${mobileNavOpen ? ' is-open' : ''}`}>
-        <div className="logo" onClick={()=>goPage('dashboard')} style={{cursor:'pointer'}} title="대시보드 홈으로">
+        <div className="logo" role="button" tabIndex={0} aria-label="대시보드 홈으로" onClick={()=>goPage('dashboard')} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();goPage('dashboard');}}} style={{cursor:'pointer'}} title="대시보드 홈으로">
           <img src="/youngsili.png" alt="영실이" className="logo-icon" style={{width:42,height:42,borderRadius:12,objectFit:'cover',padding:0}} />
           <div><div className="logo-title">영실이</div><div className="logo-sub">어르신 관리 시스템</div></div>
         </div>
@@ -3044,7 +3048,7 @@ export default function App() {
                 {id:'script',   icon:'script',   label:'전화 멘트 관리'},
               ]},
               { label:'외부 데이터', items:[
-                {id:'data', icon:'data', label:'공공데이터 현황'},
+                {id:'data', icon:'data', label:'데이터 연동'},
               ]},
             ];
             // 영실이 콘솔 — 기관 무관, 서비스 전체를 총괄하는 계정(SUPERADMIN_EMAILS)에게만 노출
@@ -3106,7 +3110,7 @@ export default function App() {
               <div className="sidebar-account-email">{authUser?.email || me?.email || '계정 정보 확인 중'}</div>
             </div>
           </div>
-          <div className={`sidebar-org-code ${me?.orgCode?'':'is-disabled'}`} onClick={me?.orgCode?copyOrgCode:undefined} title={me?.orgCode?'클릭하면 복사 · 어르신 앱 등록 시 입력':'기관코드가 아직 발급되지 않았습니다'}>
+          <div className={`sidebar-org-code ${me?.orgCode?'':'is-disabled'}`} role={me?.orgCode?'button':undefined} tabIndex={me?.orgCode?0:undefined} onClick={me?.orgCode?copyOrgCode:undefined} onKeyDown={e=>{if(me?.orgCode&&(e.key==='Enter'||e.key===' ')){e.preventDefault();copyOrgCode();}}} title={me?.orgCode?'클릭하면 복사 · 어르신 앱 등록 시 입력':'기관코드가 아직 발급되지 않았습니다'}>
             <span className="sidebar-org-label">기관코드</span>
             <span className="sidebar-org-value">{me?.orgCode || '미등록'}</span>
             {me?.orgCode && <span className={`sidebar-org-copy ${orgCopied?'is-copied':''}`}><Copy size={13}/>{orgCopied?'복사됨':'복사'}</span>}
@@ -3116,7 +3120,7 @@ export default function App() {
               소속 기관이 없어(orgId='*') billing이 항상 null이라 자동으로 안 보인다. */}
           {billing && typeof billing.creditBalance === 'number' && (
             <div className="sidebar-org-code sidebar-credit-balance" style={{cursor:'pointer'}} title="클릭하면 현재 플랜·잔액·결제수단을 볼 수 있어요"
-              onClick={()=>{ setShowPlanModal(true); fetchSubscriptionStatus(); }}>
+              role="button" tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setShowPlanModal(true);fetchSubscriptionStatus();}}} onClick={()=>{ setShowPlanModal(true); fetchSubscriptionStatus(); }}>
               <span className="sidebar-org-label">크레딧 잔액</span>
               <span className="sidebar-org-value" style={{color: billing.creditBalance <= 10000 ? '#dc2626' : undefined}}>
                 {billing.creditBalance.toLocaleString()}
@@ -3159,7 +3163,7 @@ export default function App() {
             const title =
               page==='dashboard'?'대시보드':page==='elders'?`${T.elder} 관리`:page==='schedule'?'전화 발신 관리'
               :page==='safety'?'안전확인 관리':page==='calls'?'통화 기록':page==='script'?'전화 멘트 관리'
-              :page==='report'?'리포트 / 통계':page==='data'?'공공데이터 현황':page==='health'?'건강 상태'
+              :page==='report'?'리포트 / 통계':page==='data'?'데이터 연동':page==='health'?'건강 상태'
               :page==='casenotes'?'상담·방문 일지':page==='forms'?'보고서·서식'
               :page==='admin'?(isSuper?'기관 관리 (운영자)':'구성원 관리'):page==='help'?'도움말 보기'
               :page==='console'?'영실이 콘솔 — 시스템 모니터링'
@@ -3190,7 +3194,7 @@ export default function App() {
               setAlertsOpen={setAlertsOpen} openDetail={openDetail} setCallModal={setCallModal} T={T}
               isDisability={isDisability} setSortBy={setSortBy} noRespOpen={noRespOpen}
               setNoRespOpen={setNoRespOpen} danger={danger} warning={warning} normal={normal}
-              todoDone={todoDone} setTodoDone={setTodoDone} todayCalls={todayCalls}
+              todayCalls={todayCalls}
               drillDispatch={drillDispatch} dispatchTotal={dispatchTotal} answeredCount={answeredCount}
               missedCount={missedCount} drillCalls={drillCalls} totalCalls={totalCalls}
               criticalCount={criticalCount} urgentCount={urgentCount} normalCount={normalCount}
@@ -3267,7 +3271,7 @@ export default function App() {
               callsHistory={callsHistory} callsPhone={callsPhone} callsSearch={callsSearch}
               callsRiskMatch={callsRiskMatch} nameByPhone={nameByPhone} callsRange={callsRange}
               setCallsRange={setCallsRange} callsFrom={callsFrom} setCallsFrom={setCallsFrom}
-              callsTo={callsTo} setCallsTo={setCallsTo} fetchCalls={fetchCalls} callsLoading={callsLoading}
+              callsTo={callsTo} setCallsTo={setCallsTo} fetchCalls={fetchCalls} callsLoading={callsLoading} callsError={callsError}
               callsAllOpen={callsAllOpen} setCallsAllOpen={setCallsAllOpen} setCallsDayOv={setCallsDayOv}
               callsRisk={callsRisk} setCallsRisk={setCallsRisk} elders={elders} setCallsSearch={setCallsSearch}
               setCallsPhone={setCallsPhone} callsDayOv={callsDayOv} expandedCallDays={expandedCallDays}
@@ -3291,7 +3295,7 @@ export default function App() {
 
           {page==='health' && (
             <HealthPage
-              healthLoading={healthLoading} fetchHealth={fetchHealth} healthData={healthData} elders={elders}
+              healthLoading={healthLoading} healthError={healthError} fetchHealth={fetchHealth} healthData={healthData} elders={elders}
               alertsData={alertsData} alertIsReal={alertIsReal} nameByPhone={nameByPhone} alertEnCode={alertEnCode}
               alertKw={alertKw} draftingAlertId={draftingAlertId} openNoteFromAlert={openNoteFromAlert}
               healthFilter={healthFilter} setHealthFilter={setHealthFilter} healthAllOpen={healthAllOpen}
@@ -3302,7 +3306,7 @@ export default function App() {
               healthRange={healthRange} setHealthRange={setHealthRange} healthHistFrom={healthHistFrom}
               setHealthHistFrom={setHealthHistFrom} healthHistTo={healthHistTo} setHealthHistTo={setHealthHistTo}
               formatDateHeader={formatDateHeader} healthNormalShown={healthNormalShown}
-              notify={notify} me={me} goPage={goPage} setCallsPhone={setCallsPhone}
+              notify={notify} me={me} goPage={goPage} setCallsPhone={setCallsPhone} openSavedNote={openSavedNote}
             />
           )}
 
@@ -3310,16 +3314,15 @@ export default function App() {
           {page==='casenotes' && (
             <CasenotesPage
               T={T} caseSearch={caseSearch} setCaseSearch={setCaseSearch} openSchedule={openSchedule}
-              openWeeklyReport={openWeeklyReport} exportNotesXlsx={exportNotesXlsx} caseNotes={caseNotes}
+              openWeeklyReport={openWeeklyReport} openNoteExport={openNoteExport} notesPage={notesPage} caseNotes={caseNotes} printNote={printNote} caseError={caseError} reloadNotes={()=>loadCaseNotes()}
               openNewNote={openNewNote} caseType={caseType} setCaseType={setCaseType}
               caseFollowUpOnly={caseFollowUpOnly} setCaseFollowUpOnly={setCaseFollowUpOnly}
-              memoText={memoText} setMemoText={setMemoText} memos={memos} setMemos={setMemos}
               isAutoDraft={isAutoDraft} caseLoading={caseLoading} nameByPhone={nameByPhone}
               CASE_TYPE_META={CASE_TYPE_META} selectedNotes={selectedNotes} setSelectedNotes={setSelectedNotes}
               deleteSelectedNotes={deleteSelectedNotes} expandedNoteDays={expandedNoteDays}
               setExpandedNoteDays={setExpandedNoteDays} formatDateHeader={formatDateHeader}
               toggleNoteSel={toggleNoteSel} copyNote={copyNote} copiedNoteId={copiedNoteId}
-              openEditNote={openEditNote} deleteNote={deleteNote} CASE_CAT_META={CASE_CAT_META}
+              openEditNote={openSavedNote} deleteNote={deleteNote} CASE_CAT_META={CASE_CAT_META}
               CASE_TOPIC_META={CASE_TOPIC_META} AutoDraftBadge={AutoDraftBadge}
             />
           )}
@@ -3340,11 +3343,11 @@ export default function App() {
               selected={selected} setPage={setPage} setSelected={setSelected} openEdit={openEdit}
               deleteElder={deleteElder} callResult={callResult} calling={calling} setCallModal={setCallModal}
               makeCall={makeCall} toggleCallActive={toggleCallActive} cycleLabel={cycleLabel}
-              callsHistory={callsHistory} draftingCallId={draftingCallId} openNoteForCall={openNoteForCall}
+              callsHistory={callsHistory} draftingCallId={draftingCallId} openNoteForCall={openNoteForCall} callNoteErrors={callNoteErrors} printNote={printNote} caseError={caseError} reloadNotes={()=>loadCaseNotes()}
               caseNotes={caseNotes} CASE_TYPE_META={CASE_TYPE_META} CASE_CAT_META={CASE_CAT_META}
               isAutoDraft={isAutoDraft} AutoDraftBadge={AutoDraftBadge} copyNote={copyNote}
-              copiedNoteId={copiedNoteId} openEditNote={openEditNote} deleteNote={deleteNote}
-              openNewNote={openNewNote}
+              copiedNoteId={copiedNoteId} openEditNote={openSavedNote} deleteNote={deleteNote}
+              openNewNote={openNewNote} notesPage={notesPage}
             />
           )}
 
@@ -3380,7 +3383,7 @@ export default function App() {
               formsCounts={formsCounts} openWeeklyReport={openWeeklyReport}
               printWeeklyBatchFor={printWeeklyBatchFor} openSchedule={openSchedule}
               printScheduleBatchFor={printScheduleBatchFor} caseNotes={caseNotes}
-              exportNotesXlsx={exportNotesXlsx} monthlyBusy={monthlyBusy}
+              openNoteExport={openNoteExport} monthlyBusy={monthlyBusy}
               downloadMonthlyReport={downloadMonthlyReport}
             />
           )}

@@ -78,7 +78,7 @@ export default function ConsolePage(props: any) {
                   <tr key={c.callId} style={{borderBottom:'1px solid #f1f3f4'}}>
                     <td style={{padding:'10px'}}>{c.name || '(이름 없음)'}</td>
                     <td style={{padding:'10px', color:'#5f6368'}}>{c.orgId}</td>
-                    <td style={{padding:'10px'}}>{c.channel === 'pstn' ? '070' : '앱'}</td>
+                    <td style={{padding:'10px'}}>{c.channel === 'pstn' ? '전화통화' : '앱'}</td>
                     <td style={{padding:'10px'}}>
                       <span style={{
                         fontSize:12, fontWeight:600, padding:'2px 8px', borderRadius:10,
@@ -142,7 +142,7 @@ export default function ConsolePage(props: any) {
                       <td style={{padding:'10px'}}>{c.elderName || '(이름 없음)'}</td>
                       <td style={{padding:'10px', color:'#5f6368'}}>{c.phone}</td>
                       <td style={{padding:'10px', color:'#5f6368'}}>{org?.name || c.orgId || '-'}</td>
-                      <td style={{padding:'10px'}}>{c.channel === 'pstn' ? '070' : '앱'}</td>
+                      <td style={{padding:'10px'}}>{c.channel === 'pstn' ? '전화통화' : '앱'}</td>
                       <td style={{padding:'10px'}}>
                         <span className={`result-pill ${c.riskLevel==='critical'?'pill-danger':c.riskLevel==='urgent'?'pill-warning':'pill-normal'}`}>{R.label || '정상'}</span>
                       </td>

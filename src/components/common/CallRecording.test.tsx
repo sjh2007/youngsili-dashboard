@@ -23,9 +23,9 @@ function view() { return render(<RecordingProvider><CallRecording callId="call_f
 
 it('labels public demo recordings with one day retention instead of institution retention', async () => {
   view(); const check = await screen.findByRole('button', { name: '녹음 확인' });
-  fetchMock.mockResolvedValueOnce(response({ ...metadata, channel: 'pstn', retentionMonths: null, retentionDays: 1 }));
+  fetchMock.mockResolvedValueOnce(response({ ...metadata, channel: 'pstn', retentionMonths: null, retentionDays: 14 }));
   fireEvent.click(check);
-  expect(await screen.findByText(/신청일 기준 1일 보관/)).toBeInTheDocument();
+  expect(await screen.findByText(/신청일 기준 14일 보관/)).toBeInTheDocument();
   expect(screen.getByText('암호화 보관 · 운영관리자만 이용')).toBeInTheDocument();
   expect(screen.queryByText(/음성 원본 30일 보관/)).not.toBeInTheDocument();
 });
@@ -45,13 +45,15 @@ it('clears playback and labels expiration when a download expires', async () => 
 });
 
 it('loads actual stereo waveform on demand and supports authenticated playback and seeking', async () => {
-  const page = view();
+  const utils = view();
   const check = await screen.findByRole('button', { name: '녹음 확인' });
   expect(fetchMock).toHaveBeenCalledTimes(1);
   fireEvent.click(check);
   const play = await screen.findByRole('button', { name: '다시 듣기' });
   const audio = screen.getByLabelText('통화 녹음 재생');
   const seek = screen.getByRole('slider', { name: '녹음 재생 위치' });
+  // SVG waveform bins have no interactive role; inspect their count to verify decoded audio data.
+  // eslint-disable-next-line testing-library/no-node-access
   expect(screen.getByLabelText('통화 녹음 파형').querySelectorAll('line')).toHaveLength(240);
   fireEvent.change(seek, { target: { value: '5' } });
   expect((audio as HTMLAudioElement).currentTime).toBe(5);
@@ -73,7 +75,7 @@ it('loads actual stereo waveform on demand and supports authenticated playback a
   expect(volume).toHaveAttribute('aria-valuetext', '0%');
   expect(audio).toHaveAttribute('src', 'blob:recording-fixture');
   expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('format=wav&purpose=play'), expect.objectContaining({ signal: expect.any(AbortSignal) }));
-  page.unmount();
+  utils.unmount();
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:recording-fixture');
 });
 it('shows separate MP3 and WAV downloads and labels failures', async () => {
@@ -106,8 +108,8 @@ it('distinguishes missing, failed and still processing recordings', async () => 
 });
 it('hides controls from roles without recording access and makes no request for CS console', async () => {
   fetchMock.mockResolvedValueOnce(response({ ...config, canRead: false, canManage: false }));
-  const page = view(); await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-  expect(screen.queryByRole('button', { name: '녹음 확인' })).not.toBeInTheDocument(); page.unmount();
+  const utils = view(); await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole('button', { name: '녹음 확인' })).not.toBeInTheDocument(); utils.unmount();
   fetchMock.mockClear();
   render(<RecordingProvider enabled={false}><CallRecording callId="fixture" /></RecordingProvider>);
   expect(fetchMock).not.toHaveBeenCalled();

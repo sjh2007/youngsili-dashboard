@@ -1,0 +1,44 @@
+import {fireEvent,render,screen,waitFor} from '@testing-library/react';
+import WorkMemosPanel from './WorkMemosPanel';
+import {authFetch} from '../../utils/api';
+jest.mock('../../utils/api',()=>({authFetch:jest.fn(),SERVER_URL:'https://fixture.invalid',errMsg:()=> '저장 실패'}));
+const mock=authFetch as jest.Mock;
+const item={id:'memo-1',text:'방문 일정 확인',done:false,createdAt:'2026-10-02T01:00:00Z',updatedAt:'2026-10-02T01:00:00Z'};
+const response=(data:unknown,ok=true)=>({ok,json:async()=>data});
+beforeEach(()=>mock.mockReset());
+it('기관 메모를 조회하고 추가·완료·삭제 결과를 서버 응답으로 반영한다',async()=>{
+ mock.mockResolvedValueOnce(response({items:[],nextCursor:null}));
+ render(<WorkMemosPanel/>);
+ await screen.findByText('등록된 업무 메모가 없습니다.');
+ mock.mockResolvedValueOnce(response(item));
+ fireEvent.change(screen.getByLabelText('새 업무 메모'),{target:{value:item.text}});
+ fireEvent.click(screen.getByRole('button',{name:'메모 추가'}));
+ expect(await screen.findByText(item.text)).toBeInTheDocument();
+ expect(JSON.parse(mock.mock.calls[1][1].body)).toEqual({text:item.text});
+ mock.mockResolvedValueOnce(response({...item,done:true}));
+ fireEvent.click(screen.getByRole('button',{name:'메모 완료'}));
+ expect(await screen.findByRole('button',{name:'메모 완료 취소'})).toHaveAttribute('aria-pressed','true');
+ mock.mockResolvedValueOnce(response({success:true}));
+ fireEvent.click(screen.getByRole('button',{name:'메모 삭제'}));
+ await waitFor(()=>expect(screen.queryByText(item.text)).not.toBeInTheDocument());
+});
+it('저장 실패 시 원문 입력과 기존 목록을 보존한다',async()=>{
+ mock.mockResolvedValueOnce(response({items:[],nextCursor:null}));
+ render(<WorkMemosPanel/>);
+ await screen.findByText('등록된 업무 메모가 없습니다.');
+ mock.mockResolvedValueOnce(response({},false));
+ fireEvent.change(screen.getByLabelText('새 업무 메모'),{target:{value:item.text}});
+ fireEvent.click(screen.getByRole('button',{name:'메모 추가'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('저장 실패');
+ expect(screen.getByLabelText('새 업무 메모')).toHaveValue(item.text);
+});
+it('메모가 많으면 서버 커서로 다음 목록을 조회한다',async()=>{
+ mock.mockResolvedValueOnce(response({items:[item],nextCursor:'next-id'}));
+ render(<WorkMemosPanel/>);
+ const more=await screen.findByRole('button',{name:'이전 메모 더 보기'});
+ mock.mockResolvedValueOnce(response({items:[{...item,id:'memo-2',text:'다음 일정'}],nextCursor:null}));
+ fireEvent.click(more);
+ expect(await screen.findByText('다음 일정')).toBeInTheDocument();
+ expect(screen.getByText(item.text)).toBeInTheDocument();
+ expect(mock.mock.calls[1][0]).toContain('?cursor=next-id');
+});
